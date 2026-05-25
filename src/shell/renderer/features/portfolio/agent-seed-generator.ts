@@ -116,7 +116,10 @@ function pickJsonObject(raw: string): Record<string, unknown> {
   try {
     parsed = JSON.parse(candidate);
   } catch (error) {
-    throw new Error(`LLM output JSON parse failed: ${error instanceof Error ? error.message : 'unknown'}`);
+    throw new Error(
+      `LLM output JSON parse failed: ${error instanceof Error ? error.message : 'unknown'}`,
+      { cause: error },
+    );
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('LLM output JSON is not a plain object.');

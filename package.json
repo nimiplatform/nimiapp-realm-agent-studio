@@ -20,6 +20,10 @@
     "check:phase1-closeout": "pnpm run check:spec-consistency && pnpm run typecheck && pnpm run test && pnpm run lint && cargo test --manifest-path src-tauri/Cargo.toml",
     "test": "vitest run",
     "test:watch": "vitest",
+    "validate": "node scripts/validate.mjs",
+    "local-audit": "node scripts/local-audit.mjs",
+    "pack": "pnpm run build:renderer && node scripts/pack.mjs",
+    "check": "pnpm run validate && pnpm run local-audit && pnpm run check:spec-consistency && pnpm run typecheck && pnpm run lint && pnpm run test",
     "nimicoding": "nimicoding",
     "nimicoding:doctor": "nimicoding doctor"
   },

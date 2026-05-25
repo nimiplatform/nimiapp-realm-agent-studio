@@ -65,7 +65,6 @@ export type StudioTextCallParams = {
  */
 export function resolveStudioTextCallParams(
   // surfaceId reserved for future per-surface AIConfig binding lookup
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _surfaceId: StudioAISurfaceId,
   defaults: StudioTextCallDefaults = {},
 ): StudioTextCallParams {
@@ -95,7 +94,6 @@ export type StudioImageCallParams = {
  * Default image-generate call params.
  */
 export function resolveStudioImageCallParams(
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _surfaceId: StudioAISurfaceId,
   defaults: StudioImageCallDefaults = {},
 ): StudioImageCallParams {
@@ -125,7 +123,6 @@ export type StudioSpeechCallParams = {
  * Default audio.synthesize / media.tts.synthesize call params.
  */
 export function resolveStudioSpeechCallParams(
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _surfaceId: StudioAISurfaceId,
   defaults: StudioSpeechCallDefaults = {},
 ): StudioSpeechCallParams {

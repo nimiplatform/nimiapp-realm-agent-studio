@@ -55,6 +55,58 @@ jobs:
       - name: Renderer build
         run: pnpm build:renderer
 
+      - name: Upload renderer build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: renderer-dist
+          path: dist/
+          retention-days: 7
+
+  pre-submission-self-check:
+    name: Pre-submission self-check
+    needs: spec-and-typescript
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@d15e628ca66d93ee5f352c71671a7bc6a97af5c9 # v6.0.8
+        with:
+          version: 10.32.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Validate admission inputs
+        run: pnpm run validate
+
+      - name: Local audit
+        run: pnpm run local-audit
+
+      - name: Download renderer build
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        with:
+          name: renderer-dist
+          path: dist/
+
+      - name: Pack submission packet
+        run: node scripts/pack.mjs
+
+      - name: Upload submission packet
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nimi-app-submission
+          path: dist/nimi-app-submission.json
+          retention-days: 30
+
   rust-quality:
     name: Rust (Tauri)
     runs-on: ubuntu-latest

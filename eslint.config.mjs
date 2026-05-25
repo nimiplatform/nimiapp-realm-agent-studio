@@ -43,7 +43,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['scripts/**/*.ts'],
+    files: ['scripts/**/*.{ts,mjs}'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',

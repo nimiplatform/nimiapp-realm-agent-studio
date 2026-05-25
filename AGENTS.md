@@ -78,6 +78,32 @@ unavailable — render an explicit "source unavailable" state.
 - AI generation failure → preserve owner draft, never invent placeholder text.
 - Schedule due time arrives but post draft missing → fail, do not publish stale draft.
 
+## Admission Inputs
+
+`nimi.app.yaml`, `ADMISSION.md`, `SECURITY.md`, and `.nimi/admission/**` are
+developer-submitted review inputs, not platform admission truth. They mark
+their own role:
+
+- `nimi.app.yaml` → `manifest_role: submitted-input`
+- `.nimi/admission/submission.yaml` → `submission_role: developer-submitted-input` and `admission_truth: platform-owned-after-review`
+- `.nimi/admission/build-profile.yaml` → `profile_role: developer-workflow-input`
+
+Reviewer boundary: Nimi Platform review owns final admission, release
+descriptors, ordinary-user visibility, install availability, and permission
+grants. Do not promote any local file or `dist/nimi-app-submission.json`
+field into a release/permission claim.
+
+When editing admission inputs:
+
+- Keep `app_id: app.nimi.realm-agent-studio` identical across the manifest,
+  `submission.yaml`, `tauri.conf.json` (`identifier`), and `scripts/pack.mjs`.
+- New scope declarations in `nimi.app.yaml` must carry an explicit
+  `purpose:` and a real product justification — they are review transparency,
+  not grants.
+- Never add fields that claim grant/approval semantics
+  (`permission_grant: granted`, `public_admission_truth: true`, etc.); the
+  `scripts/local-audit.mjs` self-check rejects them.
+
 ## Verification
 
 ```bash
@@ -92,7 +118,27 @@ pnpm lint
 
 # Spec layer
 pnpm check:spec-consistency
+
+# Pre-submission self-check (local-only; does not establish admission truth)
+pnpm run validate       # manifest/submission/build-profile role markers
+pnpm run local-audit    # admission inputs must defer truth to platform
+pnpm run pack           # builds renderer + produces dist/nimi-app-submission.json
+pnpm run check          # aggregate: validate + local-audit + spec-consistency + typecheck + lint + test
 ```
+
+## CI
+
+`.github/workflows/ci.yml` runs three jobs:
+
+- `spec-and-typescript` — nimicoding doctor, spec consistency, typecheck,
+  lint, vitest, renderer build (uploads `renderer-dist` artifact).
+- `pre-submission-self-check` — needs `spec-and-typescript`, runs `validate`
+  + `local-audit`, then re-packs the submission packet from the renderer
+  artifact and uploads `nimi-app-submission`.
+- `rust-quality` — cargo fmt/check/clippy/test on `src-tauri/`.
+
+The self-check is pre-submission only. CI green does not constitute an
+admission decision.
 
 ## Retrieval Defaults
 
