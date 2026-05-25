@@ -1,0 +1,1016 @@
+@import "@nimiplatform/kit/ui/styles.css";
+@import "@nimiplatform/kit/ui/themes/light.css";
+@import "@nimiplatform/kit/ui/themes/dark.css";
+@import "@nimiplatform/kit/ui/themes/nimi-accent.css";
+@import "@nimiplatform/kit/auth/styles.css";
+@import "tailwindcss";
+
+/* Tailwind 4 won't auto-scan node_modules; without this, kit's JS class
+ * strings like `flex flex-col gap-1.5` never get compiled into utility CSS
+ * and every kit component (FieldShell, Button, Surface, etc.) loses its
+ * intended layout. We explicitly include both the pnpm symlink path and the
+ * resolved .pnpm/ path to be robust against fast-glob symlink behavior. */
+@source "../../../node_modules/@nimiplatform/kit/dist";
+@source "../../../node_modules/.pnpm";
+
+/* ─────────────────────────────────────────────────────────────
+ * Realm Agent Studio — hand-authored shell + layout CSS
+ *
+ * Why hand-authored:
+ *   Kit ships Button/Surface tones via Tailwind arbitrary values
+ *   (`bg-[var(--nimi-action-primary-bg)]`). When kit is consumed
+ *   from npm (not from a workspace), Tailwind 4's default scanner
+ *   skips `node_modules` and those utilities never compile, so kit
+ *   primary buttons silently fall back to white-on-white. The
+ *   tester app (`nimiapp-tester`) sidesteps this by writing
+ *   semantic CSS classes that read kit's CSS variables directly.
+ *   We follow the same pattern here.
+ *
+ *   Kit CSS variables (loaded by the theme imports above) remain
+ *   the single source of truth for color, radius, shadow, motion,
+ *   and material tokens.
+ * ───────────────────────────────────────────────────────────── */
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--nimi-font-sans);
+  color: var(--nimi-text-primary);
+  background:
+    radial-gradient(1200px 600px at 12% -10%, color-mix(in srgb, var(--nimi-action-primary-bg) 14%, transparent), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, color-mix(in srgb, #6366f1 12%, transparent), transparent 65%),
+    linear-gradient(135deg, #f7f8fb 0%, #eef3f7 48%, #f8fbfa 100%);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Generic helpers
+ * ───────────────────────────────────────────────────────────── */
+
+.ras-break-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.ras-json-preview {
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ras-technical-details {
+  min-width: 0;
+  border: 1px solid var(--nimi-border-subtle);
+  border-radius: var(--nimi-radius-md);
+  background: var(--nimi-surface-card);
+  padding: 0.75rem;
+}
+
+.ras-technical-details > summary {
+  cursor: pointer;
+  color: var(--nimi-text-secondary);
+  font-size: var(--nimi-type-body-sm-size);
+  font-weight: 500;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Kit Button tone polyfill
+ *
+ * Kit emits the modifier class (e.g. `nimi-action--primary`)
+ * alongside the Tailwind arbitrary-value utilities. The modifier
+ * is stable; we style it directly here so the button looks right
+ * even when Tailwind doesn't compile the arbitrary utilities.
+ * ───────────────────────────────────────────────────────────── */
+
+.nimi-action {
+  border-radius: var(--nimi-radius-action);
+  font-weight: 600;
+  letter-spacing: var(--nimi-type-label-letter-spacing);
+  transition: background-color var(--nimi-motion-fast), border-color var(--nimi-motion-fast),
+    color var(--nimi-motion-fast), box-shadow var(--nimi-motion-fast), transform var(--nimi-motion-fast);
+}
+
+.nimi-action--primary {
+  background-color: var(--nimi-action-primary-bg);
+  border-color: var(--nimi-action-primary-bg);
+  color: var(--nimi-action-primary-text);
+}
+.nimi-action--primary:hover:not(:disabled) {
+  background-color: var(--nimi-action-primary-bg-hover);
+  border-color: var(--nimi-action-primary-bg-hover);
+  transform: translateY(-1px);
+}
+
+.nimi-action--secondary {
+  background-color: var(--nimi-action-secondary-bg);
+  border-color: var(--nimi-action-secondary-border);
+  color: var(--nimi-action-secondary-text);
+}
+.nimi-action--secondary:hover:not(:disabled) {
+  border-color: var(--nimi-border-strong);
+  box-shadow: var(--nimi-elevation-base);
+  transform: translateY(-1px);
+}
+
+.nimi-action--ghost {
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--nimi-text-secondary);
+}
+.nimi-action--ghost:hover:not(:disabled) {
+  background-color: var(--nimi-action-ghost-hover);
+  color: var(--nimi-text-primary);
+  transform: translateY(-1px);
+}
+
+.nimi-action--danger {
+  background-color: var(--nimi-status-danger-soft-bg);
+  border-color: transparent;
+  color: var(--nimi-status-danger-soft-text);
+}
+.nimi-action--danger:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.nimi-action--size-sm {
+  min-height: var(--nimi-sizing-action-sm-height);
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  font-size: var(--nimi-type-body-sm-size);
+}
+.nimi-action--size-md {
+  min-height: var(--nimi-sizing-action-md-height);
+  padding-left: 1rem;
+  padding-right: 1rem;
+  font-size: var(--nimi-type-label-size);
+}
+.nimi-action--size-lg {
+  min-height: var(--nimi-sizing-action-lg-height);
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+  font-size: var(--nimi-type-label-size);
+}
+
+.nimi-action--active {
+  background-color: var(--nimi-surface-active);
+}
+
+.nimi-action--icon {
+  aspect-ratio: 1 / 1;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * App shell
+ * ───────────────────────────────────────────────────────────── */
+
+.ras-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.ras-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  height: 56px;
+  padding: 0 14px 0 92px;
+  background: color-mix(in srgb, var(--nimi-surface-canvas) 12%, transparent);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.ras-topbar__inner {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--nimi-border-subtle) 78%, white);
+}
+
+.ras-topbar__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--nimi-text-primary);
+}
+
+.ras-topbar__chip {
+  margin-left: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--nimi-border-subtle);
+  background: color-mix(in srgb, var(--nimi-action-primary-bg) 12%, transparent);
+  color: var(--nimi-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.ras-topbar__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ras-shell__body {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 14px;
+  padding: 70px 14px 14px 14px;
+}
+
+.ras-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 62px;
+  flex-shrink: 0;
+  padding: 6px 0;
+}
+
+.ras-sidebar__logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 64px;
+}
+
+.ras-sidebar__logo-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 55%, #ec4899 100%);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.3);
+}
+
+.ras-sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.ras-sidebar__item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  color: var(--nimi-text-muted);
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.ras-sidebar__item:hover {
+  background-color: var(--nimi-action-ghost-hover);
+  color: var(--nimi-text-primary);
+  transform: translateY(-1px);
+}
+
+.ras-sidebar__item--active {
+  background-color: var(--nimi-text-primary);
+  color: var(--nimi-text-inverse);
+  box-shadow: var(--nimi-elevation-base);
+}
+.ras-sidebar__item--active:hover {
+  background-color: var(--nimi-text-primary);
+  color: var(--nimi-text-inverse);
+}
+
+.ras-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Avatar menu (top-right)
+ * ───────────────────────────────────────────────────────────── */
+
+.ras-avatar-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: white;
+  color: var(--nimi-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: transform 0.15s ease;
+  overflow: hidden;
+}
+.ras-avatar-trigger:hover {
+  transform: scale(1.03);
+}
+
+.ras-avatar-menu {
+  position: absolute;
+  right: 0;
+  top: 48px;
+  z-index: 200;
+  width: 256px;
+  padding: 8px 0;
+  border-radius: 16px;
+  border: 1px solid var(--nimi-material-glass-thick-border);
+  background: var(--nimi-material-glass-thick-bg);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  box-shadow: var(--nimi-elevation-floating);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.ras-avatar-menu--closed {
+  opacity: 0;
+  transform: translateY(4px) scale(0.96);
+  pointer-events: none;
+}
+
+.ras-avatar-menu__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+}
+.ras-avatar-menu__name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--nimi-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ras-avatar-menu__email {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--nimi-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ras-avatar-menu__divider {
+  margin: 4px 12px;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--nimi-action-primary-bg) 20%, transparent);
+}
+.ras-avatar-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: calc(100% - 12px);
+  margin: 0 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--nimi-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.ras-avatar-menu__item:hover {
+  background-color: var(--nimi-action-ghost-hover);
+  color: var(--nimi-text-primary);
+}
+.ras-avatar-menu__item--danger {
+  color: var(--nimi-status-danger);
+}
+.ras-avatar-menu__item--danger:hover {
+  background-color: color-mix(in srgb, var(--nimi-status-danger) 8%, transparent);
+  color: var(--nimi-status-danger);
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Page layout
+ * ───────────────────────────────────────────────────────────── */
+
+.ras-page {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 12px 28px 32px;
+  gap: 24px;
+}
+
+.ras-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.ras-page-header__eyebrow {
+  margin: 0 0 6px;
+  color: var(--nimi-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.ras-page-header__title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--nimi-text-primary);
+  letter-spacing: -0.012em;
+}
+
+.ras-page-header__description {
+  margin: 8px 0 0;
+  max-width: 60ch;
+  color: var(--nimi-text-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.ras-page-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Glass cards
+ * ───────────────────────────────────────────────────────────── */
+
+.ras-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 22px;
+  border: 1px solid color-mix(in srgb, var(--nimi-border-subtle) 90%, white);
+  background: color-mix(in srgb, var(--nimi-surface-panel) 78%, transparent);
+  backdrop-filter: blur(26px);
+  -webkit-backdrop-filter: blur(26px);
+  box-shadow: 0 16px 44px rgba(15, 23, 42, 0.06);
+}
+
+.ras-card--hero {
+  padding: 28px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--nimi-surface-panel) 82%, transparent),
+    color-mix(in srgb, var(--nimi-surface-card) 74%, transparent)
+  );
+  box-shadow: var(--nimi-elevation-raised);
+}
+
+.ras-card--quiet {
+  background: color-mix(in srgb, var(--nimi-surface-card) 84%, transparent);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Filter / search row inside cards
+ * ───────────────────────────────────────────────────────────── */
+
+.ras-filter-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 14px;
+  align-items: end;
+}
+@media (max-width: 760px) {
+  .ras-filter-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ras-filter-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-bottom: 6px;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Empty / hero state inside content area
+ * ───────────────────────────────────────────────────────────── */
+
+.ras-hero-empty {
+  display: grid;
+  place-items: center;
+  gap: 18px;
+  min-height: 320px;
+  padding: 56px 28px;
+  border-radius: 24px;
+  border: 1px dashed color-mix(in srgb, var(--nimi-border-subtle) 90%, white);
+  background:
+    radial-gradient(600px 320px at 50% 0%, color-mix(in srgb, var(--nimi-action-primary-bg) 10%, transparent), transparent 70%),
+    color-mix(in srgb, var(--nimi-surface-card) 60%, transparent);
+  text-align: center;
+}
+
+.ras-hero-empty__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--nimi-action-primary-bg) 22%, white), color-mix(in srgb, var(--nimi-action-primary-bg) 8%, white));
+  color: color-mix(in srgb, var(--nimi-action-primary-bg) 80%, var(--nimi-text-primary));
+}
+
+.ras-hero-empty__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--nimi-text-primary);
+}
+
+.ras-hero-empty__description {
+  margin: 0;
+  max-width: 56ch;
+  color: var(--nimi-text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Agent grid
+ * ───────────────────────────────────────────────────────────── */
+
+.ras-agent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Source warnings inline alert spacing
+ * ───────────────────────────────────────────────────────────── */
+
+.ras-stack-tight {
+  display: grid;
+  gap: 6px;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Kit-token utility shortcuts (avoid Tailwind arbitrary
+ * `text-[var(--nimi-...)]` syntax that doesn't compile when kit
+ * lives in node_modules).
+ * ───────────────────────────────────────────────────────────── */
+
+.ras-text-primary { color: var(--nimi-text-primary); }
+.ras-text-secondary { color: var(--nimi-text-secondary); }
+.ras-text-muted { color: var(--nimi-text-muted); }
+.ras-text-inverse { color: var(--nimi-text-inverse); }
+.ras-text-danger { color: var(--nimi-status-danger); }
+.ras-text-success { color: var(--nimi-status-success); }
+
+.ras-bg-card { background: var(--nimi-surface-card); }
+.ras-bg-panel { background: var(--nimi-surface-panel); }
+.ras-bg-canvas { background: var(--nimi-surface-canvas); }
+.ras-bg-active { background: var(--nimi-surface-active); }
+
+.ras-border-subtle { border: 1px solid var(--nimi-border-subtle); }
+.ras-border-strong { border: 1px solid var(--nimi-border-strong); }
+
+.ras-radius-sm { border-radius: var(--nimi-radius-sm); }
+.ras-radius-md { border-radius: var(--nimi-radius-md); }
+.ras-radius-lg { border-radius: var(--nimi-radius-lg); }
+.ras-radius-xl { border-radius: var(--nimi-radius-xl); }
+
+.ras-elevation-base { box-shadow: var(--nimi-elevation-base); }
+.ras-elevation-raised { box-shadow: var(--nimi-elevation-raised); }
+.ras-elevation-floating { box-shadow: var(--nimi-elevation-floating); }
+
+.ras-text-size-sm { font-size: var(--nimi-type-body-sm-size); }
+.ras-text-size-md { font-size: var(--nimi-type-body-md-size); }
+.ras-text-size-label { font-size: var(--nimi-type-label-size); }
+
+/* ─────────────────────────────────────────────────────────────
+ * Page-wrapper helpers used by per-agent route pages
+ * ───────────────────────────────────────────────────────────── */
+
+.ras-workspace-intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.ras-workspace-intro__copy {
+  min-width: 0;
+}
+
+.ras-workspace-intro__title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--nimi-text-primary);
+}
+
+.ras-workspace-intro__description {
+  margin: 6px 0 0;
+  color: var(--nimi-text-muted);
+  font-size: 14px;
+  line-height: 1.55;
+  max-width: 64ch;
+}
+
+/* Agent header (compact bar at top of /portfolio/:agentId/*) */
+
+.ras-agent-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.ras-agent-header__identity {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+  gap: 12px;
+}
+
+.ras-agent-header__name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--nimi-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ras-agent-header__handle {
+  color: var(--nimi-text-muted);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ras-agent-header__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Centered loading / error screens used by AuthProvider */
+
+.ras-fullscreen-center {
+  display: grid;
+  place-items: center;
+  width: 100vw;
+  height: 100vh;
+  padding: 24px;
+  background:
+    radial-gradient(800px 400px at 20% 0%, color-mix(in srgb, var(--nimi-action-primary-bg) 12%, transparent), transparent 60%),
+    linear-gradient(135deg, #f7f8fb 0%, #eef3f7 50%, #f8fbfa 100%);
+}
+
+.ras-spinner {
+  width: 32px;
+  height: 32px;
+  margin: 0 auto;
+  border: 2px solid var(--nimi-border-subtle);
+  border-top-color: var(--nimi-text-primary);
+  border-radius: 999px;
+  animation: ras-spin 0.85s linear infinite;
+}
+
+@keyframes ras-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Two-column data grid used by detail / insights */
+
+.ras-info-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.ras-info-tile {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--nimi-border-subtle);
+  background: color-mix(in srgb, var(--nimi-surface-card) 80%, transparent);
+}
+
+.ras-info-tile__label {
+  color: var(--nimi-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ras-info-tile__value {
+  margin-top: 4px;
+  color: var(--nimi-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* Post-create handoff card on agent-detail */
+
+.ras-handoff {
+  display: grid;
+  gap: 12px;
+}
+
+.ras-handoff__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ras-handoff__bio {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--nimi-border-subtle);
+  background: var(--nimi-surface-panel);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * AgentProfileOverview
+ * ───────────────────────────────────────────────────────────── */
+
+.ras-profile-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  min-width: 0;
+}
+.ras-profile-grid[data-compact] {
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+}
+
+.ras-profile-cover {
+  min-width: 0;
+  display: grid;
+  gap: 20px;
+}
+
+.ras-profile-cover--compact {
+  width: 96px;
+  height: 96px;
+  border-radius: var(--nimi-radius-md);
+  overflow: hidden;
+  background: var(--nimi-surface-active);
+  display: block;
+}
+
+.ras-profile-cover__hero {
+  height: 176px;
+  border-radius: var(--nimi-radius-md);
+  overflow: hidden;
+  background: var(--nimi-surface-active);
+}
+
+.ras-profile-cover__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ras-profile-cover__heading {
+  min-width: 0;
+}
+
+.ras-profile-cover__title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ras-profile-cover__title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--nimi-text-primary);
+}
+
+.ras-profile-cover__handle {
+  margin: 6px 0 0;
+  color: var(--nimi-text-secondary);
+  font-size: 14px;
+}
+
+.ras-profile-fields {
+  display: grid;
+  gap: 14px;
+}
+
+.ras-profile-meta {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ras-profile-meta--compact {
+  align-self: center;
+}
+
+.ras-profile-meta__compact-badges {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+}
+
+@media (max-width: 760px) {
+  .ras-profile-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ras-profile-grid[data-compact] {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+}
+
+/* Insights grid: 2 columns on wide, 1 on narrow; full-width spans for some */
+
+.ras-insights-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.ras-insights-grid__span {
+  grid-column: 1 / -1;
+}
+@media (max-width: 760px) {
+  .ras-insights-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Voice demo two-column layout */
+@media (max-width: 980px) {
+  .ras-voice-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Tailwind arbitrary-value polyfills (for the workspace
+ * components copied from the source repo). Tailwind 4 doesn't
+ * compile these utilities for kit JS in node_modules, so we
+ * generate the exact CSS rules Tailwind would have emitted —
+ * matched against the literal class strings present in the DOM.
+ * ───────────────────────────────────────────────────────────── */
+
+/* Colors */
+.text-\[var\(--nimi-text-muted\)\] { color: var(--nimi-text-muted); }
+.text-\[var\(--nimi-text-secondary\)\] { color: var(--nimi-text-secondary); }
+.text-\[var\(--nimi-text-primary\)\] { color: var(--nimi-text-primary); }
+.text-\[var\(--nimi-text-inverse\)\] { color: var(--nimi-text-inverse); }
+
+/* Font sizes (Tailwind `text-[length:var(--...)]` syntax) */
+.text-\[length\:var\(--nimi-type-body-sm-size\)\] { font-size: var(--nimi-type-body-sm-size); }
+.text-\[length\:var\(--nimi-type-body-md-size\)\] { font-size: var(--nimi-type-body-md-size); }
+.text-\[length\:var\(--nimi-type-body-lg-size\)\] { font-size: var(--nimi-type-body-lg-size); }
+.text-\[length\:var\(--nimi-type-label-size\)\] { font-size: var(--nimi-type-label-size); }
+
+/* Backgrounds */
+.bg-\[var\(--nimi-surface-card\)\] { background-color: var(--nimi-surface-card); }
+.bg-\[var\(--nimi-surface-panel\)\] { background-color: var(--nimi-surface-panel); }
+.bg-\[var\(--nimi-surface-canvas\)\] { background-color: var(--nimi-surface-canvas); }
+.bg-\[var\(--nimi-surface-active\)\] { background-color: var(--nimi-surface-active); }
+.bg-\[var\(--nimi-action-primary-bg\)\] { background-color: var(--nimi-action-primary-bg); }
+.bg-\[var\(--nimi-action-secondary-bg\)\] { background-color: var(--nimi-action-secondary-bg); }
+.bg-\[var\(--nimi-action-ghost-hover\)\] { background-color: var(--nimi-action-ghost-hover); }
+.bg-\[var\(--nimi-material-glass-thick-bg\)\] { background-color: var(--nimi-material-glass-thick-bg); }
+.bg-\[var\(--nimi-material-glass-regular-bg\)\] { background-color: var(--nimi-material-glass-regular-bg); }
+.bg-\[var\(--nimi-material-glass-thin-bg\)\] { background-color: var(--nimi-material-glass-thin-bg); }
+
+/* Borders (color only — width comes from Tailwind `border` / `border-l` etc.) */
+.border-\[var\(--nimi-border-subtle\)\] { border-color: var(--nimi-border-subtle); }
+.border-\[var\(--nimi-border-strong\)\] { border-color: var(--nimi-border-strong); }
+.border-\[var\(--nimi-action-primary-bg\)\] { border-color: var(--nimi-action-primary-bg); }
+.border-\[var\(--nimi-action-secondary-border\)\] { border-color: var(--nimi-action-secondary-border); }
+.border-\[var\(--nimi-material-glass-thick-border\)\] { border-color: var(--nimi-material-glass-thick-border); }
+
+/* Radii */
+.rounded-\[var\(--nimi-radius-sm\)\] { border-radius: var(--nimi-radius-sm); }
+.rounded-\[var\(--nimi-radius-md\)\] { border-radius: var(--nimi-radius-md); }
+.rounded-\[var\(--nimi-radius-lg\)\] { border-radius: var(--nimi-radius-lg); }
+.rounded-\[var\(--nimi-radius-xl\)\] { border-radius: var(--nimi-radius-xl); }
+.rounded-\[var\(--nimi-radius-field\)\] { border-radius: var(--nimi-radius-field); }
+.rounded-\[var\(--nimi-radius-action\)\] { border-radius: var(--nimi-radius-action); }
+.rounded-\[var\(--nimi-radius-full\)\] { border-radius: var(--nimi-radius-full); }
+
+/* Shadows */
+.shadow-\[var\(--nimi-elevation-base\)\] { box-shadow: var(--nimi-elevation-base); }
+.shadow-\[var\(--nimi-elevation-raised\)\] { box-shadow: var(--nimi-elevation-raised); }
+.shadow-\[var\(--nimi-elevation-floating\)\] { box-shadow: var(--nimi-elevation-floating); }
+
+/* Backdrop blur */
+.backdrop-blur-\[var\(--nimi-backdrop-blur-regular\)\] {
+  backdrop-filter: blur(var(--nimi-backdrop-blur-regular));
+  -webkit-backdrop-filter: blur(var(--nimi-backdrop-blur-regular));
+}
+.backdrop-blur-\[var\(--nimi-backdrop-blur-strong\)\] {
+  backdrop-filter: blur(var(--nimi-backdrop-blur-strong));
+  -webkit-backdrop-filter: blur(var(--nimi-backdrop-blur-strong));
+}
+.backdrop-blur-\[var\(--nimi-backdrop-blur-light\)\] {
+  backdrop-filter: blur(var(--nimi-backdrop-blur-light));
+  -webkit-backdrop-filter: blur(var(--nimi-backdrop-blur-light));
+}
+
+/* Min-height for action buttons (used by kit Button cva size variants) */
+.min-h-\[var\(--nimi-sizing-action-sm-height\)\] { min-height: var(--nimi-sizing-action-sm-height); }
+.min-h-\[var\(--nimi-sizing-action-md-height\)\] { min-height: var(--nimi-sizing-action-md-height); }
+.min-h-\[var\(--nimi-sizing-action-lg-height\)\] { min-height: var(--nimi-sizing-action-lg-height); }
+
+/* Hover states for kit Button (used by buttonVariants tone classes) */
+.hover\:bg-\[var\(--nimi-action-primary-bg-hover\)\]:hover { background-color: var(--nimi-action-primary-bg-hover); }
+.hover\:bg-\[var\(--nimi-action-ghost-hover\)\]:hover { background-color: var(--nimi-action-ghost-hover); }
+.hover\:border-\[var\(--nimi-border-strong\)\]:hover { border-color: var(--nimi-border-strong); }
+.hover\:shadow-\[var\(--nimi-elevation-base\)\]:hover { box-shadow: var(--nimi-elevation-base); }
+.hover\:text-\[var\(--nimi-text-primary\)\]:hover { color: var(--nimi-text-primary); }
+
+/* Misc kit Button utilities */
+.tracking-\[var\(--nimi-type-label-letter-spacing\)\] { letter-spacing: var(--nimi-type-label-letter-spacing); }
+.duration-\[var\(--nimi-motion-fast\)\] { transition-duration: var(--nimi-motion-fast); }
+.disabled\:opacity-\[var\(--nimi-opacity-disabled\)\]:disabled { opacity: var(--nimi-opacity-disabled); }
