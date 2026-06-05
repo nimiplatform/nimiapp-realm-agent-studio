@@ -23,7 +23,7 @@ describe('local creative asset history', () => {
       createdAt: '2026-05-22T00:00:00.000Z',
       kind: 'runtime-image-candidate',
       label: 'Runtime image candidate',
-      source: 'Runtime media.image.generate',
+      source: 'Runtime ScenarioService.executeScenario image.generate',
       detail: 'artifact-image-1',
       artifactIds: ['artifact-image-1'],
     }, storage);
@@ -34,7 +34,7 @@ describe('local creative asset history', () => {
       createdAt: '2026-05-22T00:00:00.000Z',
       kind: 'runtime-image-candidate',
       label: 'Runtime image candidate',
-      source: 'Runtime media.image.generate',
+      source: 'Runtime ScenarioService.executeScenario image.generate',
       publicTruth: false,
       detail: 'artifact-image-1',
       artifactIds: ['artifact-image-1'],

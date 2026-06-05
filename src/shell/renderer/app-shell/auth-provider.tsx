@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { useAppStore } from './app-store.js';
 import { runStudioBootstrap } from '../infra/studio-bootstrap.js';
-import { getPlatformClient } from '@nimiplatform/sdk';
 import { StudioLoginPage } from '../features/auth/studio-login-page.js';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -12,17 +11,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     void runStudioBootstrap();
   }, []);
-
-  useEffect(() => {
-    if (authStatus !== 'unauthenticated') {
-      return;
-    }
-    try {
-      getPlatformClient().realm.clearAuth();
-    } catch {
-      // Platform client may not be ready yet.
-    }
-  }, [authStatus]);
 
   if (bootstrapError) {
     return (

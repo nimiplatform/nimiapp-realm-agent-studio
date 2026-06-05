@@ -21,10 +21,10 @@ permissions:
     - scope: runtime.ai.text.generate
       qualifier: studio-text
       purpose: Generate candidate agent seeds, settings proposals, and post copy.
-    - scope: runtime.media.image.generate
+    - scope: runtime.ai.executeScenario.image.generate
       qualifier: studio-image
       purpose: Generate reference image, avatar, profile cover, and post-image candidates.
-    - scope: runtime.audio.synthesize
+    - scope: runtime.ai.executeScenario.audio.synthesize
       qualifier: studio-voice
       purpose: Generate voice-demo candidates for owner review.
     - scope: app.local.drafts

@@ -39,7 +39,8 @@ describe('studio runtime client gate', () => {
 
     expect(combinedDataSource).not.toMatch(/VITE_REALM_ACCESS_TOKEN|external_principal|allowAnonymousRealm/);
     expect(combinedDataSource).not.toMatch(/createRealmClient|createPlatformClient/);
-    expect(studioPlatformSource).toContain('createLocalFirstPartyRuntimePlatformClient');
+    expect(studioPlatformSource).toContain('createNimiClient');
+    expect(studioPlatformSource).toContain("type: 'tauri-ipc'");
     expect(studioPlatformSource).not.toMatch(/accessToken|refreshToken|sessionStore|subjectUserIdProvider/);
   });
 });

@@ -6,10 +6,10 @@
 - All Runtime account state flows through `runtime.account.*` via the `nimi-shell-tauri` IPC bridge; refresh-token custody lives in Runtime, not in Studio.
 - Studio uses the kit's `DesktopShellAuthPage` with a code-only proof envelope (PO-SHELL-008 / K-ACCSVC-008 equivalent).
 
-## Platform client
+## Nimi client
 
-- Use the local-first-party PlatformClient constructed in `src/shell/renderer/app-shell/studio-platform.ts` (`createLocalFirstPartyRuntimePlatformClient` with the `tauri-ipc` transport).
-- Do not introduce parallel PlatformClient construction paths or bypass the IPC transport.
+- Use the app-scoped `NimiClient` constructed in `src/shell/renderer/app-shell/studio-platform.ts` with the Runtime `tauri-ipc` transport and Realm fetch transport.
+- Do not introduce parallel Nimi client construction paths or bypass the IPC transport for Runtime account state.
 
 ## Permission posture
 

@@ -1,9 +1,14 @@
-import type { RealmServiceArgs, RealmServiceResult } from '@nimiplatform/sdk/realm';
+import type {
+  RealmAgentControllerCheckHandleOperationResponse,
+  RealmAgentControllerCreateOperationRequest,
+  RealmWorldControllerGetWorldDetailWithAgentsOperationResponse,
+  RealmWorldControllerListWorldsOperationResponse,
+} from '@nimiplatform/sdk/realm/generated';
 
-export type RealmAgentCreationWorldDto = RealmServiceResult<'WorldsService', 'worldControllerListWorlds'>[number];
-export type RealmAgentCreationWorldDetailDto = RealmServiceResult<'WorldsService', 'worldControllerGetWorldDetailWithAgents'>;
-export type RealmCreateAgentInput = RealmServiceArgs<'AgentsService', 'agentControllerCreate'>[0];
-export type RealmAgentHandleAvailabilityDto = RealmServiceResult<'AgentsService', 'agentControllerCheckHandle'>;
+export type RealmAgentCreationWorldDto = RealmWorldControllerListWorldsOperationResponse[number];
+export type RealmAgentCreationWorldDetailDto = RealmWorldControllerGetWorldDetailWithAgentsOperationResponse;
+export type RealmCreateAgentInput = RealmAgentControllerCreateOperationRequest['body'];
+export type RealmAgentHandleAvailabilityDto = RealmAgentControllerCheckHandleOperationResponse;
 type RealmCreateAgentRulesInput = NonNullable<RealmCreateAgentInput['rules']>;
 
 export const REALM_AGENT_CREATE_SOURCE = 'Realm AgentsService.agentControllerCreate';
@@ -75,8 +80,8 @@ export type CreateRealmAgentDraftInput = {
   selectedWorldId: string;
   dnaPrimary: DnaPrimaryArchetype | '';
   dnaSecondary: DnaSecondaryTrait[];
-  /** Optional reference image URL produced by Runtime media.image.generate in
-   * the AI-seeded create flow. Passes through CreateAgentDto.referenceImageUrl. */
+  /** Optional reference image URL produced by Runtime image generation in the
+   * AI-seeded create flow. Passes through CreateAgentDto.referenceImageUrl. */
   referenceImageUrl: string;
   /** Client-only: the one-liner the owner typed in the seed phase. Re-used as
    * the image-generation prompt seed. Not submitted to Realm. */

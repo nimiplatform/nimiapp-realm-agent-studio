@@ -1,9 +1,8 @@
+import type { Realm } from '@nimiplatform/sdk/realm';
 import type {
-  RealmServiceArgs,
-  RealmServiceMethod,
-  RealmServiceName,
-  RealmServiceResult,
-} from '@nimiplatform/sdk/realm';
+  RealmAgentControllerCheckHandleOperationResponse,
+  RealmAgentControllerCreateOperationResponse,
+} from '@nimiplatform/sdk/realm/generated';
 import { createStudioRealmClient } from '@renderer/data/realm-client.js';
 import {
   normalizeOwnerPortfolio,
@@ -25,30 +24,10 @@ import {
   type SelectedWorldPreview,
 } from './create-agent-draft.js';
 
-type StudioRealmMethod<
-  Service extends RealmServiceName,
-  Method extends RealmServiceMethod<Service>,
-> = (...args: RealmServiceArgs<Service, Method>) => Promise<RealmServiceResult<Service, Method>>;
+type StudioRealmClient = Pick<Realm, 'generated'>;
 
-type StudioRealmClient = {
-  services: {
-    AgentsService: {
-      agentControllerCheckHandle: StudioRealmMethod<'AgentsService', 'agentControllerCheckHandle'>;
-      agentControllerCreate: StudioRealmMethod<'AgentsService', 'agentControllerCreate'>;
-    };
-    MeService: {
-      getMyRealmAgent: StudioRealmMethod<'MeService', 'getMyRealmAgent'>;
-      listMyRealmAgents: StudioRealmMethod<'MeService', 'listMyRealmAgents'>;
-    };
-    WorldsService: {
-      worldControllerGetWorldDetailWithAgents: StudioRealmMethod<'WorldsService', 'worldControllerGetWorldDetailWithAgents'>;
-      worldControllerListWorlds: StudioRealmMethod<'WorldsService', 'worldControllerListWorlds'>;
-    };
-  };
-};
-
-type RealmCreateAgentResponse = RealmServiceResult<'AgentsService', 'agentControllerCreate'>;
-type RealmAgentHandleAvailabilityResponse = RealmServiceResult<'AgentsService', 'agentControllerCheckHandle'>;
+type RealmCreateAgentResponse = RealmAgentControllerCreateOperationResponse;
+type RealmAgentHandleAvailabilityResponse = RealmAgentControllerCheckHandleOperationResponse;
 
 export type RealmAgentCreateCanonicalFields = {
   id: string;
@@ -128,7 +107,7 @@ export function normalizeRealmAgentCreateResult(agent: RealmCreateAgentResponse)
     };
   }
 
-  const record = agent as Record<string, unknown>;
+  const record = agent as unknown as Record<string, unknown>;
   const id = readOptionalString(record, 'id');
   if (!id) {
     return {
@@ -151,7 +130,7 @@ export function normalizeRealmAgentCreateResult(agent: RealmCreateAgentResponse)
   };
 }
 export async function listOwnerPortfolioAgents(realm: StudioRealmClient = createStudioRealmClient()): Promise<OwnerPortfolioAgent[]> {
-  const agents = await realm.services.MeService.listMyRealmAgents();
+  const agents = await realm.generated.listMyRealmAgents({ path: {} });
   return normalizeOwnerPortfolio(agents);
 }
 
@@ -159,14 +138,14 @@ export async function getOwnerPortfolioAgentDetail(
   agentId: string,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<OwnerPortfolioAgentDetail> {
-  const agent = await realm.services.MeService.getMyRealmAgent(agentId);
+  const agent = await realm.generated.getMyRealmAgent({ path: { agentId } });
   return normalizeOwnerPortfolioAgentDetail(agent);
 }
 
 export async function listCreateRealmAgentSelectableWorlds(
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<SelectableRealmWorld[]> {
-  const worlds = await realm.services.WorldsService.worldControllerListWorlds();
+  const worlds = await realm.generated.worldControllerListWorlds({ path: {} });
   return normalizeSelectableWorlds(worlds as RealmAgentCreationWorldDto[]);
 }
 
@@ -174,7 +153,10 @@ export async function getCreateRealmAgentWorldPreview(
   worldId: string,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<SelectedWorldPreview> {
-  const world = await realm.services.WorldsService.worldControllerGetWorldDetailWithAgents(worldId, 4);
+  const world = await realm.generated.worldControllerGetWorldDetailWithAgents({
+    path: { id: worldId },
+    query: { recommendedAgentLimit: 4 },
+  });
   return normalizeSelectedWorldPreview(world);
 }
 
@@ -206,8 +188,11 @@ export async function checkCreateRealmAgentHandleAvailability(
   }
 
   try {
-    const response = await realm.services.AgentsService.agentControllerCheckHandle(normalizedHandle);
-    if (!response || typeof response !== 'object' || typeof (response as Record<string, unknown>).available !== 'boolean') {
+    const response = await realm.generated.agentControllerCheckHandle({
+      path: {},
+      query: { handle: normalizedHandle },
+    });
+    if (!response || typeof response !== 'object' || typeof (response as unknown as Record<string, unknown>).available !== 'boolean') {
       return {
         ok: false,
         truthWrite: false,
@@ -238,7 +223,10 @@ export async function createReviewedRealmAgent(
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<RealmAgentCreateResult> {
   try {
-    const agent = await realm.services.AgentsService.agentControllerCreate(buildRealmCreateAgentInput(payload));
+    const agent = await realm.generated.agentControllerCreate({
+      path: {},
+      body: buildRealmCreateAgentInput(payload),
+    });
     return normalizeRealmAgentCreateResult(agent);
   } catch (error) {
     return {

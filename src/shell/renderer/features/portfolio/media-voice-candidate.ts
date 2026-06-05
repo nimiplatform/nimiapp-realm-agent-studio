@@ -1,5 +1,13 @@
-import type { ImageGenerateInput, SpeechSynthesizeInput } from '@nimiplatform/sdk/runtime/browser';
 import type { OwnerPortfolioAgentDetail } from './portfolio-data.js';
+import {
+  createStudioImageGeneratePayload,
+  createStudioSpeechSynthesizePayload,
+  resolveStudioImageCallParams,
+  resolveStudioSpeechCallParams,
+  STUDIO_DEFAULT_SPEECH_TIMING_MODE,
+  type StudioImageGeneratePayload,
+  type StudioSpeechSynthesizePayload,
+} from './studio-ai-runtime.js';
 
 export const MEDIA_CANDIDATE_RESOURCE_TYPES = ['IMAGE', 'VIDEO', 'AUDIO'] as const;
 export const MEDIA_CANDIDATE_BINDING_POINTS = [
@@ -11,10 +19,10 @@ export const MEDIA_CANDIDATE_BINDING_POINTS = [
 
 export const VISUAL_MEDIA_BLOCKED_REASON = 'visual media candidate blocked: image generation and owner-scoped Resource-to-Agent binding ingress are not admitted; READY Resources may be used for post attachments only';
 export const VOICE_DEMO_BLOCKED_REASON = 'voice demo candidate blocked: Runtime synthesis and Resource upload/finalize are not called in this local preview slice';
-export const VISUAL_IMAGE_CANDIDATE_NOTICE = 'visual image candidate uses Runtime media.image.generate only; public profile Resource-to-Agent binding requires a dedicated owner-scoped Realm ingress';
-export const VOICE_DEMO_CANDIDATE_NOTICE = 'voice demo candidate uses Runtime media.tts.synthesize only; public voice/sample binding requires a dedicated owner-scoped Realm ingress';
-export const VISUAL_IMAGE_GENERATION_SOURCE = 'Runtime media.image.generate';
-export const VOICE_DEMO_SYNTHESIS_SOURCE = 'Runtime media.tts.synthesize';
+export const VISUAL_IMAGE_CANDIDATE_NOTICE = 'visual image candidate uses Runtime ScenarioService.executeScenario image.generate only; public profile Resource-to-Agent binding requires a dedicated owner-scoped Realm ingress';
+export const VOICE_DEMO_CANDIDATE_NOTICE = 'voice demo candidate uses Runtime ScenarioService.executeScenario audio.synthesize only; public voice/sample binding requires a dedicated owner-scoped Realm ingress';
+export const VISUAL_IMAGE_GENERATION_SOURCE = 'Runtime ScenarioService.executeScenario image.generate';
+export const VOICE_DEMO_SYNTHESIS_SOURCE = 'Runtime ScenarioService.executeScenario audio.synthesize';
 
 export type MediaCandidateResourceType = typeof MEDIA_CANDIDATE_RESOURCE_TYPES[number];
 export type MediaCandidateBindingPoint = typeof MEDIA_CANDIDATE_BINDING_POINTS[number];
@@ -98,7 +106,7 @@ export type BlockedVoiceDemoRequestPayload = {
   agentContext: CandidateAgentContext;
   runtimePreview: {
     capabilityToken: 'audio.synthesize';
-    currentSdkPath: 'media.tts.synthesize';
+    runtimeScenario: 'speechSynthesize';
     requestCandidate: {
       model: string;
       text: string;
@@ -132,9 +140,9 @@ export type ReviewedVoiceDemoCandidatePayload = {
   agentContext: CandidateAgentContext;
   runtime: {
     capabilityToken: 'audio.synthesize';
-    currentSdkPath: 'media.tts.synthesize';
+    runtimeScenario: 'speechSynthesize';
     source: typeof VOICE_DEMO_SYNTHESIS_SOURCE;
-    request: SpeechSynthesizeInput;
+    request: StudioSpeechSynthesizePayload;
     status: 'candidate-ready';
   };
   futureEvidencePath: {
@@ -160,9 +168,9 @@ export type ReviewedVisualImageCandidatePayload = {
   agentContext: CandidateAgentContext;
   runtime: {
     capabilityToken: 'image.generate';
-    currentSdkPath: 'media.image.generate';
+    runtimeScenario: 'imageGenerate';
     source: typeof VISUAL_IMAGE_GENERATION_SOURCE;
-    request: ImageGenerateInput;
+    request: StudioImageGeneratePayload;
     status: 'candidate-ready';
   };
   futureEvidencePath: {
@@ -226,7 +234,7 @@ const FORBIDDEN_MEDIA_CANDIDATE_FIELDS = new Set([
 ]);
 const MODEL_ALLOWED_PATHS = new Set([
   'runtimePreview.requestCandidate.model',
-  'runtime.request.model',
+  'runtime.request.params.model',
 ]);
 
 function normalizeLineText(value: string): string {
@@ -305,17 +313,20 @@ export function normalizeVoiceDemoCandidateInput(input: VoiceDemoCandidateInput)
 export function buildReviewedVisualImageGenerationPayload(
   input: VisualImageGenerationInput,
   agent: OwnerPortfolioAgentDetail,
-): VisualImageCandidateBuildResult<ImageGenerateInput> {
+): VisualImageCandidateBuildResult<StudioImageGeneratePayload> {
   const normalized = normalizeVisualMediaCandidateInput(input);
   const model = normalizeSingleLine(input.model);
   const aspectRatio = normalizeSingleLine(input.aspectRatio) || '1:1';
+  const callParams = resolveStudioImageCallParams('realm-agent-studio.visual-image-candidate', {
+    aspectRatio,
+  });
   const errors: string[] = [];
 
   if (!normalized.prompt) {
-    errors.push('visual prompt missing for Runtime media.image.generate');
+    errors.push('visual prompt missing for Runtime ScenarioService.executeScenario image.generate');
   }
   if (!model) {
-    errors.push('Runtime media.image.generate model config missing');
+    errors.push('Runtime ScenarioService.executeScenario image.generate model config missing');
   }
 
   if (errors.length > 0) {
@@ -332,18 +343,26 @@ export function buildReviewedVisualImageGenerationPayload(
   return {
     changed: true,
     errors: [],
-    payload: {
-      model,
-      prompt: promptParts.join('\n'),
-      n: 1,
-      aspectRatio,
-      responseFormat: 'url',
-      metadata: {
-        source: 'realm-agent-studio.reviewed-visual-image-candidate',
-        agentKey: agent.id,
-        bindingPoint: normalized.bindingPoint,
+    payload: createStudioImageGeneratePayload({
+      surfaceId: 'realm-agent-studio.visual-image-candidate',
+      params: {
+        ...callParams,
+        model,
       },
-    },
+      spec: {
+        prompt: promptParts.join('\n'),
+        negativePrompt: '',
+        n: 1,
+        size: '',
+        aspectRatio,
+        quality: '',
+        style: '',
+        seed: '',
+        referenceImages: [],
+        mask: '',
+        responseFormat: 'url',
+      },
+    }),
   };
 }
 
@@ -368,7 +387,7 @@ export function buildReviewedVisualImageCandidatePayload(
       agentContext: createAgentContext(agent),
       runtime: {
         capabilityToken: 'image.generate',
-        currentSdkPath: 'media.image.generate',
+        runtimeScenario: 'imageGenerate',
         source: VISUAL_IMAGE_GENERATION_SOURCE,
         request: imagePayload.payload,
         status: 'candidate-ready',
@@ -393,30 +412,40 @@ export function buildReviewedVisualImageCandidatePayload(
 
 export function buildReviewedVoiceSynthesisPayload(
   input: VoiceDemoCandidateInput,
-  agent: OwnerPortfolioAgentDetail,
-): VoiceDemoCandidateBuildResult<SpeechSynthesizeInput> {
+): VoiceDemoCandidateBuildResult<StudioSpeechSynthesizePayload> {
   const normalized = normalizeVoiceDemoCandidateInput(input);
+  const callParams = resolveStudioSpeechCallParams('realm-agent-studio.voice-demo-candidate');
   const errors: string[] = [];
 
   if (!normalized.scriptText) {
-    errors.push('voice demo script missing for Runtime media.tts.synthesize');
+    errors.push('voice demo script missing for Runtime ScenarioService.executeScenario audio.synthesize');
   }
   if (!normalized.model) {
-    errors.push('Runtime media.tts.synthesize model config missing');
+    errors.push('Runtime ScenarioService.executeScenario audio.synthesize model config missing');
   }
 
   if (errors.length > 0) {
     return { changed: false, errors, payload: null };
   }
 
-  const payload: SpeechSynthesizeInput = {
-    model: normalized.model,
-    text: normalizeSingleLine(normalized.scriptText),
-    metadata: {
-      source: 'realm-agent-studio.reviewed-voice-demo-candidate',
-      agentKey: agent.id,
+  const payload = createStudioSpeechSynthesizePayload({
+    surfaceId: 'realm-agent-studio.voice-demo-candidate',
+    params: {
+      ...callParams,
+      model: normalized.model,
     },
-  };
+    spec: {
+      text: normalizeSingleLine(normalized.scriptText),
+      language: '',
+      audioFormat: '',
+      sampleRateHz: 0,
+      speed: callParams.speed ?? 0,
+      pitch: 0,
+      volume: 0,
+      emotion: '',
+      timingMode: STUDIO_DEFAULT_SPEECH_TIMING_MODE,
+    },
+  });
 
   return { changed: true, errors: [], payload };
 }
@@ -425,7 +454,7 @@ export function buildReviewedVoiceDemoCandidatePayload(
   input: VoiceDemoCandidateInput,
   agent: OwnerPortfolioAgentDetail,
 ): VoiceDemoCandidateBuildResult<ReviewedVoiceDemoCandidatePayload> {
-  const synthesisPayload = buildReviewedVoiceSynthesisPayload(input, agent);
+  const synthesisPayload = buildReviewedVoiceSynthesisPayload(input);
   const normalized = normalizeVoiceDemoCandidateInput(input);
 
   if (!synthesisPayload.payload) {
@@ -442,7 +471,7 @@ export function buildReviewedVoiceDemoCandidatePayload(
       agentContext: createAgentContext(agent),
       runtime: {
         capabilityToken: 'audio.synthesize',
-        currentSdkPath: 'media.tts.synthesize',
+        runtimeScenario: 'speechSynthesize',
         source: VOICE_DEMO_SYNTHESIS_SOURCE,
         request: synthesisPayload.payload,
         status: 'candidate-ready',
@@ -534,10 +563,10 @@ export function buildBlockedVoiceDemoRequestPayload(
   const errors: string[] = [];
 
   if (!normalized.scriptText) {
-    errors.push('voice demo script missing for Runtime media.tts.synthesize');
+    errors.push('voice demo script missing for Runtime ScenarioService.executeScenario audio.synthesize');
   }
   if (!normalized.model) {
-    errors.push('Runtime media.tts.synthesize model config missing');
+    errors.push('Runtime ScenarioService.executeScenario audio.synthesize model config missing');
   }
 
   if (errors.length > 0) {
@@ -553,7 +582,7 @@ export function buildBlockedVoiceDemoRequestPayload(
     agentContext: createAgentContext(agent),
     runtimePreview: {
       capabilityToken: 'audio.synthesize',
-      currentSdkPath: 'media.tts.synthesize',
+      runtimeScenario: 'speechSynthesize',
       requestCandidate: {
         model: normalized.model,
         text: normalizeSingleLine(normalized.scriptText),

@@ -1,4 +1,4 @@
-import { hasTauriInvoke, invoke } from '../../bridge/index.js';
+import { hasTauriInvoke, invoke, type JsonValue } from '../../bridge/index.js';
 
 export type RendererLogLevel = 'info' | 'warn' | 'error';
 
@@ -7,7 +7,7 @@ export type RendererLogEvent = {
   area: string;
   message: string;
   flowId?: string;
-  details?: Record<string, unknown>;
+  details?: JsonValue;
 };
 
 export function describeError(error: unknown): { name: string; message: string; stack?: string } {

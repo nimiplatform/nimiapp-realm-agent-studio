@@ -1,14 +1,14 @@
-import { getPlatformClient } from '@nimiplatform/sdk';
 import { getRuntimeDefaults } from '../bridge/index.js';
 import { useAppStore } from '../app-shell/app-store.js';
 import {
-  buildStudioPlatformClient,
-  clearStudioPlatformClient,
+  buildStudioNimiClient,
+  clearStudioNimiClient,
   loadStudioRuntimeAccountUser,
   resolveStudioRealmBaseUrl,
   type StudioAuthUser,
 } from '../app-shell/studio-platform.js';
 import { describeError, logRendererEvent } from './telemetry/renderer-log.js';
+import { hasStudioNimiClient, setStudioNimiClient } from './studio-nimi-client.js';
 
 let bootstrapPromise: Promise<void> | null = null;
 
@@ -39,24 +39,15 @@ export async function ensureStudioBootstrapReady(): Promise<void> {
   }
 }
 
-function hasStudioPlatformClient(): boolean {
-  try {
-    getPlatformClient();
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export async function ensureStudioRuntimeClientReady(): Promise<void> {
   await ensureStudioBootstrapReady();
-  if (hasStudioPlatformClient()) {
+  if (hasStudioNimiClient()) {
     return;
   }
 
   await runStudioBootstrap({ force: true });
-  if (!hasStudioPlatformClient()) {
-    throw new Error('Realm Agent Studio runtime platform client is unavailable after bootstrap retry');
+  if (!hasStudioNimiClient()) {
+    throw new Error('Realm Agent Studio Nimi client is unavailable after bootstrap retry');
   }
 }
 
@@ -81,18 +72,19 @@ async function doRunStudioBootstrap(): Promise<void> {
 
     const realmBaseUrl = runtimeDefaults?.realm.realmBaseUrl || resolveStudioRealmBaseUrl();
 
-    clearStudioPlatformClient();
-    const platformClient = await buildStudioPlatformClient(realmBaseUrl).catch((error) => {
+    clearStudioNimiClient();
+    const client = await buildStudioNimiClient(realmBaseUrl).catch((error) => {
       logRendererEvent({
         level: 'warn',
         area: 'studio-bootstrap.runtime-client',
-        message: 'action:runtime-platform-client-unavailable',
+        message: 'action:nimi-client-unavailable',
         flowId,
         details: { error: describeError(error) },
       });
       return null;
     });
-    const runtime = platformClient?.runtime ?? null;
+    setStudioNimiClient(client);
+    const runtime = client?.runtime ?? null;
 
     const runtimeAccountUser: StudioAuthUser | null = runtime
       ? await loadStudioRuntimeAccountUser(runtime).catch((error) => {

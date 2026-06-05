@@ -1,12 +1,16 @@
-import type { ImageGenerateInput, ImageGenerateOutput } from '@nimiplatform/sdk/runtime/browser';
+import type { Runtime } from '@nimiplatform/sdk/runtime';
+import type { ExecuteScenarioResponse, ScenarioArtifact } from '@nimiplatform/sdk/runtime/generated';
 import { createStudioRuntimeClient } from '@renderer/data/runtime-client.js';
-import { buildStudioRuntimeMetadata, resolveStudioImageCallParams } from './studio-ai-runtime.js';
+import {
+  createStudioImageGeneratePayload,
+  executeStudioImageGenerate,
+  resolveStudioImageCallParams,
+  type StudioImageGeneratePayload,
+} from './studio-ai-runtime.js';
 
-export const AGENT_REFERENCE_IMAGE_SOURCE = 'Runtime media.image.generate' as const;
+export const AGENT_REFERENCE_IMAGE_SOURCE = 'Runtime ScenarioService.executeScenario image.generate' as const;
 
-type RuntimeImageClient = {
-  media: { image: { generate(input: ImageGenerateInput): Promise<ImageGenerateOutput> } };
-};
+type RuntimeImageClient = Runtime;
 
 export type AgentReferenceImageInput = {
   prompt: string;
@@ -21,7 +25,7 @@ export type AgentReferenceImageResult =
     referenceImageUrl: string;
     artifactIds: string[];
     artifactUris: string[];
-    submitted: ImageGenerateInput;
+    submitted: StudioImageGeneratePayload;
     runtime: {
       jobId?: string;
       traceId?: string;
@@ -37,13 +41,13 @@ export type AgentReferenceImageResult =
       | 'agent-reference-image-generate-failed'
       | 'agent-reference-image-no-artifact';
     message: string;
-    submitted: ImageGenerateInput | null;
+    submitted: StudioImageGeneratePayload | null;
   };
 
 export function buildAgentReferenceImagePayload(input: AgentReferenceImageInput): {
   ok: boolean;
   errors: string[];
-  payload: ImageGenerateInput | null;
+  payload: StudioImageGeneratePayload | null;
 } {
   const prompt = input.prompt.trim();
   const errors: string[] = [];
@@ -57,16 +61,40 @@ export function buildAgentReferenceImagePayload(input: AgentReferenceImageInput)
   // Caller can override the runtime-resolved model with an explicit id (escape
   // hatch for testing). Empty / "auto" falls back to runtime selection.
   const callerOverride = String(input.model || '').trim();
+  const model = callerOverride && callerOverride.toLowerCase() !== 'auto'
+    ? callerOverride
+    : callParams.model;
   return {
     ok: true,
     errors: [],
-    payload: {
-      ...callParams,
-      ...(callerOverride && callerOverride.toLowerCase() !== 'auto' ? { model: callerOverride } : {}),
-      prompt,
-      metadata: buildStudioRuntimeMetadata('realm-agent-studio.agent-reference-image'),
-    } as ImageGenerateInput,
+    payload: createStudioImageGeneratePayload({
+      surfaceId: 'realm-agent-studio.agent-reference-image',
+      params: {
+        ...callParams,
+        model,
+      },
+      spec: {
+        prompt,
+        negativePrompt: '',
+        n: 1,
+        size: '',
+        aspectRatio: callParams.aspectRatio ?? '',
+        quality: '',
+        style: '',
+        seed: '',
+        referenceImages: [],
+        mask: '',
+        responseFormat: 'url',
+      },
+    }),
   };
+}
+
+function readImageArtifacts(output: ExecuteScenarioResponse): readonly ScenarioArtifact[] {
+  const scenarioOutput = output.output?.output;
+  return scenarioOutput?.oneofKind === 'imageGenerate'
+    ? scenarioOutput.imageGenerate.artifacts
+    : [];
 }
 
 export async function generateAgentReferenceImage(
@@ -89,15 +117,13 @@ export async function generateAgentReferenceImage(
       ok: false,
       source: AGENT_REFERENCE_IMAGE_SOURCE,
       failure: 'agent-reference-image-transport-unavailable',
-      message: 'Runtime media.image.generate runtime transport unavailable: Tauri IPC runtime transport is required.',
+      message: 'Runtime imageGenerate scenario transport unavailable: Tauri IPC runtime transport is required.',
       submitted: built.payload,
     };
   }
   try {
-    const output = await runtimeClient.media.image.generate(built.payload);
-    // ImageGenerateOutput shape per kit/sdk: `output.artifacts` is `Array<{ artifactId, uri }>`,
-    // `output.job` carries `{ jobId, traceId, modelResolved }`.
-    const artifacts = Array.isArray(output.artifacts) ? output.artifacts : [];
+    const output = await executeStudioImageGenerate(built.payload, runtimeClient);
+    const artifacts = readImageArtifacts(output);
     const artifactIds: string[] = [];
     const artifactUris: string[] = [];
     for (const artifact of artifacts) {
@@ -114,21 +140,10 @@ export async function generateAgentReferenceImage(
         ok: false,
         source: AGENT_REFERENCE_IMAGE_SOURCE,
         failure: 'agent-reference-image-no-artifact',
-        message: 'Runtime media.image.generate returned no artifact URI or id.',
+        message: 'Runtime imageGenerate scenario returned no artifact URI or id.',
         submitted: built.payload,
       };
     }
-    const jobRecord: Record<string, unknown> = output.job && typeof output.job === 'object'
-      ? (output.job as unknown as Record<string, unknown>)
-      : {};
-    const traceRecord: Record<string, unknown> = output.trace && typeof output.trace === 'object'
-      ? (output.trace as unknown as Record<string, unknown>)
-      : {};
-    const jobId = typeof jobRecord.jobId === 'string' ? jobRecord.jobId : undefined;
-    const modelResolved = typeof jobRecord.modelResolved === 'string' ? jobRecord.modelResolved : undefined;
-    const traceId = typeof traceRecord.traceId === 'string'
-      ? traceRecord.traceId
-      : typeof jobRecord.traceId === 'string' ? jobRecord.traceId : undefined;
     return {
       ok: true,
       source: AGENT_REFERENCE_IMAGE_SOURCE,
@@ -137,9 +152,8 @@ export async function generateAgentReferenceImage(
       artifactUris,
       submitted: built.payload,
       runtime: {
-        ...(jobId ? { jobId } : {}),
-        ...(traceId ? { traceId } : {}),
-        ...(modelResolved ? { modelResolved } : {}),
+        ...(output.traceId ? { traceId: output.traceId } : {}),
+        ...(output.modelResolved ? { modelResolved: output.modelResolved } : {}),
       },
     };
   } catch (error) {
@@ -147,7 +161,7 @@ export async function generateAgentReferenceImage(
       ok: false,
       source: AGENT_REFERENCE_IMAGE_SOURCE,
       failure: 'agent-reference-image-generate-failed',
-      message: `Runtime media.image.generate failed: ${error instanceof Error ? error.message : 'runtime transport call failed.'}`,
+      message: `Runtime imageGenerate scenario failed: ${error instanceof Error ? error.message : 'runtime transport call failed.'}`,
       submitted: built.payload,
     };
   }

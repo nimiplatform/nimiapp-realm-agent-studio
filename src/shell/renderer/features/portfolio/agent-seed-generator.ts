@@ -1,4 +1,3 @@
-import type { TextGenerateInput, TextGenerateOutput } from '@nimiplatform/sdk/runtime/browser';
 import { createStudioRuntimeClient } from '@renderer/data/runtime-client.js';
 import {
   DNA_PRIMARY_ARCHETYPES,
@@ -7,13 +6,17 @@ import {
   type DnaPrimaryArchetype,
   type DnaSecondaryTrait,
 } from './create-agent-draft.js';
-import { buildStudioRuntimeMetadata, resolveStudioTextCallParams } from './studio-ai-runtime.js';
+import {
+  buildStudioRuntimeMetadata,
+  resolveStudioTextCallParams,
+  runStudioTextGenerate,
+  studioTextMessage,
+  type StudioRuntimeAIClient,
+  type StudioTextGenerationOutput,
+  type StudioTextGeneratePayload,
+} from './studio-ai-runtime.js';
 
 export const AGENT_SEED_SOURCE = 'Runtime runtime.ai.text.generate' as const;
-
-type RuntimeTextClient = {
-  ai: { text: { generate(input: TextGenerateInput): Promise<TextGenerateOutput> } };
-};
 
 /**
  * Subset of CreateRealmAgentDraftInput populated by the LLM. World selection
@@ -32,7 +35,7 @@ export type AgentSeedGenerationResult =
     source: typeof AGENT_SEED_SOURCE;
     seed: GeneratedAgentSeed;
     rationale: string;
-    submitted: TextGenerateInput;
+    submitted: StudioTextGeneratePayload;
     runtime: {
       traceId?: string;
       modelResolved?: string;
@@ -48,13 +51,13 @@ export type AgentSeedGenerationResult =
       | 'agent-seed-generate-failed'
       | 'agent-seed-invalid-output';
     message: string;
-    submitted: TextGenerateInput | null;
+    submitted: StudioTextGeneratePayload | null;
   };
 
 function buildAgentSeedPayload(description: string): {
   ok: boolean;
   errors: string[];
-  payload: TextGenerateInput | null;
+  payload: StudioTextGeneratePayload | null;
 } {
   const trimmed = description.trim();
   const errors: string[] = [];
@@ -70,33 +73,43 @@ function buildAgentSeedPayload(description: string): {
     ok: true,
     errors: [],
     payload: {
-      ...callParams,
-      system: [
-        'You generate an owner-reviewed Realm Agent draft from a one-line user description.',
-        'Return ONE JSON object. No prose before or after. No code fences.',
-        'Required keys: handle, displayName, publicBio, concept, description, ruleText, dnaPrimary, dnaSecondary, rationale.',
-        '',
-        '— Field rules —',
-        'handle: short kebab-case latin suggestion (3-20 chars), no leading @, lowercase letters/digits/hyphens only.',
-        'displayName: 2-32 chars; match the user\'s described language (Chinese, English, etc).',
-        'publicBio: 1-2 sentence public bio (≤160 chars).',
-        'concept: 1-2 sentences naming the core creative concept.',
-        'description: 1 short paragraph public-facing description (≤500 chars).',
-        'ruleText: optional behavior/boundary lines, one per line; empty string if nothing meaningful.',
-        `dnaPrimary: EXACTLY ONE of ${DNA_PRIMARY_ARCHETYPES.join(' | ')}`,
-        `dnaSecondary: array of 1-3 traits from ${DNA_SECONDARY_TRAITS.join(' | ')}`,
-        'rationale: 1-2 sentences explaining the design choice (English).',
-        '',
-        '— Hard prohibitions —',
-        'Never include: handle prefix @, provider, model, lifecycle, state, worldId, ownerId, dna (full JSON), avatarUrl, profileCoverUrl, agentRule, agentRules, LocalAgent.',
-        'Never include code fences, comments, or trailing text outside the JSON object.',
-      ].join('\n'),
-      input: JSON.stringify({
-        userDescription: trimmed,
-        dnaPrimaryAllowed: DNA_PRIMARY_ARCHETYPES,
-        dnaSecondaryAllowed: DNA_SECONDARY_TRAITS,
-      }),
-      metadata: buildStudioRuntimeMetadata('realm-agent-studio.agent-seed'),
+      surfaceId: 'realm-agent-studio.agent-seed',
+      params: callParams,
+      request: {
+        model: { modelId: callParams.model },
+        messages: [
+          studioTextMessage('system', [
+            'You generate an owner-reviewed Realm Agent draft from a one-line user description.',
+            'Return ONE JSON object. No prose before or after. No code fences.',
+            'Required keys: handle, displayName, publicBio, concept, description, ruleText, dnaPrimary, dnaSecondary, rationale.',
+            '',
+            '— Field rules —',
+            'handle: short kebab-case latin suggestion (3-20 chars), no leading @, lowercase letters/digits/hyphens only.',
+            'displayName: 2-32 chars; match the user\'s described language (Chinese, English, etc).',
+            'publicBio: 1-2 sentence public bio (≤160 chars).',
+            'concept: 1-2 sentences naming the core creative concept.',
+            'description: 1 short paragraph public-facing description (≤500 chars).',
+            'ruleText: optional behavior/boundary lines, one per line; empty string if nothing meaningful.',
+            `dnaPrimary: EXACTLY ONE of ${DNA_PRIMARY_ARCHETYPES.join(' | ')}`,
+            `dnaSecondary: array of 1-3 traits from ${DNA_SECONDARY_TRAITS.join(' | ')}`,
+            'rationale: 1-2 sentences explaining the design choice (English).',
+            '',
+            '— Hard prohibitions —',
+            'Never include: handle prefix @, provider, model, lifecycle, state, worldId, ownerId, dna (full JSON), avatarUrl, profileCoverUrl, agentRule, agentRules, LocalAgent.',
+            'Never include code fences, comments, or trailing text outside the JSON object.',
+          ].join('\n')),
+          studioTextMessage('user', JSON.stringify({
+            userDescription: trimmed,
+            dnaPrimaryAllowed: DNA_PRIMARY_ARCHETYPES,
+            dnaSecondaryAllowed: DNA_SECONDARY_TRAITS,
+          })),
+        ],
+        parameters: {
+          temperature: callParams.temperature,
+          maxTokens: callParams.maxTokens,
+          metadata: buildStudioRuntimeMetadata('realm-agent-studio.agent-seed'),
+        },
+      },
     },
   };
 }
@@ -187,7 +200,7 @@ export function parseAgentSeedOutput(raw: string): { seed: GeneratedAgentSeed; r
 
 export async function generateAgentSeedFromDescription(
   description: string,
-  runtime?: RuntimeTextClient | null,
+  runtime?: StudioRuntimeAIClient | null,
 ): Promise<AgentSeedGenerationResult> {
   const built = buildAgentSeedPayload(description);
   if (!built.ok || !built.payload) {
@@ -210,7 +223,7 @@ export async function generateAgentSeedFromDescription(
     };
   }
   try {
-    const output = await runtimeClient.ai.text.generate(built.payload);
+    const output: StudioTextGenerationOutput = await runStudioTextGenerate(built.payload, runtimeClient);
     try {
       const parsed = parseAgentSeedOutput(output.text);
       return {

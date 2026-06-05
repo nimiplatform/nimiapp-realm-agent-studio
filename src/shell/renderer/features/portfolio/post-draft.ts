@@ -1,5 +1,10 @@
-import type { TextGenerateInput } from '@nimiplatform/sdk/runtime/browser';
 import type { OwnerPortfolioAgentDetail } from './portfolio-data.js';
+import {
+  buildStudioRuntimeMetadata,
+  resolveStudioTextCallParams,
+  studioTextMessage,
+  type StudioTextGeneratePayload,
+} from './studio-ai-runtime.js';
 
 export const ATTACHMENT_TARGET_TYPES = ['RESOURCE', 'ASSET', 'BUNDLE'] as const;
 export const POST_COPY_ASSISTANCE_SOURCE = 'Runtime runtime.ai.text.generate';
@@ -363,8 +368,12 @@ export function buildRuntimePostCopyPrompt(input: {
   draft: LocalPostDraftInput;
   intent: string;
   model: string;
-}): { ok: true; errors: []; payload: TextGenerateInput } | { ok: false; errors: string[]; payload: null } {
-  const model = input.model.trim();
+}): { ok: true; errors: []; payload: StudioTextGeneratePayload } | { ok: false; errors: string[]; payload: null } {
+  const callParams = resolveStudioTextCallParams('realm-agent-studio.post-copy', {
+    maxTokens: 700,
+    temperature: 0.5,
+  });
+  const model = (input.model.trim() || callParams.model).trim();
   const intent = input.intent.trim();
   const normalizedDraft = normalizeLocalPostDraft(input.draft);
   const errors: string[] = [];
@@ -384,30 +393,41 @@ export function buildRuntimePostCopyPrompt(input: {
     ok: true,
     errors: [],
     payload: {
-      model,
-      maxTokens: 700,
-      temperature: 0.5,
-      system: [
-        'You draft candidate Realm Agent post copy for owner review.',
-        'Return one JSON object with caption, tagsText, and rationale only.',
-        'Do not include provider, model, LocalAgent, worldId, authorId, id, scheduledAt, scheduleId, queue, campaign, recurrence, moderation, or publish success fields.',
-        'The owner must review the result before Realm publish.',
-      ].join('\n'),
-      input: JSON.stringify({
-        ownerIntent: intent,
-        currentDraft: normalizedDraft,
-        agentPublicContext: {
-          source: input.agent.source,
-          agentKey: input.agent.id,
-          handle: input.agent.handle.value,
-          displayName: input.agent.displayName.value,
-          bio: input.agent.bio.value,
-          greeting: input.agent.greeting.value,
+      surfaceId: 'realm-agent-studio.post-copy',
+      params: {
+        ...callParams,
+        model,
+      },
+      request: {
+        model: { modelId: model },
+        messages: [
+          studioTextMessage('system', [
+            'You draft candidate Realm Agent post copy for owner review.',
+            'Return one JSON object with caption, tagsText, and rationale only.',
+            'Do not include provider, model, LocalAgent, worldId, authorId, id, scheduledAt, scheduleId, queue, campaign, recurrence, moderation, or publish success fields.',
+            'The owner must review the result before Realm publish.',
+          ].join('\n')),
+          studioTextMessage('user', JSON.stringify({
+            ownerIntent: intent,
+            currentDraft: normalizedDraft,
+            agentPublicContext: {
+              source: input.agent.source,
+              agentKey: input.agent.id,
+              handle: input.agent.handle.value,
+              displayName: input.agent.displayName.value,
+              bio: input.agent.bio.value,
+              greeting: input.agent.greeting.value,
+            },
+          })),
+        ],
+        parameters: {
+          maxTokens: 700,
+          temperature: 0.5,
+          metadata: {
+            ...buildStudioRuntimeMetadata('realm-agent-studio.post-copy'),
+            domain: 'realm-agent-studio.post-copy',
+          },
         },
-      }),
-      metadata: {
-        domain: 'realm-agent-studio.post-copy',
-        surfaceId: 'realm-agent-studio',
       },
     },
   };

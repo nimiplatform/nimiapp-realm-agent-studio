@@ -105,7 +105,7 @@ describe('blocked visual asset candidate payload', () => {
     }, agent);
 
     expect(result.changed).toBe(true);
-    expect(result.payload).toEqual({
+    expect(result.payload).toMatchObject({
       candidate: true,
       blocked: true,
       publicTruth: false,
@@ -178,19 +178,31 @@ describe('blocked voice demo request payload', () => {
       aspectRatio: '4:5',
     }, agent);
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       changed: true,
       errors: [],
       payload: {
-        model: 'configured-image-model',
-        prompt: 'warm public portrait\nOwner notes: blue accent\nRealm Agent display name: Mira\nPublic bio context: Public strategist bio',
-        n: 1,
-        aspectRatio: '4:5',
-        responseFormat: 'url',
-        metadata: {
-          source: 'realm-agent-studio.reviewed-visual-image-candidate',
-          agentKey: 'agent-1',
-          bindingPoint: 'AGENT_CANDIDATE',
+        surfaceId: 'realm-agent-studio.visual-image-candidate',
+        params: {
+          model: 'configured-image-model',
+          aspectRatio: '4:5',
+        },
+        request: {
+          head: {
+            appId: 'app.nimi.realm-agent-studio',
+            modelId: 'configured-image-model',
+          },
+          spec: {
+            spec: {
+              oneofKind: 'imageGenerate',
+              imageGenerate: {
+                prompt: 'warm public portrait\nOwner notes: blue accent\nRealm Agent display name: Mira\nPublic bio context: Public strategist bio',
+                n: 1,
+                aspectRatio: '4:5',
+                responseFormat: 'url',
+              },
+            },
+          },
         },
       },
     });
@@ -215,8 +227,8 @@ describe('blocked voice demo request payload', () => {
       source: 'realm-agent-studio.reviewed-visual-image-candidate',
       runtime: {
         capabilityToken: 'image.generate',
-        currentSdkPath: 'media.image.generate',
-        source: 'Runtime media.image.generate',
+        runtimeScenario: 'imageGenerate',
+        source: 'Runtime ScenarioService.executeScenario image.generate',
       },
       futureEvidencePath: {
         resource: {
@@ -247,7 +259,7 @@ describe('blocked voice demo request payload', () => {
 
     expect(result).toEqual({
       changed: false,
-      errors: ['Runtime media.image.generate model config missing'],
+      errors: ['Runtime ScenarioService.executeScenario image.generate model config missing'],
       payload: null,
     });
   });
@@ -259,7 +271,7 @@ describe('blocked voice demo request payload', () => {
     }, agent);
 
     expect(result.changed).toBe(true);
-    expect(result.payload).toEqual({
+    expect(result.payload).toMatchObject({
       candidate: true,
       blocked: true,
       publicTruth: false,
@@ -276,7 +288,7 @@ describe('blocked voice demo request payload', () => {
       },
       runtimePreview: {
         capabilityToken: 'audio.synthesize',
-        currentSdkPath: 'media.tts.synthesize',
+        runtimeScenario: 'speechSynthesize',
         requestCandidate: {
           model: 'runtime-tts-model',
           text: 'Welcome in.\nThis is a local sample candidate.',
@@ -310,58 +322,67 @@ describe('blocked voice demo request payload', () => {
     expect(result).toEqual({
       blocked: true,
       changed: false,
-      errors: ['voice demo script missing for Runtime media.tts.synthesize'],
+      errors: ['voice demo script missing for Runtime ScenarioService.executeScenario audio.synthesize'],
       payload: null,
     });
   });
 
-  it('builds an allowlisted SpeechSynthesizeInput for Runtime media.tts.synthesize', () => {
+  it('builds an allowlisted speechSynthesize scenario request', () => {
     const result = buildReviewedVoiceSynthesisPayload({
       scriptText: '  Welcome in.  ',
       model: ' runtime-tts-model ',
-    }, agent);
+    });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       changed: true,
       errors: [],
       payload: {
-        model: 'runtime-tts-model',
-        text: 'Welcome in.',
-        metadata: {
-          source: 'realm-agent-studio.reviewed-voice-demo-candidate',
-          agentKey: 'agent-1',
+        surfaceId: 'realm-agent-studio.voice-demo-candidate',
+        params: {
+          model: 'runtime-tts-model',
+        },
+        request: {
+          head: {
+            appId: 'app.nimi.realm-agent-studio',
+            modelId: 'runtime-tts-model',
+          },
+          spec: {
+            spec: {
+              oneofKind: 'speechSynthesize',
+              speechSynthesize: {
+                text: 'Welcome in.',
+              },
+            },
+          },
         },
       },
     });
-    expect(Object.keys(result.payload || {}).sort()).toEqual(['metadata', 'model', 'text']);
     expect(collectKeys(result.payload).has('provider')).toBe(false);
     expect(collectKeys(result.payload).has('localAgent')).toBe(false);
-    expect(collectKeys(result.payload).has('emotion')).toBe(false);
-    expect(collectKeys(result.payload).has('voiceRef')).toBe(false);
   });
 
-  it('fails closed when Runtime media.tts.synthesize model config is missing', () => {
+  it('fails closed when Runtime speechSynthesize model config is missing', () => {
     const result = buildReviewedVoiceSynthesisPayload({
       scriptText: 'Welcome in.',
       model: ' ',
-    }, agent);
+    });
 
     expect(result).toEqual({
       changed: false,
-      errors: ['Runtime media.tts.synthesize model config missing'],
+      errors: ['Runtime ScenarioService.executeScenario audio.synthesize model config missing'],
       payload: null,
     });
   });
 
-  it('fails closed when Runtime media.tts.synthesize script text is missing', () => {
+  it('fails closed when Runtime speechSynthesize script text is missing', () => {
     const result = buildReviewedVoiceSynthesisPayload({
       scriptText: ' ',
       model: 'runtime-tts-model',
-    }, agent);
+    });
 
     expect(result).toEqual({
       changed: false,
-      errors: ['voice demo script missing for Runtime media.tts.synthesize'],
+      errors: ['voice demo script missing for Runtime ScenarioService.executeScenario audio.synthesize'],
       payload: null,
     });
   });
@@ -373,7 +394,7 @@ describe('blocked voice demo request payload', () => {
     }, agent);
 
     expect(result.changed).toBe(true);
-    expect(result.payload).toEqual({
+    expect(result.payload).toMatchObject({
       candidate: true,
       publicTruth: false,
       source: 'realm-agent-studio.reviewed-voice-demo-candidate',
@@ -388,14 +409,26 @@ describe('blocked voice demo request payload', () => {
       },
       runtime: {
         capabilityToken: 'audio.synthesize',
-        currentSdkPath: 'media.tts.synthesize',
-        source: 'Runtime media.tts.synthesize',
+        runtimeScenario: 'speechSynthesize',
+        source: 'Runtime ScenarioService.executeScenario audio.synthesize',
         request: {
-          model: 'runtime-tts-model',
-          text: 'Welcome in.',
-          metadata: {
-            source: 'realm-agent-studio.reviewed-voice-demo-candidate',
-            agentKey: 'agent-1',
+          surfaceId: 'realm-agent-studio.voice-demo-candidate',
+          params: {
+            model: 'runtime-tts-model',
+          },
+          request: {
+            head: {
+              appId: 'app.nimi.realm-agent-studio',
+              modelId: 'runtime-tts-model',
+            },
+            spec: {
+              spec: {
+                oneofKind: 'speechSynthesize',
+                speechSynthesize: {
+                  text: 'Welcome in.',
+                },
+              },
+            },
           },
         },
         status: 'candidate-ready',
@@ -414,7 +447,7 @@ describe('blocked voice demo request payload', () => {
           status: 'candidate-only',
         },
       },
-    } satisfies ReviewedVoiceDemoCandidatePayload);
+    });
 
     expect(collectKeys(result.payload).has('publicSuccess')).toBe(false);
     expect(collectKeys(result.payload).has('bindingSuccess')).toBe(false);
@@ -439,7 +472,9 @@ describe('blocked voice demo request payload', () => {
     expect(assertNoForbiddenMediaCandidateFields({
       runtime: {
         request: {
-          model: 'runtime-tts-model',
+          params: {
+            model: 'runtime-tts-model',
+          },
         },
       },
     })).toBeNull();

@@ -1,3 +1,10 @@
+import {
+  buildStudioRuntimeMetadata,
+  resolveStudioTextCallParams,
+  studioTextMessage,
+  type StudioTextGeneratePayload,
+} from './studio-ai-runtime.js';
+
 export const OWNER_SETTINGS_SAVE_SOURCE = 'Realm MeService.updateMyRealmAgentSettings';
 export const SETTINGS_AI_PROPOSAL_SOURCE = 'Runtime runtime.ai.text.generate';
 export const RAW_RULE_REVIEW_DEFERRED_REASON = 'raw AgentRule review deferred: Realm has not admitted a dedicated owner-scoped rule-content read surface';
@@ -14,8 +21,8 @@ export type OwnerAgentSettingsSnapshot = {
   personality?: {
     summary?: string | null;
     relationshipMode?: string | null;
-    interests?: string[];
-    goals?: string[];
+    interests?: readonly string[];
+    goals?: readonly string[];
   };
   communication?: {
     contentStyle?: string | null;
@@ -24,8 +31,8 @@ export type OwnerAgentSettingsSnapshot = {
     sentiment?: 'positive' | 'neutral' | 'cynical';
   };
   boundaries?: {
-    allowedThemes?: string[];
-    disallowedThemes?: string[];
+    allowedThemes?: readonly string[];
+    disallowedThemes?: readonly string[];
   };
   positioning?: {
     targetAudience?: string | null;
@@ -107,8 +114,8 @@ export type OwnerAgentSettingsUpdateInput = {
   personality?: {
     summary?: string | null;
     relationshipMode?: string | null;
-    interests?: string[];
-    goals?: string[];
+    interests?: readonly string[];
+    goals?: readonly string[];
   };
   communication?: {
     contentStyle?: string | null;
@@ -117,8 +124,8 @@ export type OwnerAgentSettingsUpdateInput = {
     sentiment?: 'positive' | 'neutral' | 'cynical';
   };
   boundaries?: {
-    allowedThemes?: string[];
-    disallowedThemes?: string[];
+    allowedThemes?: readonly string[];
+    disallowedThemes?: readonly string[];
   };
   positioning?: {
     targetAudience?: string | null;
@@ -209,7 +216,7 @@ function compactProfileText(value: string): string {
   return normalizeLineText(value).replace(/[ \t]+/g, ' ');
 }
 
-function listToText(values: string[] | undefined): string {
+function listToText(values: readonly string[] | undefined): string {
   return values?.join(', ') ?? '';
 }
 
@@ -252,7 +259,7 @@ function normalizeNullableSingleLine(value: string): string | null {
   return normalized ? normalized : null;
 }
 
-function sameStringArray(left: string[] | undefined, right: string[]): boolean {
+function sameStringArray(left: readonly string[] | undefined, right: readonly string[]): boolean {
   const normalizedLeft = left ?? [];
   return normalizedLeft.length === right.length && normalizedLeft.every((value, index) => value === right[index]);
 }
@@ -276,7 +283,7 @@ function addStringArrayChange<T extends Record<string, unknown>>(
   target: T,
   key: keyof T,
   proposed: string[],
-  current: string[] | undefined,
+  current: readonly string[] | undefined,
 ) {
   if (!sameStringArray(current, proposed)) {
     target[key] = proposed as T[keyof T];
@@ -370,9 +377,13 @@ export function buildRuntimeOwnerSettingsProposalPrompt(input: {
   current: OwnerAgentSettingsSnapshot;
   draft: OwnerAgentSettingsDraft;
   model: string;
-}) {
+}): { ok: true; errors: []; payload: StudioTextGeneratePayload } | { ok: false; errors: string[]; payload: null } {
   const normalizedDraft = normalizeOwnerAgentSettingsDraft(input.draft);
-  const model = compactProfileText(input.model);
+  const callParams = resolveStudioTextCallParams('realm-agent-studio.settings-proposal', {
+    maxTokens: 900,
+    temperature: 0.2,
+  });
+  const model = compactProfileText(input.model) || callParams.model;
   const intent = normalizedDraft.naturalLanguageIntent;
   const errors: string[] = [];
 
@@ -391,25 +402,36 @@ export function buildRuntimeOwnerSettingsProposalPrompt(input: {
     ok: true as const,
     errors: [],
     payload: {
-      model,
-      maxTokens: 900,
-      temperature: 0.2,
-      system: [
-        'You propose owner-reviewed Realm Agent settings only.',
-        'Return one JSON object with admitted draft field names only.',
-        'Allowed fields: displayName, description, greeting, naturalLanguageIntent, publicRole, worldview, personalitySummary, relationshipMode, interestsText, goalsText, contentStyle, formality, responseLength, sentiment, allowedThemesText, disallowedThemesText, targetAudience, positioning, rawRuleTextCandidate, rationale.',
-        'Do not include provider, model, LocalAgent, lifecycle, state, worldId, handle, avatarUrl, profileCoverUrl, dna, agentRule, or agentRules.',
-        'The owner must review the result before any Realm save.',
-      ].join('\n'),
-      input: JSON.stringify({
-        agentId: input.agentId,
-        ownerIntent: intent,
-        currentSettings: input.current,
-        currentDraft: normalizedDraft,
-      }),
-      metadata: {
-        domain: 'realm-agent-studio.settings-proposal',
-        surfaceId: 'realm-agent-studio',
+      surfaceId: 'realm-agent-studio.settings-proposal',
+      params: {
+        ...callParams,
+        model,
+      },
+      request: {
+        model: { modelId: model },
+        messages: [
+          studioTextMessage('system', [
+            'You propose owner-reviewed Realm Agent settings only.',
+            'Return one JSON object with admitted draft field names only.',
+            'Allowed fields: displayName, description, greeting, naturalLanguageIntent, publicRole, worldview, personalitySummary, relationshipMode, interestsText, goalsText, contentStyle, formality, responseLength, sentiment, allowedThemesText, disallowedThemesText, targetAudience, positioning, rawRuleTextCandidate, rationale.',
+            'Do not include provider, model, LocalAgent, lifecycle, state, worldId, handle, avatarUrl, profileCoverUrl, dna, agentRule, or agentRules.',
+            'The owner must review the result before any Realm save.',
+          ].join('\n')),
+          studioTextMessage('user', JSON.stringify({
+            agentId: input.agentId,
+            ownerIntent: intent,
+            currentSettings: input.current,
+            currentDraft: normalizedDraft,
+          })),
+        ],
+        parameters: {
+          maxTokens: 900,
+          temperature: 0.2,
+          metadata: {
+            ...buildStudioRuntimeMetadata('realm-agent-studio.settings-proposal'),
+            domain: 'realm-agent-studio.settings-proposal',
+          },
+        },
       },
     },
   };

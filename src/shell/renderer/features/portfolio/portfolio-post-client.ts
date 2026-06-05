@@ -1,13 +1,25 @@
+import type { Realm } from '@nimiplatform/sdk/realm';
 import type {
-  RealmServiceArgs,
-  RealmServiceMethod,
-  RealmServiceName,
-  RealmServiceResult,
-} from '@nimiplatform/sdk/realm';
-import type { TextGenerateInput, TextGenerateOutput } from '@nimiplatform/sdk/runtime/browser';
+  RealmCreateAudioDirectUploadOperationRequest,
+  RealmCreateAudioDirectUploadOperationResponse,
+  RealmCreateImageDirectUploadOperationResponse,
+  RealmCreatePostOperationRequest,
+  RealmCreatePostOperationResponse,
+  RealmCreateTextResourceOperationRequest,
+  RealmCreateTextResourceOperationResponse,
+  RealmCreateVideoDirectUploadOperationResponse,
+  RealmFinalizeResourceOperationRequest,
+  RealmFinalizeResourceOperationResponse,
+  RealmListResourcesOperationResponse,
+} from '@nimiplatform/sdk/realm/generated';
 import { createStudioRealmClient } from '@renderer/data/realm-client.js';
 import { createStudioRuntimeClient } from '@renderer/data/runtime-client.js';
-import { resolveStudioTextCallParams } from './studio-ai-runtime.js';
+import {
+  resolveStudioTextCallParams,
+  runStudioTextGenerate,
+  type StudioRuntimeAIClient,
+  type StudioTextGeneratePayload,
+} from './studio-ai-runtime.js';
 import type { OwnerPortfolioAgentDetail } from './portfolio-data.js';
 import {
   POST_COPY_ASSISTANCE_SOURCE,
@@ -18,46 +30,19 @@ import {
   type RuntimePostCopyProposal,
 } from './post-draft.js';
 
-type StudioRealmMethod<
-  Service extends RealmServiceName,
-  Method extends RealmServiceMethod<Service>,
-> = (...args: RealmServiceArgs<Service, Method>) => Promise<RealmServiceResult<Service, Method>>;
+type StudioRealmClient = Pick<Realm, 'generated'>;
 
-type StudioRealmClient = {
-  services: {
-    PostsService: {
-      createPost: StudioRealmMethod<'PostsService', 'createPost'>;
-    };
-    ResourcesService: {
-      createAudioDirectUpload: StudioRealmMethod<'ResourcesService', 'createAudioDirectUpload'>;
-      createImageDirectUpload: StudioRealmMethod<'ResourcesService', 'createImageDirectUpload'>;
-      createTextResource: StudioRealmMethod<'ResourcesService', 'createTextResource'>;
-      createVideoDirectUpload: StudioRealmMethod<'ResourcesService', 'createVideoDirectUpload'>;
-      finalizeResource: StudioRealmMethod<'ResourcesService', 'finalizeResource'>;
-      listResources: StudioRealmMethod<'ResourcesService', 'listResources'>;
-    };
-  };
-};
-
-type RuntimeTextClient = {
-  ai: {
-    text: {
-      generate(input: TextGenerateInput): Promise<TextGenerateOutput>;
-    };
-  };
-};
-
-type RealmCreatePostInput = RealmServiceArgs<'PostsService', 'createPost'>[0];
-type RealmCreatePostResponse = RealmServiceResult<'PostsService', 'createPost'>;
-type RealmCreateTextResourceInput = RealmServiceArgs<'ResourcesService', 'createTextResource'>[0];
-type RealmCreateTextResourceResponse = RealmServiceResult<'ResourcesService', 'createTextResource'>;
-type RealmResourceListResponse = RealmServiceResult<'ResourcesService', 'listResources'>;
-type RealmCreateImageUploadResponse = RealmServiceResult<'ResourcesService', 'createImageDirectUpload'>;
-type RealmCreateVideoUploadResponse = RealmServiceResult<'ResourcesService', 'createVideoDirectUpload'>;
-type RealmCreateAudioUploadInput = RealmServiceArgs<'ResourcesService', 'createAudioDirectUpload'>[0];
-type RealmCreateAudioUploadResponse = RealmServiceResult<'ResourcesService', 'createAudioDirectUpload'>;
-type RealmFinalizeResourceInput = RealmServiceArgs<'ResourcesService', 'finalizeResource'>[1];
-type RealmFinalizeResourceResponse = RealmServiceResult<'ResourcesService', 'finalizeResource'>;
+type RealmCreatePostInput = RealmCreatePostOperationRequest['body'];
+type RealmCreatePostResponse = RealmCreatePostOperationResponse;
+type RealmCreateTextResourceInput = RealmCreateTextResourceOperationRequest['body'];
+type RealmCreateTextResourceResponse = RealmCreateTextResourceOperationResponse;
+type RealmResourceListResponse = RealmListResourcesOperationResponse;
+type RealmCreateImageUploadResponse = RealmCreateImageDirectUploadOperationResponse;
+type RealmCreateVideoUploadResponse = RealmCreateVideoDirectUploadOperationResponse;
+type RealmCreateAudioUploadInput = RealmCreateAudioDirectUploadOperationRequest['body'];
+type RealmCreateAudioUploadResponse = RealmCreateAudioDirectUploadOperationResponse;
+type RealmFinalizeResourceInput = RealmFinalizeResourceOperationRequest['body'];
+type RealmFinalizeResourceResponse = RealmFinalizeResourceOperationResponse;
 
 export const REALM_POST_PUBLISH_SOURCE = 'Realm PostsService.createPost';
 export const REALM_TEXT_RESOURCE_SOURCE = 'Realm ResourcesService.createTextResource';
@@ -197,7 +182,7 @@ export type RuntimePostCopyProposalResult =
     candidate: true;
     truthWrite: false;
     proposal: RuntimePostCopyProposal;
-    submitted: TextGenerateInput;
+    submitted: StudioTextGeneratePayload;
     runtime: {
       traceId?: string;
       modelResolved?: string;
@@ -215,7 +200,7 @@ export type RuntimePostCopyProposalResult =
       | 'runtime-post-copy-failed'
       | 'runtime-post-copy-invalid-output';
     message: string;
-    submitted: TextGenerateInput | null;
+    submitted: StudioTextGeneratePayload | null;
   };
 
 function readOptionalString(record: Record<string, unknown>, key: string): string | undefined {
@@ -248,8 +233,9 @@ function normalizeResourceTitle(value: string): string {
 }
 
 export function normalizePostAttachmentResourceOptions(response: RealmResourceListResponse): PostAttachmentResourceOption[] {
-  const items = response && typeof response === 'object' && Array.isArray((response as Record<string, unknown>).items)
-    ? (response as { items: unknown[] }).items
+  const responseRecord = response as unknown as Record<string, unknown>;
+  const items = response && typeof response === 'object' && Array.isArray(responseRecord.items)
+    ? responseRecord.items
     : [];
 
   return items.flatMap((item) => {
@@ -336,7 +322,7 @@ function normalizeDirectMediaUploadSession(
   if (!session || typeof session !== 'object') {
     return null;
   }
-  const record = session as Record<string, unknown>;
+  const record = session as unknown as Record<string, unknown>;
   const resourceId = readOptionalString(record, 'resourceId');
   const resourceType = readOptionalString(record, 'resourceType');
   const uploadUrl = readOptionalString(record, 'uploadUrl');
@@ -359,7 +345,7 @@ export function normalizeFinalizedDirectMediaResource(
   if (!resource || typeof resource !== 'object') {
     return null;
   }
-  const record = resource as Record<string, unknown>;
+  const record = resource as unknown as Record<string, unknown>;
   const id = readOptionalString(record, 'id');
   const resourceType = readOptionalString(record, 'resourceType');
   const status = readOptionalString(record, 'status');
@@ -413,7 +399,7 @@ export function normalizeRealmTextResourceCreateResult(
     };
   }
 
-  const record = resource as Record<string, unknown>;
+  const record = resource as unknown as Record<string, unknown>;
   const id = readOptionalString(record, 'id');
   if (!id) {
     return {
@@ -464,7 +450,7 @@ export function normalizeRealmPostPublishResult(post: RealmCreatePostResponse): 
     };
   }
 
-  const record = post as Record<string, unknown>;
+  const record = post as unknown as Record<string, unknown>;
   const id = readOptionalString(record, 'id');
   if (!id) {
     return {
@@ -499,7 +485,7 @@ export async function proposeReviewedPostCopy(
   agent: OwnerPortfolioAgentDetail,
   draft: LocalPostDraftInput,
   intent: string,
-  runtime?: RuntimeTextClient | null,
+  runtime?: StudioRuntimeAIClient | null,
 ): Promise<RuntimePostCopyProposalResult> {
   // Model resolved by Runtime via `'auto'`; future AIConfig store will plug
   // in here via studio-ai-runtime helpers.
@@ -535,7 +521,7 @@ export async function proposeReviewedPostCopy(
   }
 
   try {
-    const output = await runtimeClient.ai.text.generate(built.payload);
+    const output = await runStudioTextGenerate(built.payload, runtimeClient);
     try {
       const proposal = normalizeRuntimePostCopyProposal(output.text, draft);
       return {
@@ -579,7 +565,10 @@ export async function publishReviewedPostDraft(
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<RealmPostPublishResult> {
   try {
-    const post = await realm.services.PostsService.createPost(buildRealmCreatePostInput(payload));
+    const post = await realm.generated.createPost({
+      path: {},
+      body: buildRealmCreatePostInput(payload),
+    });
     return normalizeRealmPostPublishResult(post);
   } catch (error) {
     return {
@@ -594,7 +583,7 @@ export async function publishReviewedPostDraft(
 export async function listReadyPostAttachmentResources(
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<PostAttachmentResourceOption[]> {
-  const response = await realm.services.ResourcesService.listResources();
+  const response = await realm.generated.listResources({ path: {} });
   return normalizePostAttachmentResourceOptions(response);
 }
 
@@ -640,13 +629,22 @@ export async function uploadReviewedPostMediaResource(
   let rawSession: DirectMediaResourceUploadSession;
   try {
     if (input.resourceType === 'IMAGE') {
-      rawSession = await realm.services.ResourcesService.createImageDirectUpload('true');
+      rawSession = await realm.generated.createImageDirectUpload({
+        path: {},
+        query: { requireSignedUrls: 'true' },
+      });
     } else if (input.resourceType === 'VIDEO') {
-      rawSession = await realm.services.ResourcesService.createVideoDirectUpload('true');
+      rawSession = await realm.generated.createVideoDirectUpload({
+        path: {},
+        query: { requireSignedUrls: 'true' },
+      });
     } else {
-      rawSession = await realm.services.ResourcesService.createAudioDirectUpload({
-        ...finalizeInput,
-        filename: input.file.name,
+      rawSession = await realm.generated.createAudioDirectUpload({
+        path: {},
+        body: {
+          ...finalizeInput,
+          filename: input.file.name,
+        },
       });
     }
   } catch (error) {
@@ -693,7 +691,10 @@ export async function uploadReviewedPostMediaResource(
   }
 
   try {
-    const resource = await realm.services.ResourcesService.finalizeResource(session.resourceId, finalizeInput);
+    const resource = await realm.generated.finalizeResource({
+      path: { resourceId: session.resourceId },
+      body: finalizeInput,
+    });
     const canonical = normalizeFinalizedDirectMediaResource(resource, input.resourceType);
     if (!canonical) {
       return {
@@ -757,7 +758,10 @@ export async function createReviewedPostTextResource(
   }
 
   try {
-    const resource = await realm.services.ResourcesService.createTextResource(submitted);
+    const resource = await realm.generated.createTextResource({
+      path: {},
+      body: submitted,
+    });
     return normalizeRealmTextResourceCreateResult(resource, submitted);
   } catch (error) {
     return {

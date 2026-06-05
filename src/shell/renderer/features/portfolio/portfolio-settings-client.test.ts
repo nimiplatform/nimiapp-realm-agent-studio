@@ -1,4 +1,5 @@
 import type { Realm } from '@nimiplatform/sdk/realm';
+import { FinishReason, RoutePolicy } from '@nimiplatform/sdk/runtime/generated';
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildFinalizeDirectMediaResourceInput,
@@ -57,7 +58,9 @@ describe('owner portfolio settings client', () => {
       const realm = mockRealm();
       const settings = await getOwnerAgentSettings('agent-1', realm);
 
-      expect(realm.services.MeService.getMyRealmAgentSettings).toHaveBeenCalledWith('agent-1');
+      expect(realm.generated.getMyRealmAgentSettings).toHaveBeenCalledWith({
+        path: { agentId: 'agent-1' },
+      });
       expect(settings).toMatchObject({
         agentId: 'agent-1',
         agentRuleVersion: 3,
@@ -66,8 +69,6 @@ describe('owner portfolio settings client', () => {
           publicRole: 'Guide',
         },
       });
-      expect(Object.hasOwn(realm.services, 'CreatorService')).toBe(false);
-      expect(Object.hasOwn(realm.services, 'AgentRulesService')).toBe(false);
     });
 
      it('updates owner settings through MeService.updateMyRealmAgentSettings without raw rule payloads', async () => {
@@ -81,16 +82,20 @@ describe('owner portfolio settings client', () => {
         rawRuleTextCandidate: 'Visible raw rule candidate must stay deferred.',
       };
       const result = await updateReviewedOwnerAgentSettings('agent-1', draft, current, realm);
-      const updateSettings = realm.services.MeService.updateMyRealmAgentSettings;
-      const submittedPayload = vi.mocked(updateSettings).mock.calls[0]?.[1];
+      const updateSettings = realm.generated.updateMyRealmAgentSettings;
+      const submittedRequest = vi.mocked(updateSettings).mock.calls[0]?.[0];
+      const submittedPayload = submittedRequest?.body;
 
-      expect(updateSettings).toHaveBeenCalledWith('agent-1', {
-        displayName: 'Mira Prime',
-        identity: {
-          worldview: 'Layered world with owner-reviewed framing.',
-        },
-        personality: {
-          interests: ['strategy', 'tea'],
+      expect(updateSettings).toHaveBeenCalledWith({
+        path: { agentId: 'agent-1' },
+        body: {
+          displayName: 'Mira Prime',
+          identity: {
+            worldview: 'Layered world with owner-reviewed framing.',
+          },
+          personality: {
+            interests: ['strategy', 'tea'],
+          },
         },
       });
       expect(collectKeys(submittedPayload).has('rawRuleTextCandidate')).toBe(false);
@@ -99,8 +104,6 @@ describe('owner portfolio settings client', () => {
       expect(collectKeys(submittedPayload).has('profileCoverUrl')).toBe(false);
       expect(collectKeys(submittedPayload).has('provider')).toBe(false);
       expect(collectKeys(submittedPayload).has('model')).toBe(false);
-      expect(Object.hasOwn(realm.services, 'CreatorService')).toBe(false);
-      expect(Object.hasOwn(realm.services, 'AgentRulesService')).toBe(false);
       expect(result).toMatchObject({
         ok: true,
         source: 'Realm MeService.updateMyRealmAgentSettings',
@@ -124,36 +127,51 @@ describe('owner portfolio settings client', () => {
         ...createOwnerAgentSettingsDraft(current),
         naturalLanguageIntent: 'Make Mira warmer for builders.',
       };
-      const generateSettings = vi.fn(async (_input: unknown) => ({
-        text: JSON.stringify({
-          description: 'Warmer strategist for builders.',
-          contentStyle: 'Warm and concise.',
-          rationale: 'Owner asked for a warmer public presentation.',
-        }),
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 1, outputTokens: 1 },
-        trace: { traceId: 'trace-settings', modelResolved: 'runtime-default-text' },
+      const executeScenario = vi.fn(async (_input: unknown) => ({
+        output: {
+          output: {
+            oneofKind: 'textGenerate' as const,
+            textGenerate: {
+              text: JSON.stringify({
+                description: 'Warmer strategist for builders.',
+                contentStyle: 'Warm and concise.',
+                rationale: 'Owner asked for a warmer public presentation.',
+              }),
+            },
+          },
+        },
+        finishReason: FinishReason.STOP,
+        routeDecision: RoutePolicy.UNSPECIFIED,
+        modelResolved: 'runtime-default-text',
+        traceId: 'trace-settings',
+        ignoredExtensions: [],
       }));
       const runtime = {
         ai: {
-          text: {
-            generate: generateSettings,
-          },
+          executeScenario,
+          streamScenario: async function* () {},
         },
       };
 
       const result = await proposeReviewedOwnerAgentSettings('agent-1', draft, current, runtime);
-      const submittedPayload = generateSettings.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+      const submittedPayload = executeScenario.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
 
-      expect(generateSettings).toHaveBeenCalledTimes(1);
+      expect(executeScenario).toHaveBeenCalledTimes(1);
       expect(submittedPayload).toMatchObject({
-        model: 'auto',
-        metadata: {
-          domain: 'realm-agent-studio.settings-proposal',
+        head: {
+          modelId: 'auto',
+        },
+        spec: {
+          spec: {
+            oneofKind: 'textGenerate',
+          },
         },
       });
       expect(collectKeys(submittedPayload).has('provider')).toBe(false);
-      expect(String(submittedPayload?.input || '')).not.toContain('LocalAgent');
+      const textGenerate = (submittedPayload?.spec as { spec?: { textGenerate?: { input?: unknown } } } | undefined)
+        ?.spec?.textGenerate;
+      const submittedUserInput = JSON.stringify(textGenerate?.input ?? []);
+      expect(submittedUserInput).not.toContain('LocalAgent');
       expect(result).toMatchObject({
         ok: true,
         source: 'Runtime runtime.ai.text.generate',
@@ -169,7 +187,7 @@ describe('owner portfolio settings client', () => {
           traceId: 'trace-settings',
         },
       });
-      expect(realm.services.MeService.updateMyRealmAgentSettings).not.toHaveBeenCalled();
+      expect(realm.generated.updateMyRealmAgentSettings).not.toHaveBeenCalled();
     });
 
      it('fails closed for Runtime settings proposal when intent is missing', async () => {
@@ -181,9 +199,8 @@ describe('owner portfolio settings client', () => {
       const current = await getOwnerAgentSettings('agent-1', realm);
       const runtime = {
         ai: {
-          text: {
-            generate: vi.fn(),
-          },
+          executeScenario: vi.fn(),
+          streamScenario: async function* () {},
         },
       };
 
@@ -192,7 +209,7 @@ describe('owner portfolio settings client', () => {
         naturalLanguageIntent: '',
       }, current, runtime);
 
-      expect(runtime.ai.text.generate).not.toHaveBeenCalled();
+      expect(runtime.ai.executeScenario).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: false,
         source: 'Runtime runtime.ai.text.generate',
@@ -212,7 +229,7 @@ describe('owner portfolio settings client', () => {
         rawRuleTextCandidate: 'Only raw rule review.',
       }, current, realm);
 
-      expect(realm.services.MeService.updateMyRealmAgentSettings).not.toHaveBeenCalled();
+      expect(realm.generated.updateMyRealmAgentSettings).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: false,
         source: 'Realm MeService.updateMyRealmAgentSettings',
@@ -226,14 +243,15 @@ describe('owner portfolio settings client', () => {
       const realm = mockRealm();
       const settings = await getAgentVisibilitySettings('agent-1', realm);
 
-      expect(realm.services.AgentsService.agentControllerGetVisibility).toHaveBeenCalledWith('agent-1');
+      expect(realm.generated.agentControllerGetVisibility).toHaveBeenCalledWith({
+        path: { id: 'agent-1' },
+      });
       expect(settings).toEqual({
         accountVisibility: 'PUBLIC',
         defaultPostVisibility: 'PUBLIC',
         dmVisibility: 'FRIENDS',
         profileVisibility: 'PUBLIC',
       });
-      expect(Object.hasOwn(realm.services, 'CreatorService')).toBe(false);
     });
 
      it('updates owner visibility through AgentsService.agentControllerUpdateVisibility with changed allowlisted fields only', async () => {
@@ -251,12 +269,16 @@ describe('owner portfolio settings client', () => {
         profileVisibility: 'PUBLIC',
       };
       const result = await updateReviewedAgentVisibility('agent-1', draft, current, realm);
-      const updateVisibility = realm.services.AgentsService.agentControllerUpdateVisibility;
-      const submittedPayload = vi.mocked(updateVisibility).mock.calls[0]?.[1];
+      const updateVisibility = realm.generated.agentControllerUpdateVisibility;
+      const submittedRequest = vi.mocked(updateVisibility).mock.calls[0]?.[0];
+      const submittedPayload = submittedRequest?.body;
 
-      expect(updateVisibility).toHaveBeenCalledWith('agent-1', {
-        accountVisibility: 'FRIENDS',
-        dmVisibility: 'PRIVATE',
+      expect(updateVisibility).toHaveBeenCalledWith({
+        path: { id: 'agent-1' },
+        body: {
+          accountVisibility: 'FRIENDS',
+          dmVisibility: 'PRIVATE',
+        },
       });
       expect(Object.keys(submittedPayload || {}).sort()).toEqual(['accountVisibility', 'dmVisibility']);
       expect(collectKeys(submittedPayload).has('state')).toBe(false);
@@ -292,7 +314,7 @@ describe('owner portfolio settings client', () => {
       } as AgentVisibilityDraft;
       const invalid = await updateReviewedAgentVisibility('agent-1', invalidDraft, current, realm);
 
-      expect(realm.services.AgentsService.agentControllerUpdateVisibility).not.toHaveBeenCalled();
+      expect(realm.generated.agentControllerUpdateVisibility).not.toHaveBeenCalled();
       expect(noChange).toMatchObject({
         ok: false,
         source: 'Realm AgentsService.agentControllerUpdateVisibility',
@@ -332,15 +354,19 @@ describe('owner portfolio settings client', () => {
      it('projects Runtime context through world-only RuntimeProjectionsService and returns summary counts only', async () => {
       const realm = mockRealm();
       const result = await projectAgentRuntimeContextSummary(ownerAgentDetail(), realm);
-      const projectRuntimePayload = realm.services.RuntimeProjectionsService.projectRuntimePayload;
-      const submittedPayload = vi.mocked(projectRuntimePayload).mock.calls[0]?.[0];
+      const projectRuntimePayload = realm.generated.projectRuntimePayload;
+      const submittedRequest = vi.mocked(projectRuntimePayload).mock.calls[0]?.[0];
+      const submittedPayload = submittedRequest?.body;
 
       expect(projectRuntimePayload).toHaveBeenCalledWith({
-        worldId: 'OASIS',
-        contextEnvelope: {
-          allowedWorldScopes: ['WORLD', 'REGION', 'FACTION', 'INDIVIDUAL', 'SCENE'],
-          includeInheritedAgentRules: false,
-          focusKeywords: ['realm-agent-studio', 'owner-reviewed-runtime-context'],
+        path: {},
+        body: {
+          worldId: 'OASIS',
+          contextEnvelope: {
+            allowedWorldScopes: ['WORLD', 'REGION', 'FACTION', 'INDIVIDUAL', 'SCENE'],
+            includeInheritedAgentRules: false,
+            focusKeywords: ['realm-agent-studio', 'owner-reviewed-runtime-context'],
+          },
         },
       });
       expect(collectKeys(submittedPayload).has('agentId')).toBe(false);
@@ -379,7 +405,7 @@ describe('owner portfolio settings client', () => {
         payload: {
           worldRules: [{ statement: 'world raw' }],
         },
-      } as unknown as Awaited<ReturnType<Realm['services']['RuntimeProjectionsService']['projectRuntimePayload']>>);
+      } as unknown as Awaited<ReturnType<Realm['generated']['projectRuntimePayload']>>);
 
       expect(summary).toEqual({
         source: 'Realm RuntimeProjectionsService.projectRuntimePayload',
@@ -402,7 +428,7 @@ describe('owner portfolio settings client', () => {
         world: detailField('world', 'World evidence', ''),
       }, realm);
 
-      expect(realm.services.RuntimeProjectionsService.projectRuntimePayload).not.toHaveBeenCalled();
+      expect(realm.generated.projectRuntimePayload).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: false,
         truthWrite: false,

@@ -1,13 +1,19 @@
+import type { Realm } from '@nimiplatform/sdk/realm';
 import type {
-  RealmServiceArgs,
-  RealmServiceMethod,
-  RealmServiceName,
-  RealmServiceResult,
-} from '@nimiplatform/sdk/realm';
-import type { TextGenerateInput, TextGenerateOutput } from '@nimiplatform/sdk/runtime/browser';
+  RealmAgentControllerGetVisibilityOperationResponse,
+  RealmGetMyRealmAgentSettingsOperationResponse,
+  RealmProjectRuntimePayloadOperationRequest,
+  RealmProjectRuntimePayloadOperationResponse,
+  RealmUpdateMyRealmAgentSettingsOperationRequest,
+} from '@nimiplatform/sdk/realm/generated';
 import { createStudioRealmClient } from '@renderer/data/realm-client.js';
 import { createStudioRuntimeClient } from '@renderer/data/runtime-client.js';
-import { resolveStudioTextCallParams } from './studio-ai-runtime.js';
+import {
+  resolveStudioTextCallParams,
+  runStudioTextGenerate,
+  type StudioRuntimeAIClient,
+  type StudioTextGeneratePayload,
+} from './studio-ai-runtime.js';
 import type { OwnerPortfolioAgentDetail } from './portfolio-data.js';
 import {
   OWNER_SETTINGS_SAVE_SOURCE,
@@ -19,41 +25,16 @@ import {
   type RuntimeOwnerSettingsProposal,
 } from './setting-proposal.js';
 
-type StudioRealmMethod<
-  Service extends RealmServiceName,
-  Method extends RealmServiceMethod<Service>,
-> = (...args: RealmServiceArgs<Service, Method>) => Promise<RealmServiceResult<Service, Method>>;
+type StudioRealmClient = Pick<Realm, 'generated'>;
 
-type StudioRealmClient = {
-  services: {
-    AgentsService: {
-      agentControllerGetVisibility: StudioRealmMethod<'AgentsService', 'agentControllerGetVisibility'>;
-      agentControllerUpdateVisibility: StudioRealmMethod<'AgentsService', 'agentControllerUpdateVisibility'>;
-    };
-    MeService: {
-      getMyRealmAgentSettings: StudioRealmMethod<'MeService', 'getMyRealmAgentSettings'>;
-      updateMyRealmAgentSettings: StudioRealmMethod<'MeService', 'updateMyRealmAgentSettings'>;
-    };
-    RuntimeProjectionsService: {
-      projectRuntimePayload: StudioRealmMethod<'RuntimeProjectionsService', 'projectRuntimePayload'>;
-    };
-  };
-};
+type RuntimeTextClient = StudioRuntimeAIClient;
 
-type RuntimeTextClient = {
-  ai: {
-    text: {
-      generate(input: TextGenerateInput): Promise<TextGenerateOutput>;
-    };
-  };
-};
-
-export type RealmAgentVisibilitySettings = RealmServiceResult<'AgentsService', 'agentControllerGetVisibility'>;
-type RealmAgentVisibilityUpdateInput = RealmServiceArgs<'AgentsService', 'agentControllerUpdateVisibility'>[1];
-export type RealmOwnerAgentSettings = RealmServiceResult<'MeService', 'getMyRealmAgentSettings'>;
-type RealmOwnerAgentSettingsUpdateInput = RealmServiceArgs<'MeService', 'updateMyRealmAgentSettings'>[1];
-type RealmRuntimeProjectionInput = RealmServiceArgs<'RuntimeProjectionsService', 'projectRuntimePayload'>[0];
-type RealmRuntimeProjectionResponse = RealmServiceResult<'RuntimeProjectionsService', 'projectRuntimePayload'>;
+export type RealmAgentVisibilitySettings = RealmAgentControllerGetVisibilityOperationResponse;
+type RealmAgentVisibilityUpdateInput = Partial<Record<AgentVisibilityField, AgentVisibilityValue>>;
+export type RealmOwnerAgentSettings = RealmGetMyRealmAgentSettingsOperationResponse;
+type RealmOwnerAgentSettingsUpdateInput = RealmUpdateMyRealmAgentSettingsOperationRequest['body'];
+type RealmRuntimeProjectionInput = RealmProjectRuntimePayloadOperationRequest['body'];
+type RealmRuntimeProjectionResponse = RealmProjectRuntimePayloadOperationResponse;
 
 export const REALM_RUNTIME_PROJECTION_SOURCE = 'Realm RuntimeProjectionsService.projectRuntimePayload';
 export const REALM_AGENT_VISIBILITY_SOURCE = 'Realm AgentsService.agentControllerUpdateVisibility';
@@ -142,7 +123,7 @@ export type RuntimeOwnerSettingsProposalResult =
     candidate: true;
     truthWrite: false;
     proposal: RuntimeOwnerSettingsProposal;
-    submitted: TextGenerateInput;
+    submitted: StudioTextGeneratePayload;
     runtime: {
       traceId?: string;
       modelResolved?: string;
@@ -160,7 +141,7 @@ export type RuntimeOwnerSettingsProposalResult =
       | 'runtime-settings-proposal-failed'
       | 'runtime-settings-proposal-invalid-output';
     message: string;
-    submitted: TextGenerateInput | null;
+    submitted: StudioTextGeneratePayload | null;
   };
 
 function readOptionalString(record: Record<string, unknown>, key: string): string | undefined {
@@ -232,7 +213,7 @@ export function normalizeRuntimeProjectionSummary(response: RealmRuntimeProjecti
   if (!response || typeof response !== 'object') {
     return null;
   }
-  const record = response as Record<string, unknown>;
+  const record = response as unknown as Record<string, unknown>;
   const consumerSurface = record.consumerSurface;
   const worldId = readOptionalString(record, 'worldId');
   const checksum = readOptionalString(record, 'checksum');
@@ -258,14 +239,14 @@ export async function getAgentVisibilitySettings(
   agentId: string,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<RealmAgentVisibilitySettings> {
-  return realm.services.AgentsService.agentControllerGetVisibility(agentId);
+  return realm.generated.agentControllerGetVisibility({ path: { id: agentId } });
 }
 
 export async function getOwnerAgentSettings(
   agentId: string,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<RealmOwnerAgentSettings> {
-  return realm.services.MeService.getMyRealmAgentSettings(agentId);
+  return realm.generated.getMyRealmAgentSettings({ path: { agentId } });
 }
 
 export async function updateReviewedAgentVisibility(
@@ -290,7 +271,10 @@ export async function updateReviewedAgentVisibility(
   }
 
   try {
-    const settings = await realm.services.AgentsService.agentControllerUpdateVisibility(agentId, input);
+    const settings = await realm.generated.agentControllerUpdateVisibility({
+      path: { id: agentId },
+      body: input,
+    });
     return {
       ok: true,
       source: REALM_AGENT_VISIBILITY_SOURCE,
@@ -351,7 +335,7 @@ export async function proposeReviewedOwnerAgentSettings(
   }
 
   try {
-    const output = await runtimeClient.ai.text.generate(built.payload);
+    const output = await runStudioTextGenerate(built.payload, runtimeClient);
     try {
       const proposal = normalizeRuntimeOwnerSettingsProposal(output.text, draft);
       return {
@@ -411,7 +395,10 @@ export async function updateReviewedOwnerAgentSettings(
 
   const submitted = built.input as RealmOwnerAgentSettingsUpdateInput;
   try {
-    const settings = await realm.services.MeService.updateMyRealmAgentSettings(agentId, submitted);
+    const settings = await realm.generated.updateMyRealmAgentSettings({
+      path: { agentId },
+      body: submitted,
+    });
     return {
       ok: true,
       source: OWNER_SETTINGS_SAVE_SOURCE,
@@ -448,7 +435,10 @@ export async function projectAgentRuntimeContextSummary(
   }
 
   try {
-    const response = await realm.services.RuntimeProjectionsService.projectRuntimePayload(submitted);
+    const response = await realm.generated.projectRuntimePayload({
+      path: {},
+      body: submitted,
+    });
     const summary = normalizeRuntimeProjectionSummary(response);
     if (!summary) {
       return {

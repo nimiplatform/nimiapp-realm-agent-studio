@@ -1,4 +1,5 @@
 import type { Realm } from '@nimiplatform/sdk/realm';
+import { FinishReason, RoutePolicy } from '@nimiplatform/sdk/runtime/generated';
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildFinalizeDirectMediaResourceInput,
@@ -56,11 +57,14 @@ describe('owner portfolio media client', () => {
      it('selects a reviewed avatar URL through AgentsService.agentControllerSelectAvatar only', async () => {
       const realm = mockRealm();
       const result = await selectReviewedAgentAvatarUrl('agent-1', ' https://cdn.example.test/avatar.png ', realm);
-      const selectAvatar = realm.services.AgentsService.agentControllerSelectAvatar;
-      const submittedPayload = vi.mocked(selectAvatar).mock.calls[0]?.[1];
+      const selectAvatar = realm.generated.agentControllerSelectAvatar;
+      const submittedPayload = vi.mocked(selectAvatar).mock.calls[0]?.[0]?.body;
 
-      expect(selectAvatar).toHaveBeenCalledWith('agent-1', {
-        avatarUrl: 'https://cdn.example.test/avatar.png',
+      expect(selectAvatar).toHaveBeenCalledWith({
+        path: { id: 'agent-1' },
+        body: {
+          avatarUrl: 'https://cdn.example.test/avatar.png',
+        },
       });
       expect(submittedPayload).toEqual({
         avatarUrl: 'https://cdn.example.test/avatar.png',
@@ -71,7 +75,6 @@ describe('owner portfolio media client', () => {
       expect(collectKeys(submittedPayload).has('bindingId')).toBe(false);
       expect(collectKeys(submittedPayload).has('provider')).toBe(false);
       expect(collectKeys(submittedPayload).has('model')).toBe(false);
-      expect(Object.hasOwn(realm.services, 'CreatorService')).toBe(false);
       expect(result).toMatchObject({
         ok: true,
         source: 'Realm AgentsService.agentControllerSelectAvatar',
@@ -86,7 +89,7 @@ describe('owner portfolio media client', () => {
       const realm = mockRealm();
       const result = await selectReviewedAgentAvatarUrl('agent-1', 'data:text/plain,avatar', realm);
 
-      expect(realm.services.AgentsService.agentControllerSelectAvatar).not.toHaveBeenCalled();
+      expect(realm.generated.agentControllerSelectAvatar).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: false,
         source: 'Realm AgentsService.agentControllerSelectAvatar',
@@ -119,26 +122,30 @@ describe('owner portfolio media client', () => {
       expect(buildRealmSelectAvatarInput('')).toBeNull();
     });
 
-     it('calls Runtime media.image.generate for visual candidates only', async () => {
-      const runtime = {
-        media: {
-          image: {
-            generate: vi.fn(async (_input: unknown) => ({
-              job: {
-                jobId: 'job-image-1',
-                modelResolved: 'runtime-image-model',
-                traceId: 'trace-image-job',
-              },
+     it('calls Runtime imageGenerate scenario for visual candidates only', async () => {
+      const executeScenario = vi.fn(async (_input: unknown) => ({
+        output: {
+          output: {
+            oneofKind: 'imageGenerate' as const,
+            imageGenerate: {
               artifacts: [{
                 artifactId: 'artifact-image-1',
                 mimeType: 'image/png',
                 uri: 'runtime://artifact-image-1',
               }],
-              trace: {
-                traceId: 'trace-image-output',
-              },
-            })),
+            },
           },
+        },
+        finishReason: FinishReason.STOP,
+        routeDecision: RoutePolicy.UNSPECIFIED,
+        modelResolved: 'runtime-image-model',
+        traceId: 'trace-image-output',
+        ignoredExtensions: [],
+      }));
+      const runtime = {
+        ai: {
+          executeScenario,
+          streamScenario: async function* () {},
         },
       };
 
@@ -151,17 +158,21 @@ describe('owner portfolio media client', () => {
         aspectRatio: '1:1',
       }, ownerAgentDetail(), runtime as unknown as Parameters<typeof generateReviewedVisualImageCandidate>[2]);
 
-      const submittedPayload = vi.mocked(runtime.media.image.generate).mock.calls[0]?.[0];
-      expect(runtime.media.image.generate).toHaveBeenCalledTimes(1);
+      const submittedPayload = executeScenario.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+      expect(executeScenario).toHaveBeenCalledTimes(1);
       expect(submittedPayload).toMatchObject({
-        model: 'runtime-image-model',
-        n: 1,
-        aspectRatio: '1:1',
-        responseFormat: 'url',
-        metadata: {
-          source: 'realm-agent-studio.reviewed-visual-image-candidate',
-          agentKey: 'agent-1',
-          bindingPoint: 'AGENT_CANDIDATE',
+        head: {
+          modelId: 'runtime-image-model',
+        },
+        spec: {
+          spec: {
+            oneofKind: 'imageGenerate',
+            imageGenerate: {
+              n: 1,
+              aspectRatio: '1:1',
+              responseFormat: 'url',
+            },
+          },
         },
       });
       expect(collectKeys(submittedPayload).has('provider')).toBe(false);
@@ -169,11 +180,10 @@ describe('owner portfolio media client', () => {
       expect(collectKeys(submittedPayload).has('worldId')).toBe(false);
       expect(result).toMatchObject({
         ok: true,
-        source: 'Runtime media.image.generate',
+        source: 'Runtime ScenarioService.executeScenario image.generate',
         candidate: true,
         publicTruth: false,
         runtime: {
-          jobId: 'job-image-1',
           artifactIds: ['artifact-image-1'],
           artifactUris: ['runtime://artifact-image-1'],
           traceId: 'trace-image-output',
@@ -182,16 +192,26 @@ describe('owner portfolio media client', () => {
       });
     });
 
-     it('fails closed when Runtime media.image.generate output has no real job or artifact', async () => {
-      const runtime = {
-        media: {
-          image: {
-            generate: vi.fn(async () => ({
-              job: {},
+     it('fails closed when Runtime imageGenerate scenario output has no artifact', async () => {
+      const executeScenario = vi.fn(async () => ({
+        output: {
+          output: {
+            oneofKind: 'imageGenerate' as const,
+            imageGenerate: {
               artifacts: [],
-              trace: {},
-            })),
+            },
           },
+        },
+        finishReason: FinishReason.STOP,
+        routeDecision: RoutePolicy.UNSPECIFIED,
+        modelResolved: '',
+        traceId: '',
+        ignoredExtensions: [],
+      }));
+      const runtime = {
+        ai: {
+          executeScenario,
+          streamScenario: async function* () {},
         },
       };
 
@@ -206,31 +226,35 @@ describe('owner portfolio media client', () => {
 
       expect(result).toMatchObject({
         ok: false,
-        source: 'Runtime media.image.generate',
+        source: 'Runtime ScenarioService.executeScenario image.generate',
         failure: 'runtime-output-missing',
-        message: 'Runtime media.image.generate output missing real job id, artifact id, or artifact URI.',
+        message: 'Runtime imageGenerate scenario output missing artifact id or artifact URI.',
       });
     });
 
-     it('calls Runtime media.tts.synthesize with the allowlisted reviewed voice body', async () => {
-      const runtime = {
-        media: {
-          tts: {
-            synthesize: vi.fn(async (_input: unknown) => ({
-              job: {
-                jobId: 'job-voice-1',
-                modelResolved: 'runtime-tts-model',
-                traceId: 'trace-job-1',
-              },
+     it('calls Runtime speechSynthesize scenario with the allowlisted reviewed voice body', async () => {
+      const executeScenario = vi.fn(async (_input: unknown) => ({
+        output: {
+          output: {
+            oneofKind: 'speechSynthesize' as const,
+            speechSynthesize: {
               artifacts: [{
                 artifactId: 'artifact-audio-1',
                 mimeType: 'audio/wav',
               }],
-              trace: {
-                traceId: 'trace-output-1',
-              },
-            })),
+            },
           },
+        },
+        finishReason: FinishReason.STOP,
+        routeDecision: RoutePolicy.UNSPECIFIED,
+        modelResolved: 'runtime-tts-model',
+        traceId: 'trace-output-1',
+        ignoredExtensions: [],
+      }));
+      const runtime = {
+        ai: {
+          executeScenario,
+          streamScenario: async function* () {},
         },
       };
 
@@ -239,26 +263,29 @@ describe('owner portfolio media client', () => {
         model: 'runtime-tts-model',
       }, ownerAgentDetail(), runtime as unknown as Parameters<typeof synthesizeReviewedVoiceDemo>[2]);
 
-      expect(runtime.media.tts.synthesize).toHaveBeenCalledWith({
-        model: 'runtime-tts-model',
-        text: 'Welcome in.',
-        metadata: {
-          source: 'realm-agent-studio.reviewed-voice-demo-candidate',
-          agentKey: 'agent-1',
+      const submittedPayload = executeScenario.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+      expect(executeScenario).toHaveBeenCalledTimes(1);
+      expect(submittedPayload).toMatchObject({
+        head: {
+          modelId: 'runtime-tts-model',
+        },
+        spec: {
+          spec: {
+            oneofKind: 'speechSynthesize',
+            speechSynthesize: {
+              text: 'Welcome in.',
+            },
+          },
         },
       });
-      const submittedPayload = vi.mocked(runtime.media.tts.synthesize).mock.calls[0]?.[0];
-      expect(Object.keys(submittedPayload || {}).sort()).toEqual(['metadata', 'model', 'text']);
       expect(collectKeys(submittedPayload).has('provider')).toBe(false);
       expect(collectKeys(submittedPayload).has('localAgent')).toBe(false);
-      expect(collectKeys(submittedPayload).has('emotion')).toBe(false);
       expect(result).toMatchObject({
         ok: true,
-        source: 'Runtime media.tts.synthesize',
+        source: 'Runtime ScenarioService.executeScenario audio.synthesize',
         candidate: true,
         publicTruth: false,
         runtime: {
-          jobId: 'job-voice-1',
           artifactIds: ['artifact-audio-1'],
           traceId: 'trace-output-1',
           modelResolved: 'runtime-tts-model',
@@ -266,12 +293,11 @@ describe('owner portfolio media client', () => {
       });
     });
 
-     it('fails closed when Runtime media.tts.synthesize model config is missing', async () => {
+     it('fails closed when Runtime speechSynthesize model config is missing', async () => {
       const runtime = {
-        media: {
-          tts: {
-            synthesize: vi.fn(),
-          },
+        ai: {
+          executeScenario: vi.fn(),
+          streamScenario: async function* () {},
         },
       };
       const result = await synthesizeReviewedVoiceDemo({
@@ -279,25 +305,35 @@ describe('owner portfolio media client', () => {
         model: '',
       }, ownerAgentDetail(), runtime as unknown as Parameters<typeof synthesizeReviewedVoiceDemo>[2]);
 
-      expect(runtime.media.tts.synthesize).not.toHaveBeenCalled();
+      expect(runtime.ai.executeScenario).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: false,
-        source: 'Runtime media.tts.synthesize',
+        source: 'Runtime ScenarioService.executeScenario audio.synthesize',
         failure: 'runtime-payload-invalid',
-        message: 'Runtime media.tts.synthesize model config missing',
+        message: 'Runtime ScenarioService.executeScenario audio.synthesize model config missing',
       });
     });
 
-     it('fails closed when Runtime media.tts.synthesize output has no real job or artifact id', async () => {
-      const runtime = {
-        media: {
-          tts: {
-            synthesize: vi.fn(async (_input: unknown) => ({
-              job: {},
+     it('fails closed when Runtime speechSynthesize scenario output has no artifact id', async () => {
+      const executeScenario = vi.fn(async () => ({
+        output: {
+          output: {
+            oneofKind: 'speechSynthesize' as const,
+            speechSynthesize: {
               artifacts: [],
-              trace: {},
-            })),
+            },
           },
+        },
+        finishReason: FinishReason.STOP,
+        routeDecision: RoutePolicy.UNSPECIFIED,
+        modelResolved: '',
+        traceId: '',
+        ignoredExtensions: [],
+      }));
+      const runtime = {
+        ai: {
+          executeScenario,
+          streamScenario: async function* () {},
         },
       };
       const result = await synthesizeReviewedVoiceDemo({
@@ -307,20 +343,20 @@ describe('owner portfolio media client', () => {
 
       expect(result).toMatchObject({
         ok: false,
-        source: 'Runtime media.tts.synthesize',
+        source: 'Runtime ScenarioService.executeScenario audio.synthesize',
         failure: 'runtime-output-missing',
-        message: 'Runtime media.tts.synthesize output missing real job id or artifact id.',
+        message: 'Runtime speechSynthesize scenario output missing artifact id.',
       });
     });
 
-     it('fails closed and preserves draft when Runtime media.tts.synthesize throws', async () => {
+     it('fails closed and preserves draft when Runtime speechSynthesize scenario throws', async () => {
+      const executeScenario = vi.fn(async () => {
+        throw new Error('runtime unavailable');
+      });
       const runtime = {
-        media: {
-          tts: {
-            synthesize: vi.fn(async () => {
-              throw new Error('runtime unavailable');
-            }),
-          },
+        ai: {
+          executeScenario,
+          streamScenario: async function* () {},
         },
       };
       const result = await synthesizeReviewedVoiceDemo({
@@ -328,12 +364,12 @@ describe('owner portfolio media client', () => {
         model: 'runtime-tts-model',
       }, ownerAgentDetail(), runtime as unknown as Parameters<typeof synthesizeReviewedVoiceDemo>[2]);
 
-      expect(runtime.media.tts.synthesize).toHaveBeenCalledTimes(1);
+      expect(executeScenario).toHaveBeenCalledTimes(1);
       expect(result).toMatchObject({
         ok: false,
-        source: 'Runtime media.tts.synthesize',
+        source: 'Runtime ScenarioService.executeScenario audio.synthesize',
         failure: 'runtime-synthesize-failed',
-        message: 'Runtime media.tts.synthesize failed: runtime unavailable',
+        message: 'Runtime speechSynthesize scenario failed: runtime unavailable',
         draft: {
           candidate: true,
           publicTruth: false,

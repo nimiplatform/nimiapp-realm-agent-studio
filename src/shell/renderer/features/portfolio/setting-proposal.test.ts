@@ -158,13 +158,20 @@ describe('owner settings proposal normalization', () => {
 
     expect(result.ok).toBe(true);
     expect(result.payload).toMatchObject({
-      model: 'configured-text-model',
-      metadata: {
-        domain: 'realm-agent-studio.settings-proposal',
+      request: {
+        model: { modelId: 'configured-text-model' },
+        parameters: {
+          metadata: {
+            domain: 'realm-agent-studio.settings-proposal',
+          },
+        },
       },
     });
-    expect(result.payload?.input).not.toContain('provider');
-    expect(result.payload?.input).not.toContain('LocalAgent');
+    const userText = result.payload?.request.messages
+      .find((message) => message.role === 'user')
+      ?.content.find((part) => part.type === 'text')?.text || '';
+    expect(userText).not.toContain('provider');
+    expect(userText).not.toContain('LocalAgent');
   });
 
   it('normalizes Runtime proposal JSON into admitted draft fields only', () => {

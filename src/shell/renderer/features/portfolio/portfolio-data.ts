@@ -1,7 +1,10 @@
-import type { RealmServiceResult } from '@nimiplatform/sdk/realm';
+import type {
+  RealmGetMyRealmAgentOperationResponse,
+  RealmListMyRealmAgentsOperationResponse,
+} from '@nimiplatform/sdk/realm/generated';
 
-export type MyRealmAgentDto = RealmServiceResult<'MeService', 'listMyRealmAgents'>[number];
-export type MyRealmAgentDetailDto = RealmServiceResult<'MeService', 'getMyRealmAgent'>;
+export type MyRealmAgentDto = RealmListMyRealmAgentsOperationResponse[number];
+export type MyRealmAgentDetailDto = RealmGetMyRealmAgentOperationResponse;
 
 export type FriendCountMetric =
   | { status: 'available'; value: number }
@@ -108,7 +111,7 @@ function readWorldEvidence(agentProfile: Record<string, unknown> | null): string
 }
 
 function readUpdatedAt(agent: MyRealmAgentDto): string | null {
-  const record = agent as Record<string, unknown>;
+  const record = agent as unknown as Record<string, unknown>;
   const profile = readOptionalRecord(record.agentProfile);
   const metadata = readOptionalRecord(record.agent);
   return readString(profile?.updatedAt) || readString(metadata?.updatedAt) || readString(record.createdAt);
@@ -139,7 +142,7 @@ export function normalizeOwnerPortfolioAgent(agent: MyRealmAgentDto): OwnerPortf
   };
 }
 
-export function normalizeOwnerPortfolio(agents: MyRealmAgentDto[]): OwnerPortfolioAgent[] {
+export function normalizeOwnerPortfolio(agents: readonly MyRealmAgentDto[]): OwnerPortfolioAgent[] {
   return agents.map(normalizeOwnerPortfolioAgent);
 }
 

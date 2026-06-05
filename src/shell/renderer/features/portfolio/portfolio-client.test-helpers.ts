@@ -50,14 +50,16 @@ export const world: RealmAgentCreationWorldDto = {
 
 export function mockRealm() {
   return {
-    services: {
-      AgentsService: {
-        agentControllerCheckHandle: vi.fn(async (handle: string) => ({
+    generated: {
+      agentControllerCheckHandle: vi.fn(async (request: { readonly query?: { readonly handle?: string } }) => {
+        const handle = String(request.query?.handle || '');
+        return {
           available: handle !== 'taken.agent',
           normalized: handle,
           ...(handle === 'taken.agent' ? { message: 'Handle already taken.' } : {}),
-        })),
-        agentControllerCreate: vi.fn(async () => ({
+        };
+      }),
+      agentControllerCreate: vi.fn(async () => ({
           id: 'agent-created-1',
           state: 'INCUBATING',
           dna: {},
@@ -66,28 +68,33 @@ export function mockRealm() {
             handle: 'mira.agent',
             displayName: 'Mira Agent',
           },
-        })),
-        agentControllerSelectAvatar: vi.fn(async () => ({
-          success: true,
-        })),
-        agentControllerGetVisibility: vi.fn(async () => ({
-          accountVisibility: 'PUBLIC',
-          defaultPostVisibility: 'PUBLIC',
-          dmVisibility: 'FRIENDS',
-          profileVisibility: 'PUBLIC',
-        })),
-        agentControllerUpdateVisibility: vi.fn(async (_agentId: string, input: Partial<RealmAgentVisibilitySettings>) => ({
+      })),
+      agentControllerSelectAvatar: vi.fn(async () => ({
+        success: true,
+      })),
+      agentControllerGetVisibility: vi.fn(async () => ({
+        accountVisibility: 'PUBLIC',
+        defaultPostVisibility: 'PUBLIC',
+        dmVisibility: 'FRIENDS',
+        profileVisibility: 'PUBLIC',
+      })),
+      agentControllerUpdateVisibility: vi.fn(async (request: { readonly body: Partial<RealmAgentVisibilitySettings> }) => {
+        const input = request.body;
+        return {
           accountVisibility: input.accountVisibility || 'PUBLIC',
           defaultPostVisibility: input.defaultPostVisibility || 'PUBLIC',
           dmVisibility: input.dmVisibility || 'FRIENDS',
           profileVisibility: input.profileVisibility || 'PUBLIC',
-        })),
-      },
-      MeService: {
-        listMyRealmAgents: vi.fn(async () => [agent]),
-        getMyRealmAgent: vi.fn(async (agentId: string) => ({ ...agent, id: agentId, bio: 'Detail bio' })),
-        getMyRealmAgentSettings: vi.fn(async (agentId: string) => ({
-          agentId,
+        };
+      }),
+      listMyRealmAgents: vi.fn(async () => [agent]),
+      getMyRealmAgent: vi.fn(async (request: { readonly path: { readonly agentId: string } }) => ({
+        ...agent,
+        id: request.path.agentId,
+        bio: 'Detail bio',
+      })),
+      getMyRealmAgentSettings: vi.fn(async (request: { readonly path: { readonly agentId: string } }) => ({
+          agentId: request.path.agentId,
           worldId: 'world-oasis',
           agentRuleVersion: 3,
           displayName: 'Mira',
@@ -119,9 +126,11 @@ export function mockRealm() {
             positioning: 'guide',
           },
           updatedAt: '2026-05-21T00:00:00.000Z',
-        })),
-        updateMyRealmAgentSettings: vi.fn(async (agentId: string, input: Record<string, unknown>) => ({
-          agentId,
+      })),
+      updateMyRealmAgentSettings: vi.fn(async (request: { readonly path: { readonly agentId: string }; readonly body: Record<string, unknown> }) => {
+        const input = request.body;
+        return {
+          agentId: request.path.agentId,
           worldId: 'world-oasis',
           agentRuleVersion: 4,
           displayName: typeof input.displayName === 'string' ? input.displayName : 'Mira',
@@ -158,13 +167,12 @@ export function mockRealm() {
             ...((input.positioning && typeof input.positioning === 'object') ? input.positioning as Record<string, unknown> : {}),
           },
           updatedAt: '2026-05-22T00:00:00.000Z',
-        })),
-      },
-      WorldsService: {
-        worldControllerListWorlds: vi.fn(async () => [world]),
-        worldControllerGetWorldDetailWithAgents: vi.fn(async (worldId: string) => ({
+        };
+      }),
+      worldControllerListWorlds: vi.fn(async () => [world]),
+      worldControllerGetWorldDetailWithAgents: vi.fn(async (request: { readonly path: { readonly id: string } }) => ({
           ...world,
-          id: worldId,
+          id: request.path.id,
           agentRuleSummary: {
             byLayer: {
               BEHAVIORAL: 0,
@@ -176,10 +184,8 @@ export function mockRealm() {
             worldLinkedRuleCount: 0,
           },
           agents: [],
-        })),
-      },
-      PostsService: {
-        createPost: vi.fn(async () => ({
+      })),
+      createPost: vi.fn(async () => ({
           id: 'post-1',
           authorId: 'author-from-realm',
           author: {
@@ -193,10 +199,8 @@ export function mockRealm() {
           tags: ['studio'],
           visibility: 'PUBLIC',
           worldId: 'world-from-realm',
-        })),
-      },
-      ResourcesService: {
-        listResources: vi.fn(async () => ({
+      })),
+      listResources: vi.fn(async () => ({
           items: [
             {
               id: 'resource-text-1',
@@ -233,45 +237,47 @@ export function mockRealm() {
               updatedAt: '2026-05-21T00:00:00.000Z',
             },
           ],
-        })),
-        createImageDirectUpload: vi.fn(async () => ({
-          resourceId: 'resource-image-upload',
-          resourceType: 'IMAGE',
-          provider: 'CF_IMAGE',
-          storageRef: 'cf-image-1',
-          uploadUrl: 'https://upload.example.test/image',
-          expiresIn: null,
-          status: 'PENDING',
-          deliveryAccess: 'SIGNED',
-        })),
-        createVideoDirectUpload: vi.fn(async () => ({
-          resourceId: 'resource-video-upload',
-          resourceType: 'VIDEO',
-          provider: 'CF_STREAM',
-          storageRef: 'cf-video-1',
-          uploadUrl: 'https://upload.example.test/video',
-          expiresIn: null,
-          status: 'PENDING',
-          deliveryAccess: 'SIGNED',
-        })),
-        createAudioDirectUpload: vi.fn(async () => ({
-          resourceId: 'resource-audio-upload',
-          resourceType: 'AUDIO',
-          provider: 'S3_OBJECT',
-          storageRef: 'audio/user-1/audio.mp3',
-          uploadUrl: 'https://upload.example.test/audio',
-          expiresIn: 3600,
-          status: 'PENDING',
-          deliveryAccess: 'SIGNED',
-        })),
-        finalizeResource: vi.fn(async (resourceId: string, input: Record<string, unknown>) => ({
-          id: resourceId,
+      })),
+      createImageDirectUpload: vi.fn(async () => ({
+        resourceId: 'resource-image-upload',
+        resourceType: 'IMAGE',
+        provider: 'CF_IMAGE',
+        storageRef: 'cf-image-1',
+        uploadUrl: 'https://upload.example.test/image',
+        expiresIn: null,
+        status: 'PENDING',
+        deliveryAccess: 'SIGNED',
+      })),
+      createVideoDirectUpload: vi.fn(async () => ({
+        resourceId: 'resource-video-upload',
+        resourceType: 'VIDEO',
+        provider: 'CF_STREAM',
+        storageRef: 'cf-video-1',
+        uploadUrl: 'https://upload.example.test/video',
+        expiresIn: null,
+        status: 'PENDING',
+        deliveryAccess: 'SIGNED',
+      })),
+      createAudioDirectUpload: vi.fn(async () => ({
+        resourceId: 'resource-audio-upload',
+        resourceType: 'AUDIO',
+        provider: 'S3_OBJECT',
+        storageRef: 'audio/user-1/audio.mp3',
+        uploadUrl: 'https://upload.example.test/audio',
+        expiresIn: 3600,
+        status: 'PENDING',
+        deliveryAccess: 'SIGNED',
+      })),
+      finalizeResource: vi.fn(async (request: { readonly path: { readonly resourceId: string }; readonly body: Record<string, unknown> }) => {
+        const input = request.body;
+        return {
+          id: request.path.resourceId,
           resourceType: input.metadata && typeof input.metadata === 'object'
             ? (input.metadata as Record<string, unknown>).resourceType
             : 'IMAGE',
           provider: 'S3_OBJECT',
           status: 'READY',
-          storageRef: resourceId,
+          storageRef: request.path.resourceId,
           mimeType: input.mimeType,
           provenance: 'UPLOADED',
           uploaderAccountId: 'user-1',
@@ -285,29 +291,28 @@ export function mockRealm() {
           metadata: input.metadata,
           createdAt: '2026-05-21T00:00:00.000Z',
           updatedAt: '2026-05-21T00:00:00.000Z',
-        })),
-        createTextResource: vi.fn(async () => ({
-          id: 'resource-text-1',
-          resourceType: 'TEXT',
-          provider: 'S3_OBJECT',
-          status: 'READY',
-          storageRef: 'text/user-1/resource-text-1.txt',
-          mimeType: 'text/plain; charset=utf-8',
-          provenance: 'UPLOADED',
-          uploaderAccountId: 'user-1',
-          controllerKind: 'ACCOUNT',
-          controllerId: 'user-1',
-          deliveryAccess: 'SIGNED',
-          agentId: 'agent-1',
-          label: 'Reviewed post text for @mira',
-          tags: ['studio'],
-          title: 'Published caption',
-          createdAt: '2026-05-21T00:00:00.000Z',
-          updatedAt: '2026-05-21T00:00:00.000Z',
-        })),
-      },
-      RuntimeProjectionsService: {
-        projectRuntimePayload: vi.fn(async () => ({
+        };
+      }),
+      createTextResource: vi.fn(async () => ({
+        id: 'resource-text-1',
+        resourceType: 'TEXT',
+        provider: 'S3_OBJECT',
+        status: 'READY',
+        storageRef: 'text/user-1/resource-text-1.txt',
+        mimeType: 'text/plain; charset=utf-8',
+        provenance: 'UPLOADED',
+        uploaderAccountId: 'user-1',
+        controllerKind: 'ACCOUNT',
+        controllerId: 'user-1',
+        deliveryAccess: 'SIGNED',
+        agentId: 'agent-1',
+        label: 'Reviewed post text for @mira',
+        tags: ['studio'],
+        title: 'Published caption',
+        createdAt: '2026-05-21T00:00:00.000Z',
+        updatedAt: '2026-05-21T00:00:00.000Z',
+      })),
+      projectRuntimePayload: vi.fn(async () => ({
           worldId: 'OASIS',
           consumerSurface: 'RUNTIME_PAYLOAD',
           releaseAnchor: null,
@@ -365,8 +370,7 @@ export function mockRealm() {
             }],
             agentRules: [],
           },
-        })),
-      },
+      })),
     },
   } as unknown as Realm;
 }

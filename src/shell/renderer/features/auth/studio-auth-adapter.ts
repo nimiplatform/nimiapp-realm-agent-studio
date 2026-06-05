@@ -1,9 +1,9 @@
 import type { AuthPlatformAdapter } from '@nimiplatform/kit/auth';
-import { getPlatformClient } from '@nimiplatform/sdk';
 import { studioTauriOAuthBridge } from '../../bridge/index.js';
 import {
   ensureStudioRuntimeClientReady,
 } from '../../infra/studio-bootstrap.js';
+import { getStudioNimiClient } from '../../infra/studio-nimi-client.js';
 import {
   loadStudioRuntimeAccountUser,
   studioRuntimeAccountCaller,
@@ -23,12 +23,12 @@ function unsupported<T>(): Promise<T> {
 
 export async function loadCurrentUser(): Promise<StudioAuthUser | null> {
   await ensureStudioRuntimeClientReady();
-  return loadStudioRuntimeAccountUser(getPlatformClient().runtime);
+  return loadStudioRuntimeAccountUser(getStudioNimiClient().runtime);
 }
 
 export async function logoutStudioRuntimeAccount(): Promise<void> {
   await ensureStudioRuntimeClientReady();
-  await getPlatformClient().runtime.account.logout({
+  await getStudioNimiClient().runtime.account.logout({
     caller: studioRuntimeAccountCaller,
     reason: 'realm_agent_studio_logout',
   });
@@ -83,7 +83,7 @@ export function createStudioRuntimeAccountBrowserBroker() {
   return {
     begin: async (input: { callbackUrl: string; baseUrl?: string; timeoutMs: number }) => {
       await ensureStudioRuntimeClientReady();
-      const response = await getPlatformClient().runtime.account.beginLogin({
+      const response = await getStudioNimiClient().runtime.account.beginLogin({
         caller: studioRuntimeAccountCaller,
         redirectUri: input.callbackUrl,
         callbackOrigin: new URL(input.callbackUrl).origin,
@@ -116,7 +116,7 @@ export function createStudioRuntimeAccountBrowserBroker() {
       callbackUrl: string;
     }) => {
       await ensureStudioRuntimeClientReady();
-      const response = await getPlatformClient().runtime.account.completeLogin({
+      const response = await getStudioNimiClient().runtime.account.completeLogin({
         caller: studioRuntimeAccountCaller,
         loginAttemptId: input.loginAttemptId,
         code: input.code,

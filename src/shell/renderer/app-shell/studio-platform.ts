@@ -1,16 +1,16 @@
 import {
-  clearPlatformClient,
-  createLocalFirstPartyRuntimePlatformClient,
-  getPlatformClient,
-  type PlatformClient,
+  createNimiClient,
+  createRealmFetchTransport,
+  type NimiClient,
 } from '@nimiplatform/sdk';
 import {
   AccountCallerMode,
   AccountSessionState,
   type AccountCaller,
   type AccountProjection,
-} from '@nimiplatform/sdk/runtime/browser';
+} from '@nimiplatform/sdk/runtime/generated';
 import type { Runtime } from '@nimiplatform/sdk/runtime';
+import { getStudioNimiClient, setStudioNimiClient } from '../infra/studio-nimi-client.js';
 
 // Studio mirrors parentos PO-SHELL-001 / PO-SHELL-008. The caller identity is
 // fixed; runtime owns refresh-token custody and short-lived access-token
@@ -68,27 +68,38 @@ export async function loadStudioRuntimeAccountUser(runtime: Runtime): Promise<St
   return normalizeStudioAccountProjection(response.accountProjection);
 }
 
-export async function buildStudioPlatformClient(realmBaseUrl: string): Promise<PlatformClient> {
-  return createLocalFirstPartyRuntimePlatformClient({
+export async function buildStudioNimiClient(realmBaseUrl: string): Promise<NimiClient> {
+  const client = createNimiClient({
     appId: STUDIO_RUNTIME_APP_ID,
-    realmBaseUrl,
-    runtimeTransport: {
-      type: 'tauri-ipc',
-      commandNamespace: 'runtime_bridge',
-      eventNamespace: 'runtime_bridge',
+    runtime: {
+      appId: STUDIO_RUNTIME_APP_ID,
+      metadata: {
+        callerId: STUDIO_RUNTIME_APP_ID,
+        surfaceId: 'realm-agent-studio',
+      },
+      transport: {
+        type: 'tauri-ipc',
+        commandNamespace: 'runtime_bridge',
+        eventNamespace: 'runtime_bridge',
+      },
     },
-    runtimeDefaults: {
-      appInstanceId: STUDIO_RUNTIME_APP_INSTANCE_ID,
-      callerId: STUDIO_RUNTIME_APP_ID,
-      surfaceId: 'realm-agent-studio',
+    realm: {
+      transport: createRealmFetchTransport({
+        baseUrl: realmBaseUrl,
+        credentials: 'include',
+      }),
     },
+    app: false,
+    permissions: false,
   });
+  await client.runtime.ready();
+  return client;
 }
 
-export function getStudioPlatformClient(): PlatformClient {
-  return getPlatformClient();
+export function getCurrentStudioNimiClient(): NimiClient {
+  return getStudioNimiClient();
 }
 
-export function clearStudioPlatformClient(): void {
-  clearPlatformClient();
+export function clearStudioNimiClient(): void {
+  setStudioNimiClient(null);
 }

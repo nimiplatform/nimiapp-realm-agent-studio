@@ -195,13 +195,20 @@ describe('app-local post schedule candidate', () => {
 
     expect(result.ok).toBe(true);
     expect(result.payload).toMatchObject({
-      model: 'configured-text-model',
-      metadata: {
-        domain: 'realm-agent-studio.post-copy',
+      request: {
+        model: { modelId: 'configured-text-model' },
+        parameters: {
+          metadata: {
+            domain: 'realm-agent-studio.post-copy',
+          },
+        },
       },
     });
-    expect(String(result.payload?.input || '')).not.toContain('LocalAgent');
-    expect(String(result.payload?.input || '')).not.toContain('worldId');
+    const userText = result.payload?.request.messages
+      .find((message) => message.role === 'user')
+      ?.content.find((part) => part.type === 'text')?.text || '';
+    expect(userText).not.toContain('LocalAgent');
+    expect(userText).not.toContain('worldId');
   });
 
   it('normalizes Runtime post copy proposal into editable draft fields', () => {

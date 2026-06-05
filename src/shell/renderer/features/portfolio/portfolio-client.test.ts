@@ -57,8 +57,8 @@ describe('owner portfolio core client', () => {
       const realm = mockRealm();
       const agents = await listOwnerPortfolioAgents(realm);
 
-      expect(realm.services.MeService.listMyRealmAgents).toHaveBeenCalledTimes(1);
-      expect(realm.services.MeService.getMyRealmAgent).not.toHaveBeenCalled();
+      expect(realm.generated.listMyRealmAgents).toHaveBeenCalledTimes(1);
+      expect(realm.generated.getMyRealmAgent).not.toHaveBeenCalled();
       expect(agents[0]?.source).toBe('Realm MeService.listMyRealmAgents');
     });
 
@@ -66,8 +66,8 @@ describe('owner portfolio core client', () => {
       const realm = mockRealm();
       const detail = await getOwnerPortfolioAgentDetail('agent-detail-1', realm);
 
-      expect(realm.services.MeService.getMyRealmAgent).toHaveBeenCalledWith('agent-detail-1');
-      expect(realm.services.MeService.listMyRealmAgents).not.toHaveBeenCalled();
+      expect(realm.generated.getMyRealmAgent).toHaveBeenCalledWith({ path: { agentId: 'agent-detail-1' } });
+      expect(realm.generated.listMyRealmAgents).not.toHaveBeenCalled();
       expect(detail.id).toBe('agent-detail-1');
       expect(detail.bio.value).toBe('Detail bio');
       expect(detail.source).toBe('Realm MeService.getMyRealmAgent');
@@ -77,8 +77,8 @@ describe('owner portfolio core client', () => {
       const realm = mockRealm();
       const worlds = await listCreateRealmAgentSelectableWorlds(realm);
 
-      expect(realm.services.WorldsService.worldControllerListWorlds).toHaveBeenCalledTimes(1);
-      expect(realm.services.AgentsService.agentControllerCreate).not.toHaveBeenCalled();
+      expect(realm.generated.worldControllerListWorlds).toHaveBeenCalledTimes(1);
+      expect(realm.generated.agentControllerCreate).not.toHaveBeenCalled();
       expect(worlds[0]).toMatchObject({
         id: 'world-oasis',
         source: 'Realm WorldsService.worldControllerListWorlds',
@@ -89,8 +89,11 @@ describe('owner portfolio core client', () => {
       const realm = mockRealm();
       const preview = await getCreateRealmAgentWorldPreview('world-oasis', realm);
 
-      expect(realm.services.WorldsService.worldControllerGetWorldDetailWithAgents).toHaveBeenCalledWith('world-oasis', 4);
-      expect(realm.services.AgentsService.agentControllerCreate).not.toHaveBeenCalled();
+      expect(realm.generated.worldControllerGetWorldDetailWithAgents).toHaveBeenCalledWith({
+        path: { id: 'world-oasis' },
+        query: { recommendedAgentLimit: 4 },
+      });
+      expect(realm.generated.agentControllerCreate).not.toHaveBeenCalled();
       expect(preview.source).toBe('Realm WorldsService.worldControllerGetWorldDetailWithAgents');
     });
 
@@ -99,8 +102,14 @@ describe('owner portfolio core client', () => {
       const available = await checkCreateRealmAgentHandleAvailability(' @Mira.Agent ', realm);
       const unavailable = await checkCreateRealmAgentHandleAvailability('taken.agent', realm);
 
-      expect(realm.services.AgentsService.agentControllerCheckHandle).toHaveBeenCalledWith('mira.agent');
-      expect(realm.services.AgentsService.agentControllerCheckHandle).toHaveBeenCalledWith('taken.agent');
+      expect(realm.generated.agentControllerCheckHandle).toHaveBeenCalledWith({
+        path: {},
+        query: { handle: 'mira.agent' },
+      });
+      expect(realm.generated.agentControllerCheckHandle).toHaveBeenCalledWith({
+        path: {},
+        query: { handle: 'taken.agent' },
+      });
       expect(available).toMatchObject({
         ok: true,
         truthWrite: false,
@@ -120,15 +129,14 @@ describe('owner portfolio core client', () => {
           message: 'Handle already taken.',
         },
       });
-      expect(realm.services.AgentsService.agentControllerCreate).not.toHaveBeenCalled();
-      expect(Object.hasOwn(realm.services, 'CreatorService')).toBe(false);
+      expect(realm.generated.agentControllerCreate).not.toHaveBeenCalled();
     });
 
      it('creates a Realm Agent through AgentsService.agentControllerCreate with CreateAgentDto allowlist only', async () => {
       const realm = mockRealm();
       const result = await createReviewedRealmAgent(createPayload, realm);
-      const createAgent = realm.services.AgentsService.agentControllerCreate;
-      const submittedPayload = vi.mocked(createAgent).mock.calls[0]?.[0];
+      const createAgent = realm.generated.agentControllerCreate;
+      const submittedPayload = vi.mocked(createAgent).mock.calls[0]?.[0]?.body;
 
       expect(createAgent).toHaveBeenCalledTimes(1);
       expect(submittedPayload).toEqual(createPayload.body);
@@ -177,12 +185,11 @@ describe('owner portfolio core client', () => {
      it('does not require or call a Creator service for create reads or writes', async () => {
       const realm = mockRealm();
 
-      expect(Object.hasOwn(realm.services, 'CreatorService')).toBe(false);
       await listCreateRealmAgentSelectableWorlds(realm);
       await getCreateRealmAgentWorldPreview('world-oasis', realm);
       await createReviewedRealmAgent(createPayload, realm);
 
-      expect(realm.services.AgentsService.agentControllerCreate).toHaveBeenCalledTimes(1);
+      expect(realm.generated.agentControllerCreate).toHaveBeenCalledTimes(1);
     });
 
      it('creates audio upload session with metadata and finalizes after storage upload', async () => {
@@ -193,7 +200,7 @@ describe('owner portfolio core client', () => {
         file: { name: 'voice.mp3', type: 'audio/mpeg', size: 4096 },
         agent: ownerAgentDetailWithWorldId(),
       }, realm, storageUpload);
-      const audioPayload = vi.mocked(realm.services.ResourcesService.createAudioDirectUpload).mock.calls[0]?.[0];
+      const audioPayload = vi.mocked(realm.generated.createAudioDirectUpload).mock.calls[0]?.[0]?.body;
 
       expect(audioPayload).toMatchObject({
         agentId: 'agent-1',
@@ -220,7 +227,7 @@ describe('owner portfolio core client', () => {
     });
 
      it('normalizes Create Agent responses without canonical id as create failure', () => {
-      const result = normalizeRealmAgentCreateResult({} as Awaited<ReturnType<Realm['services']['AgentsService']['agentControllerCreate']>>);
+      const result = normalizeRealmAgentCreateResult({} as Awaited<ReturnType<Realm['generated']['agentControllerCreate']>>);
 
       expect(result).toMatchObject({
         ok: false,
@@ -278,9 +285,9 @@ describe('owner portfolio core client', () => {
 
       expect(result).toMatchObject({
         ok: false,
-        source: 'Runtime media.tts.synthesize',
+        source: 'Runtime ScenarioService.executeScenario audio.synthesize',
         failure: 'runtime-transport-unavailable',
-        message: 'Runtime media.tts.synthesize runtime transport unavailable: Tauri IPC runtime transport is required.',
+        message: 'Runtime speechSynthesize scenario transport unavailable: Tauri IPC runtime transport is required.',
       });
       expect(result.draft).toMatchObject({
         candidate: true,

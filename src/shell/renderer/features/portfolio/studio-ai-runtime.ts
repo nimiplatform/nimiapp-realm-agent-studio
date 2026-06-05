@@ -1,3 +1,24 @@
+import {
+  createNimiRuntimeAIModel,
+  runNimiTextGenerate,
+  type NimiGenerateTextRequest,
+  type NimiRuntimeAIModelOptions,
+} from '@nimiplatform/sdk/ai';
+import type { NimiJsonObject, NimiMessage } from '@nimiplatform/sdk/contracts';
+import type { Runtime } from '@nimiplatform/sdk/runtime';
+import {
+  ExecutionMode,
+  FallbackPolicy,
+  RoutePolicy,
+  ScenarioType,
+  SpeechTimingMode,
+  type ExecuteScenarioRequest,
+  type ExecuteScenarioResponse,
+  type ImageGenerateScenarioSpec,
+  type SpeechSynthesizeScenarioSpec,
+} from '@nimiplatform/sdk/runtime/generated';
+import type { CoreMetadata } from '@nimiplatform/sdk/types';
+
 /**
  * Studio AI runtime call-params resolver.
  *
@@ -40,6 +61,35 @@ export function buildStudioRuntimeMetadata(surfaceId: StudioAISurfaceId) {
   };
 }
 
+function toStudioCoreMetadata(
+  surfaceId: StudioAISurfaceId,
+  metadata: NimiJsonObject | undefined,
+): CoreMetadata {
+  const projected: Record<string, string> = {};
+  for (const [key, value] of Object.entries(metadata ?? {})) {
+    if (typeof value === 'string') {
+      projected[key] = value;
+    }
+  }
+  return {
+    ...buildStudioRuntimeMetadata(surfaceId),
+    ...projected,
+  };
+}
+
+function toRuntimeRoutePolicy(route: 'local' | 'cloud' | undefined): RoutePolicy {
+  if (route === 'local') return RoutePolicy.LOCAL;
+  if (route === 'cloud') return RoutePolicy.CLOUD;
+  return RoutePolicy.UNSPECIFIED;
+}
+
+export function studioTextMessage(role: NimiMessage['role'], text: string): NimiMessage {
+  return {
+    role,
+    content: [{ type: 'text', text }],
+  };
+}
+
 export type StudioTextCallDefaults = {
   temperature?: number;
   topP?: number;
@@ -56,6 +106,23 @@ export type StudioTextCallParams = {
   topP?: number;
   maxTokens?: number;
   timeoutMs?: number;
+};
+
+export type StudioTextGeneratePayload = {
+  readonly surfaceId: StudioAISurfaceId;
+  readonly params: StudioTextCallParams;
+  readonly request: NimiGenerateTextRequest;
+};
+
+export type StudioRuntimeAIClient = NimiRuntimeAIModelOptions['runtime'];
+
+export type StudioTextGenerationOutput = {
+  readonly text: string;
+  readonly finishReason?: string;
+  readonly trace?: {
+    readonly traceId?: string;
+    readonly modelResolved?: string;
+  };
 };
 
 /**
@@ -77,6 +144,41 @@ export function resolveStudioTextCallParams(
   };
 }
 
+export async function runStudioTextGenerate(
+  payload: StudioTextGeneratePayload,
+  runtime: StudioRuntimeAIClient,
+): Promise<StudioTextGenerationOutput> {
+  const model = createNimiRuntimeAIModel({
+    runtime,
+    appId: STUDIO_APP_ID,
+    model: payload.request.model,
+    routePolicy: payload.params.route,
+    connectorId: payload.params.connectorId,
+    timeoutMs: payload.params.timeoutMs,
+    metadata: toStudioCoreMetadata(payload.surfaceId, payload.request.parameters?.metadata),
+  });
+  const result = await runNimiTextGenerate({
+    runtime: { model },
+    request: payload.request,
+  });
+  if (!result.ok) {
+    throw result.error.cause instanceof Error
+      ? result.error.cause
+      : new Error(result.error.message);
+  }
+  const raw = result.result.raw && typeof result.result.raw === 'object' && !Array.isArray(result.result.raw)
+    ? result.result.raw as { readonly traceId?: unknown; readonly modelResolved?: unknown }
+    : {};
+  return {
+    text: result.text,
+    finishReason: result.result.finishReason,
+    trace: {
+      ...(typeof raw.traceId === 'string' && raw.traceId ? { traceId: raw.traceId } : {}),
+      ...(typeof raw.modelResolved === 'string' && raw.modelResolved ? { modelResolved: raw.modelResolved } : {}),
+    },
+  };
+}
+
 export type StudioImageCallDefaults = {
   aspectRatio?: string;
   timeoutMs?: number;
@@ -88,6 +190,12 @@ export type StudioImageCallParams = {
   connectorId?: string;
   aspectRatio?: string;
   timeoutMs?: number;
+};
+
+export type StudioImageGeneratePayload = {
+  readonly surfaceId: StudioAISurfaceId;
+  readonly params: StudioImageCallParams;
+  readonly request: ExecuteScenarioRequest;
 };
 
 /**
@@ -102,6 +210,56 @@ export function resolveStudioImageCallParams(
     ...(defaults.aspectRatio !== undefined ? { aspectRatio: defaults.aspectRatio } : {}),
     ...(defaults.timeoutMs !== undefined ? { timeoutMs: defaults.timeoutMs } : {}),
   };
+}
+
+function createScenarioRequestHead(params: {
+  readonly model: string;
+  readonly route?: 'local' | 'cloud';
+  readonly connectorId?: string;
+  readonly timeoutMs?: number;
+}) {
+  return {
+    appId: STUDIO_APP_ID,
+    subjectUserId: '',
+    modelId: params.model,
+    routePolicy: toRuntimeRoutePolicy(params.route),
+    fallback: FallbackPolicy.DENY,
+    timeoutMs: Number(params.timeoutMs ?? 0),
+    connectorId: String(params.connectorId || ''),
+  };
+}
+
+export function createStudioImageGeneratePayload(input: {
+  readonly surfaceId: StudioAISurfaceId;
+  readonly params: StudioImageCallParams;
+  readonly spec: ImageGenerateScenarioSpec;
+}): StudioImageGeneratePayload {
+  return {
+    surfaceId: input.surfaceId,
+    params: input.params,
+    request: {
+      head: createScenarioRequestHead(input.params),
+      scenarioType: ScenarioType.IMAGE_GENERATE,
+      executionMode: ExecutionMode.SYNC,
+      spec: {
+        spec: {
+          oneofKind: 'imageGenerate',
+          imageGenerate: input.spec,
+        },
+      },
+      extensions: [],
+    },
+  };
+}
+
+export async function executeStudioImageGenerate(
+  payload: StudioImageGeneratePayload,
+  runtime: Runtime,
+): Promise<ExecuteScenarioResponse> {
+  return runtime.ai.executeScenario(payload.request, {
+    timeoutMs: payload.params.timeoutMs,
+    metadata: toStudioCoreMetadata(payload.surfaceId, undefined),
+  });
 }
 
 export type StudioSpeechCallDefaults = {
@@ -119,8 +277,14 @@ export type StudioSpeechCallParams = {
   timeoutMs?: number;
 };
 
+export type StudioSpeechSynthesizePayload = {
+  readonly surfaceId: StudioAISurfaceId;
+  readonly params: StudioSpeechCallParams;
+  readonly request: ExecuteScenarioRequest;
+};
+
 /**
- * Default audio.synthesize / media.tts.synthesize call params.
+ * Default speech-synthesize call params.
  */
 export function resolveStudioSpeechCallParams(
   _surfaceId: StudioAISurfaceId,
@@ -133,3 +297,38 @@ export function resolveStudioSpeechCallParams(
     ...(defaults.timeoutMs !== undefined ? { timeoutMs: defaults.timeoutMs } : {}),
   };
 }
+
+export function createStudioSpeechSynthesizePayload(input: {
+  readonly surfaceId: StudioAISurfaceId;
+  readonly params: StudioSpeechCallParams;
+  readonly spec: SpeechSynthesizeScenarioSpec;
+}): StudioSpeechSynthesizePayload {
+  return {
+    surfaceId: input.surfaceId,
+    params: input.params,
+    request: {
+      head: createScenarioRequestHead(input.params),
+      scenarioType: ScenarioType.SPEECH_SYNTHESIZE,
+      executionMode: ExecutionMode.SYNC,
+      spec: {
+        spec: {
+          oneofKind: 'speechSynthesize',
+          speechSynthesize: input.spec,
+        },
+      },
+      extensions: [],
+    },
+  };
+}
+
+export async function executeStudioSpeechSynthesize(
+  payload: StudioSpeechSynthesizePayload,
+  runtime: Runtime,
+): Promise<ExecuteScenarioResponse> {
+  return runtime.ai.executeScenario(payload.request, {
+    timeoutMs: payload.params.timeoutMs,
+    metadata: toStudioCoreMetadata(payload.surfaceId, undefined),
+  });
+}
+
+export const STUDIO_DEFAULT_SPEECH_TIMING_MODE = SpeechTimingMode.UNSPECIFIED;

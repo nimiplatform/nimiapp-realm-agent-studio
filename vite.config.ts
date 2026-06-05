@@ -59,7 +59,6 @@ export default defineConfig(() => {
         '@nimiplatform/sdk',
         '@nimiplatform/sdk/realm',
         '@nimiplatform/sdk/runtime',
-        '@nimiplatform/sdk/runtime/browser',
         '@tanstack/react-query',
         'react-router-dom',
         'zustand',

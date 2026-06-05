@@ -593,7 +593,7 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 600 }}>Reference image (optional)</div>
                   <div className="ras-text-muted ras-text-size-sm" style={{ marginTop: 4 }}>
-                    Generate a visual reference via Runtime <code>media.image.generate</code>. The URL passes through <code>CreateAgentDto.referenceImageUrl</code> on submit.
+                    Generate a visual reference via Runtime <code>ScenarioService.executeScenario image.generate</code>. The URL passes through <code>CreateAgentDto.referenceImageUrl</code> on submit.
                   </div>
                 </div>
                 <StatusBadge tone={draft.referenceImageUrl ? 'success' : 'neutral'}>
