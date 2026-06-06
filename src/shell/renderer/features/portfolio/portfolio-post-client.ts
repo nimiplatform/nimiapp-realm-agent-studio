@@ -487,8 +487,8 @@ export async function proposeReviewedPostCopy(
   intent: string,
   runtime?: StudioRuntimeAIClient | null,
 ): Promise<RuntimePostCopyProposalResult> {
-  // Model resolved by Runtime via `'auto'`; future AIConfig store will plug
-  // in here via studio-ai-runtime helpers.
+  // The prompt starts with the unresolved marker; studio-ai-runtime must bind a
+  // concrete text.generate route before dispatch.
   const built = buildRuntimePostCopyPrompt({
     agent,
     draft,
@@ -530,7 +530,7 @@ export async function proposeReviewedPostCopy(
         candidate: true,
         truthWrite: false,
         proposal,
-        submitted: built.payload,
+        submitted: output.submitted,
         runtime: {
           ...(output.trace?.traceId ? { traceId: output.trace.traceId } : {}),
           ...(output.trace?.modelResolved ? { modelResolved: output.trace.modelResolved } : {}),
@@ -545,7 +545,7 @@ export async function proposeReviewedPostCopy(
         truthWrite: false,
         failure: 'runtime-post-copy-invalid-output',
         message: error instanceof Error ? error.message : 'Runtime post copy output invalid.',
-        submitted: built.payload,
+        submitted: output.submitted,
       };
     }
   } catch (error) {
@@ -556,7 +556,7 @@ export async function proposeReviewedPostCopy(
       truthWrite: false,
       failure: 'runtime-post-copy-failed',
       message: `Runtime runtime.ai.text.generate failed: ${error instanceof Error ? error.message : 'runtime transport call failed.'}`,
-      submitted: built.payload,
+      submitted: null,
     };
   }
 }

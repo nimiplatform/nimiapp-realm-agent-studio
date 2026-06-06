@@ -2,6 +2,7 @@ import type { Runtime } from '@nimiplatform/sdk/runtime';
 import type { ExecuteScenarioResponse, ScenarioArtifact } from '@nimiplatform/sdk/runtime/generated';
 import { createStudioRuntimeClient } from '@renderer/data/runtime-client.js';
 import {
+  bindStudioImageGeneratePayload,
   createStudioImageGeneratePayload,
   executeStudioImageGenerate,
   resolveStudioImageCallParams,
@@ -58,8 +59,8 @@ export function buildAgentReferenceImagePayload(input: AgentReferenceImageInput)
   const callParams = resolveStudioImageCallParams('realm-agent-studio.agent-reference-image', {
     ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {}),
   });
-  // Caller can override the runtime-resolved model with an explicit id (escape
-  // hatch for testing). Empty / "auto" falls back to runtime selection.
+  // Caller can supply an explicit model id for route matching. Empty / "auto"
+  // remains unresolved until studio-ai-runtime binds image.generate.
   const callerOverride = String(input.model || '').trim();
   const model = callerOverride && callerOverride.toLowerCase() !== 'auto'
     ? callerOverride
@@ -121,8 +122,10 @@ export async function generateAgentReferenceImage(
       submitted: built.payload,
     };
   }
+  let submitted = built.payload;
   try {
-    const output = await executeStudioImageGenerate(built.payload, runtimeClient);
+    submitted = await bindStudioImageGeneratePayload(built.payload, runtimeClient);
+    const output = await executeStudioImageGenerate(submitted, runtimeClient);
     const artifacts = readImageArtifacts(output);
     const artifactIds: string[] = [];
     const artifactUris: string[] = [];
@@ -141,7 +144,7 @@ export async function generateAgentReferenceImage(
         source: AGENT_REFERENCE_IMAGE_SOURCE,
         failure: 'agent-reference-image-no-artifact',
         message: 'Runtime imageGenerate scenario returned no artifact URI or id.',
-        submitted: built.payload,
+        submitted,
       };
     }
     return {
@@ -150,7 +153,7 @@ export async function generateAgentReferenceImage(
       referenceImageUrl,
       artifactIds,
       artifactUris,
-      submitted: built.payload,
+      submitted,
       runtime: {
         ...(output.traceId ? { traceId: output.traceId } : {}),
         ...(output.modelResolved ? { modelResolved: output.modelResolved } : {}),
@@ -162,7 +165,7 @@ export async function generateAgentReferenceImage(
       source: AGENT_REFERENCE_IMAGE_SOURCE,
       failure: 'agent-reference-image-generate-failed',
       message: `Runtime imageGenerate scenario failed: ${error instanceof Error ? error.message : 'runtime transport call failed.'}`,
-      submitted: built.payload,
+      submitted,
     };
   }
 }

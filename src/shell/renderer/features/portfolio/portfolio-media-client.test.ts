@@ -49,6 +49,7 @@ import {
   createPayload,
   detailField,
   mockRealm,
+  mockRuntimeWithRoutes,
   ownerAgentDetail,
   ownerAgentDetailWithWorldId,
 } from './portfolio-client.test-helpers.js';
@@ -142,12 +143,10 @@ describe('owner portfolio media client', () => {
         traceId: 'trace-image-output',
         ignoredExtensions: [],
       }));
-      const runtime = {
-        ai: {
-          executeScenario,
-          streamScenario: async function* () {},
-        },
-      };
+      const runtime = mockRuntimeWithRoutes({
+        executeScenario,
+        routes: [{ capability: 'image.generate', model: 'runtime-image-model' }],
+      });
 
       const result = await generateReviewedVisualImageCandidate({
         resourceType: 'IMAGE',
@@ -208,12 +207,10 @@ describe('owner portfolio media client', () => {
         traceId: '',
         ignoredExtensions: [],
       }));
-      const runtime = {
-        ai: {
-          executeScenario,
-          streamScenario: async function* () {},
-        },
-      };
+      const runtime = mockRuntimeWithRoutes({
+        executeScenario,
+        routes: [{ capability: 'image.generate', model: 'runtime-image-model' }],
+      });
 
       const result = await generateReviewedVisualImageCandidate({
         resourceType: 'IMAGE',
@@ -251,12 +248,10 @@ describe('owner portfolio media client', () => {
         traceId: 'trace-output-1',
         ignoredExtensions: [],
       }));
-      const runtime = {
-        ai: {
-          executeScenario,
-          streamScenario: async function* () {},
-        },
-      };
+      const runtime = mockRuntimeWithRoutes({
+        executeScenario,
+        routes: [{ capability: 'audio.synthesize', model: 'runtime-tts-model' }],
+      });
 
       const result = await synthesizeReviewedVoiceDemo({
         scriptText: '  Welcome in.  ',
@@ -330,12 +325,10 @@ describe('owner portfolio media client', () => {
         traceId: '',
         ignoredExtensions: [],
       }));
-      const runtime = {
-        ai: {
-          executeScenario,
-          streamScenario: async function* () {},
-        },
-      };
+      const runtime = mockRuntimeWithRoutes({
+        executeScenario,
+        routes: [{ capability: 'audio.synthesize', model: 'runtime-tts-model' }],
+      });
       const result = await synthesizeReviewedVoiceDemo({
         scriptText: 'Welcome in.',
         model: 'runtime-tts-model',
@@ -353,12 +346,10 @@ describe('owner portfolio media client', () => {
       const executeScenario = vi.fn(async () => {
         throw new Error('runtime unavailable');
       });
-      const runtime = {
-        ai: {
-          executeScenario,
-          streamScenario: async function* () {},
-        },
-      };
+      const runtime = mockRuntimeWithRoutes({
+        executeScenario,
+        routes: [{ capability: 'audio.synthesize', model: 'runtime-tts-model' }],
+      });
       const result = await synthesizeReviewedVoiceDemo({
         scriptText: 'Welcome in.',
         model: 'runtime-tts-model',

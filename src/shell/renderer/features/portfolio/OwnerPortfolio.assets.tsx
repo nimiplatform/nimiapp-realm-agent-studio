@@ -46,8 +46,8 @@ export function createVisualMediaCandidateInput(): VisualMediaCandidateInput {
 export function createVisualImageGenerationDraft(): VisualMediaCandidateInput & { model: string; aspectRatio: string } {
   return {
     ...createVisualMediaCandidateInput(),
-    // `'auto'` lets the Runtime layer pick the configured image model. The
-    // owner can still type an explicit model id to override.
+    // Unspecified model marker. The Runtime route resolver must bind this to a
+    // concrete image.generate route before dispatch.
     model: 'auto',
     aspectRatio: '1:1',
   };
@@ -56,8 +56,8 @@ export function createVisualImageGenerationDraft(): VisualMediaCandidateInput & 
 export function createVoiceDemoCandidateInput(agent: OwnerPortfolioAgentDetail): VoiceDemoCandidateInput {
   return {
     scriptText: agent.greeting.value || '',
-    // `'auto'` lets the Runtime layer pick the configured TTS model. Owner
-    // can override with an explicit model id.
+    // Unspecified model marker. The Runtime route resolver must bind this to a
+    // concrete audio.synthesize route before dispatch.
     model: 'auto',
   };
 }

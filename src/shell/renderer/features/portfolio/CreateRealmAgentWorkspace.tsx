@@ -369,7 +369,7 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
             </InlineAlert>
           ) : null}
           <InlineAlert tone="neutral">
-            <strong>Privacy:</strong> the description is sent to the Runtime layer — Runtime picks the resolved text model for this surface (your AI settings binding takes precedence when admitted; otherwise Runtime defaults apply). Generated output is a candidate draft only — nothing reaches Realm until you click Create.
+            <strong>Privacy:</strong> the description is sent to the Runtime layer only after the Studio route resolver binds a concrete text.generate route. Generated output is a candidate draft only — nothing reaches Realm until you click Create.
           </InlineAlert>
         </div>
       </Surface>

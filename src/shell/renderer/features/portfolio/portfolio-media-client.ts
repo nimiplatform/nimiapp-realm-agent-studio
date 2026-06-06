@@ -8,6 +8,8 @@ import type { ExecuteScenarioResponse, ScenarioArtifact } from '@nimiplatform/sd
 import { createStudioRealmClient } from '@renderer/data/realm-client.js';
 import { createStudioRuntimeClient } from '@renderer/data/runtime-client.js';
 import {
+  bindStudioImageGeneratePayload,
+  bindStudioSpeechSynthesizePayload,
   executeStudioImageGenerate,
   executeStudioSpeechSynthesize,
 } from './studio-ai-runtime.js';
@@ -309,8 +311,16 @@ export async function synthesizeReviewedVoiceDemo(
   }
 
   try {
-    const output = await executeStudioSpeechSynthesize(synthesisPayload.payload, runtimeClient);
-    return normalizeRuntimeVoiceDemoSynthesisOutput(output, draft.payload);
+    const boundPayload = await bindStudioSpeechSynthesizePayload(synthesisPayload.payload, runtimeClient);
+    const boundDraft = {
+      ...draft.payload,
+      runtime: {
+        ...draft.payload.runtime,
+        request: boundPayload,
+      },
+    };
+    const output = await executeStudioSpeechSynthesize(boundPayload, runtimeClient);
+    return normalizeRuntimeVoiceDemoSynthesisOutput(output, boundDraft);
   } catch (error) {
     return {
       ok: false,
@@ -352,8 +362,16 @@ export async function generateReviewedVisualImageCandidate(
   }
 
   try {
-    const output = await executeStudioImageGenerate(imagePayload.payload, runtimeClient);
-    return normalizeRuntimeVisualImageGenerationOutput(output, draft.payload);
+    const boundPayload = await bindStudioImageGeneratePayload(imagePayload.payload, runtimeClient);
+    const boundDraft = {
+      ...draft.payload,
+      runtime: {
+        ...draft.payload.runtime,
+        request: boundPayload,
+      },
+    };
+    const output = await executeStudioImageGenerate(boundPayload, runtimeClient);
+    return normalizeRuntimeVisualImageGenerationOutput(output, boundDraft);
   } catch (error) {
     return {
       ok: false,

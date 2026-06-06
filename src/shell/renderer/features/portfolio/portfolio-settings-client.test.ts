@@ -49,6 +49,7 @@ import {
   createPayload,
   detailField,
   mockRealm,
+  mockRuntimeWithRoutes,
   ownerAgentDetail,
   ownerAgentDetailWithWorldId,
 } from './portfolio-client.test-helpers.js';
@@ -118,9 +119,8 @@ describe('owner portfolio settings client', () => {
     });
 
      it('uses Runtime text.generate for candidate owner settings proposals only', async () => {
-      // Studio no longer hardcodes a model id. The call params are resolved
-      // through `studio-ai-runtime` (parentos-pattern) and pass `model: 'auto'`
-      // by default — Runtime picks the resolved text model per surface.
+      // Studio resolves a concrete Runtime route before dispatch; `auto` never
+      // reaches ScenarioService.
       const realm = mockRealm();
       const current = await getOwnerAgentSettings('agent-1', realm);
       const draft = {
@@ -146,12 +146,10 @@ describe('owner portfolio settings client', () => {
         traceId: 'trace-settings',
         ignoredExtensions: [],
       }));
-      const runtime = {
-        ai: {
-          executeScenario,
-          streamScenario: async function* () {},
-        },
-      };
+      const runtime = mockRuntimeWithRoutes({
+        executeScenario,
+        routes: [{ capability: 'text.generate', model: 'runtime-default-text' }],
+      });
 
       const result = await proposeReviewedOwnerAgentSettings('agent-1', draft, current, runtime);
       const submittedPayload = executeScenario.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
@@ -159,7 +157,7 @@ describe('owner portfolio settings client', () => {
       expect(executeScenario).toHaveBeenCalledTimes(1);
       expect(submittedPayload).toMatchObject({
         head: {
-          modelId: 'auto',
+          modelId: 'runtime-default-text',
         },
         spec: {
           spec: {
@@ -192,17 +190,14 @@ describe('owner portfolio settings client', () => {
 
      it('fails closed for Runtime settings proposal when intent is missing', async () => {
       // Previously this test asserted "fails closed when model env is missing".
-      // After the refactor model is always `'auto'`, so that failure path is
-      // gone. The remaining caller-input precondition is the natural-language
-      // intent — an empty intent still trips `runtime-settings-proposal-payload-invalid`.
+      // The route resolver is not reached when caller input is invalid; an
+      // empty intent still trips `runtime-settings-proposal-payload-invalid`.
       const realm = mockRealm();
       const current = await getOwnerAgentSettings('agent-1', realm);
-      const runtime = {
-        ai: {
-          executeScenario: vi.fn(),
-          streamScenario: async function* () {},
-        },
-      };
+      const runtime = mockRuntimeWithRoutes({
+        executeScenario: vi.fn(),
+        routes: [{ capability: 'text.generate', model: 'runtime-default-text' }],
+      });
 
       const result = await proposeReviewedOwnerAgentSettings('agent-1', {
         ...createOwnerAgentSettingsDraft(current),

@@ -49,6 +49,7 @@ import {
   createPayload,
   detailField,
   mockRealm,
+  mockRuntimeWithRoutes,
   ownerAgentDetail,
   ownerAgentDetailWithWorldId,
 } from './portfolio-client.test-helpers.js';
@@ -485,10 +486,8 @@ describe('owner portfolio posts client', () => {
     });
 
      it('uses Runtime text.generate for candidate post copy only', async () => {
-      // Studio no longer hardcodes a model id. The call params are resolved
-      // through `studio-ai-runtime` (parentos-pattern) and pass `model: 'auto'`
-      // by default — Runtime picks the resolved text model per surface. A
-      // future Studio AI-settings store will plug into the same resolver.
+      // Studio resolves a concrete Runtime route before dispatch; `auto` never
+      // reaches ScenarioService.
       const executeScenario = vi.fn(async (_input: unknown) => ({
         output: {
           output: {
@@ -508,12 +507,10 @@ describe('owner portfolio posts client', () => {
         traceId: 'trace-post-copy',
         ignoredExtensions: [],
       }));
-      const runtime = {
-        ai: {
-          executeScenario,
-          streamScenario: async function* () {},
-        },
-      };
+      const runtime = mockRuntimeWithRoutes({
+        executeScenario,
+        routes: [{ capability: 'text.generate', model: 'runtime-default-text' }],
+      });
 
       const result = await proposeReviewedPostCopy(ownerAgentDetail(), {
         caption: '',
@@ -528,7 +525,7 @@ describe('owner portfolio posts client', () => {
       expect(executeScenario).toHaveBeenCalledTimes(1);
       expect(submittedPayload).toMatchObject({
         head: {
-          modelId: 'auto',
+          modelId: 'runtime-default-text',
         },
         spec: {
           spec: {

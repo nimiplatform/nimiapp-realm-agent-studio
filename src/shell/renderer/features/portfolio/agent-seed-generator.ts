@@ -231,7 +231,7 @@ export async function generateAgentSeedFromDescription(
         source: AGENT_SEED_SOURCE,
         seed: parsed.seed,
         rationale: parsed.rationale,
-        submitted: built.payload,
+        submitted: output.submitted,
         runtime: {
           ...(output.trace?.traceId ? { traceId: output.trace.traceId } : {}),
           ...(output.trace?.modelResolved ? { modelResolved: output.trace.modelResolved } : {}),
@@ -244,7 +244,7 @@ export async function generateAgentSeedFromDescription(
         source: AGENT_SEED_SOURCE,
         failure: 'agent-seed-invalid-output',
         message: error instanceof Error ? error.message : 'Agent seed output invalid.',
-        submitted: built.payload,
+        submitted: output.submitted,
       };
     }
   } catch (error) {
@@ -253,7 +253,7 @@ export async function generateAgentSeedFromDescription(
       source: AGENT_SEED_SOURCE,
       failure: 'agent-seed-generate-failed',
       message: `Runtime runtime.ai.text.generate failed: ${error instanceof Error ? error.message : 'runtime transport call failed.'}`,
-      submitted: built.payload,
+      submitted: null,
     };
   }
 }

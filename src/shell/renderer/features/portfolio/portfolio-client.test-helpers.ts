@@ -1,4 +1,5 @@
 import type { Realm } from '@nimiplatform/sdk/realm';
+import type { Runtime } from '@nimiplatform/sdk/runtime';
 import { vi } from 'vitest';
 import type { MyRealmAgentDto, OwnerPortfolioAgentDetail, SettingField } from './portfolio-data.js';
 import {
@@ -9,6 +10,12 @@ import {
 } from './create-agent-draft.js';
 import type { CandidatePostPayload } from './post-draft.js';
 import type { RealmAgentVisibilitySettings } from './portfolio-settings-client.js';
+
+export type MockRuntimeRoute = {
+  readonly capability: 'text.generate' | 'image.generate' | 'audio.synthesize';
+  readonly model: string;
+  readonly connectorId?: string;
+};
 
 export const agent: MyRealmAgentDto = {
   id: 'agent-1',
@@ -373,6 +380,64 @@ export function mockRealm() {
       })),
     },
   } as unknown as Realm;
+}
+
+function localKindForCapability(capability: MockRuntimeRoute['capability']): string {
+  if (capability === 'image.generate') return 'image';
+  if (capability === 'audio.synthesize') return 'tts';
+  return 'chat';
+}
+
+export function mockRuntimeWithRoutes(input: {
+  readonly executeScenario: ReturnType<typeof vi.fn>;
+  readonly routes: readonly MockRuntimeRoute[];
+}): Runtime {
+  const cloudRoutes = input.routes.filter((route) => route.connectorId);
+  const localRoutes = input.routes.filter((route) => !route.connectorId);
+  return {
+    ai: {
+      executeScenario: input.executeScenario,
+      streamScenario: async function* () {},
+    },
+    connectors: {
+      listConnectors: vi.fn(async () => ({
+        connectors: [...new Map(cloudRoutes.map((route) => [
+          route.connectorId,
+          {
+            connectorId: route.connectorId,
+            label: route.connectorId,
+            provider: route.connectorId,
+            kind: 'remote_managed',
+          },
+        ])).values()],
+        nextPageToken: '',
+      })),
+      listConnectorModels: vi.fn(async (request: { readonly connectorId: string }) => ({
+        models: cloudRoutes
+          .filter((route) => route.connectorId === request.connectorId)
+          .map((route) => ({
+            modelId: route.model,
+            capabilities: [route.capability],
+            available: true,
+          })),
+        nextPageToken: '',
+      })),
+    },
+    local: {
+      listLocalAssets: vi.fn(async () => ({
+        assets: localRoutes.map((route) => ({
+          localAssetId: `${localKindForCapability(route.capability)}:${route.model}`,
+          assetId: route.model,
+          kind: localKindForCapability(route.capability),
+          engine: 'mock-runtime',
+          endpoint: 'runtime://mock-local',
+          status: 'active',
+          capabilities: [route.capability],
+        })),
+        nextPageToken: '',
+      })),
+    },
+  } as unknown as Runtime;
 }
 
 export function collectKeys(value: unknown, keys = new Set<string>()): Set<string> {

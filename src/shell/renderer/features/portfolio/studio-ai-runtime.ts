@@ -2,10 +2,15 @@ import {
   createNimiRuntimeAIModel,
   runNimiTextGenerate,
   type NimiGenerateTextRequest,
-  type NimiRuntimeAIModelOptions,
 } from '@nimiplatform/sdk/ai';
 import type { NimiJsonObject, NimiMessage } from '@nimiplatform/sdk/contracts';
-import type { Runtime } from '@nimiplatform/sdk/runtime';
+import {
+  createNimiRuntimeRouteOptionsHostDeps,
+  listNimiRuntimeRouteOptionsWithHost,
+  type NimiRuntimeRouteBinding,
+  type NimiRuntimeRouteOptionsSnapshot,
+  type Runtime,
+} from '@nimiplatform/sdk/runtime';
 import {
   ExecutionMode,
   FallbackPolicy,
@@ -20,22 +25,9 @@ import {
 import type { CoreMetadata } from '@nimiplatform/sdk/types';
 
 /**
- * Studio AI runtime call-params resolver.
- *
- * Mirrors the parentos pattern (apps/parentos/src/shell/renderer/features/settings/parentos-ai-runtime.ts):
- *
- *   1. The app does **not** read `VITE_RUNTIME_*_MODEL` env vars to pick a model.
- *      Model selection lives in the Runtime layer; the app just asks for `'auto'`.
- *   2. When a future Studio AI-settings store admits an explicit per-capability
- *      binding (model/route/connectorId), this helper is the single point that
- *      reads it and merges it into call params. Until that store lands, all
- *      Studio surfaces use `{ model: 'auto' }` — Runtime applies its default
- *      route + model per capability.
- *   3. The returned shape is designed to spread directly into SDK calls:
- *      `runtime.ai.text.generate({ ...params, system, input })`.
- *
- * This file intentionally has zero env reads. If a build pipeline wants to
- * pin a model for development, do it at the Runtime layer, not in Studio JS.
+ * Studio AI runtime route resolver. No env model ids, no Runtime implicit
+ * "auto" dispatch: every call is rebound to a concrete Runtime route before it
+ * reaches ScenarioService.
  */
 
 export const STUDIO_APP_ID = 'app.nimi.realm-agent-studio' as const;
@@ -98,7 +90,6 @@ export type StudioTextCallDefaults = {
 };
 
 export type StudioTextCallParams = {
-  /** `'auto'` = let Runtime pick. Future: real model id from AIConfig store. */
   model: string;
   route?: 'local' | 'cloud';
   connectorId?: string;
@@ -114,10 +105,11 @@ export type StudioTextGeneratePayload = {
   readonly request: NimiGenerateTextRequest;
 };
 
-export type StudioRuntimeAIClient = NimiRuntimeAIModelOptions['runtime'];
+export type StudioRuntimeAIClient = Runtime;
 
 export type StudioTextGenerationOutput = {
   readonly text: string;
+  readonly submitted: StudioTextGeneratePayload;
   readonly finishReason?: string;
   readonly trace?: {
     readonly traceId?: string;
@@ -125,13 +117,7 @@ export type StudioTextGenerationOutput = {
   };
 };
 
-/**
- * Default text-generate call params. Returns `{ model: 'auto', ...defaults }`
- * today; will read user AIConfig binding for `surfaceId` once that store
- * lands. Callers spread the result into `runtime.ai.text.generate({ ... })`.
- */
 export function resolveStudioTextCallParams(
-  // surfaceId reserved for future per-surface AIConfig binding lookup
   _surfaceId: StudioAISurfaceId,
   defaults: StudioTextCallDefaults = {},
 ): StudioTextCallParams {
@@ -144,22 +130,193 @@ export function resolveStudioTextCallParams(
   };
 }
 
+type StudioResolvedRuntimeRouteBinding = {
+  readonly model: string;
+  readonly route: 'local' | 'cloud';
+  readonly connectorId?: string;
+  readonly localModelId?: string;
+  readonly provider?: string;
+  readonly snapshot: NimiRuntimeRouteOptionsSnapshot;
+};
+
+type StudioRuntimeRouteCapability = 'text.generate' | 'image.generate' | 'audio.synthesize';
+
+function normalizeStudioRouteText(value: unknown): string {
+  return String(value || '').trim();
+}
+
+function isAutoStudioRouteModel(value: unknown): boolean {
+  const normalized = normalizeStudioRouteText(value).toLowerCase();
+  return !normalized || normalized === 'auto';
+}
+
+function bindingModel(binding: NimiRuntimeRouteBinding): string {
+  return normalizeStudioRouteText(binding.modelId || binding.model);
+}
+
+function bindingToResolved(
+  binding: NimiRuntimeRouteBinding,
+  snapshot: NimiRuntimeRouteOptionsSnapshot,
+): StudioResolvedRuntimeRouteBinding | null {
+  const model = bindingModel(binding);
+  if (!model) return null;
+  if (binding.source === 'cloud') {
+    const connectorId = normalizeStudioRouteText(binding.connectorId);
+    if (!connectorId) return null;
+    return {
+      model,
+      route: 'cloud',
+      connectorId,
+      provider: normalizeStudioRouteText(binding.provider) || undefined,
+      snapshot,
+    };
+  }
+  const localModelId = normalizeStudioRouteText(binding.localModelId || binding.goRuntimeLocalModelId);
+  return {
+    model,
+    route: 'local',
+    ...(localModelId ? { localModelId } : {}),
+    provider: normalizeStudioRouteText(binding.provider || binding.engine) || undefined,
+    snapshot,
+  };
+}
+
+function routeCandidates(snapshot: NimiRuntimeRouteOptionsSnapshot): NimiRuntimeRouteBinding[] {
+  return [
+    ...snapshot.local.models.map((model): NimiRuntimeRouteBinding => ({
+      source: 'local',
+      connectorId: '',
+      model: normalizeStudioRouteText(model.modelId || model.model),
+      modelId: normalizeStudioRouteText(model.modelId || model.model) || undefined,
+      provider: normalizeStudioRouteText(model.provider || model.engine) || undefined,
+      localModelId: normalizeStudioRouteText(model.localModelId) || undefined,
+      engine: normalizeStudioRouteText(model.engine) || undefined,
+      endpoint: normalizeStudioRouteText(model.endpoint || snapshot.local.defaultEndpoint) || undefined,
+      goRuntimeLocalModelId: normalizeStudioRouteText(model.goRuntimeLocalModelId) || undefined,
+      goRuntimeStatus: normalizeStudioRouteText(model.goRuntimeStatus || model.status) || undefined,
+    })),
+    ...snapshot.connectors.flatMap((connector) =>
+      connector.models.map((model): NimiRuntimeRouteBinding => ({
+        source: 'cloud',
+        connectorId: connector.id,
+        model,
+        modelId: model,
+        provider: normalizeStudioRouteText(connector.provider) || undefined,
+      }))),
+  ].filter((binding) => bindingModel(binding));
+}
+
+function findPreferredRouteCandidate(
+  candidates: readonly NimiRuntimeRouteBinding[],
+  preferredModel: string,
+): NimiRuntimeRouteBinding | null {
+  const normalized = preferredModel.toLowerCase();
+  const matches = candidates.filter((candidate) => {
+    const tokens = [
+      candidate.model,
+      candidate.modelId,
+      candidate.localModelId,
+      candidate.goRuntimeLocalModelId,
+    ].map((value) => normalizeStudioRouteText(value).toLowerCase()).filter(Boolean);
+    return tokens.includes(normalized);
+  });
+  return matches.length === 1 ? matches[0]! : null;
+}
+
+function routeFailureMessage(
+  capability: StudioRuntimeRouteCapability,
+  snapshot: NimiRuntimeRouteOptionsSnapshot,
+  preferredModel: string,
+): string {
+  const candidates = routeCandidates(snapshot);
+  if (!isAutoStudioRouteModel(preferredModel)) {
+    return `Runtime ${capability} route binding is missing or ambiguous for model ${preferredModel}.`;
+  }
+  if (snapshot.selected) {
+    return `Runtime ${capability} selected route binding is invalid.`;
+  }
+  if (candidates.length === 0) {
+    return `Runtime ${capability} route binding unavailable.`;
+  }
+  return `Runtime ${capability} route binding is ambiguous; ${candidates.length} candidates are available and no selected binding was provided.`;
+}
+
+export async function resolveStudioRuntimeRouteBinding(input: {
+  readonly runtime: Runtime;
+  readonly capability: StudioRuntimeRouteCapability;
+  readonly preferredModel?: string;
+}): Promise<StudioResolvedRuntimeRouteBinding> {
+  const preferredModel = normalizeStudioRouteText(input.preferredModel);
+  const snapshot = await listNimiRuntimeRouteOptionsWithHost(
+    { capability: input.capability },
+    createNimiRuntimeRouteOptionsHostDeps(input.runtime),
+  );
+  const selected = snapshot.selected ? bindingToResolved(snapshot.selected, snapshot) : null;
+  if (selected && isAutoStudioRouteModel(preferredModel)) {
+    return selected;
+  }
+  const candidates = routeCandidates(snapshot);
+  const preferred = isAutoStudioRouteModel(preferredModel)
+    ? (candidates.length === 1 ? candidates[0]! : null)
+    : findPreferredRouteCandidate(candidates, preferredModel);
+  const resolved = preferred ? bindingToResolved(preferred, snapshot) : null;
+  if (!resolved) {
+    throw new Error(routeFailureMessage(input.capability, snapshot, preferredModel));
+  }
+  return resolved;
+}
+
+function bindTextPayloadToRoute(
+  payload: StudioTextGeneratePayload,
+  binding: StudioResolvedRuntimeRouteBinding,
+): StudioTextGeneratePayload {
+  return {
+    ...payload,
+    params: {
+      ...payload.params,
+      model: binding.model,
+      route: binding.route,
+      ...(binding.connectorId ? { connectorId: binding.connectorId } : {}),
+    },
+    request: {
+      ...payload.request,
+      model: {
+        modelId: binding.model,
+        ...(binding.connectorId ? { providerId: binding.connectorId } : {}),
+      },
+    },
+  };
+}
+
+export async function bindStudioTextGeneratePayload(
+  payload: StudioTextGeneratePayload,
+  runtime: Runtime,
+): Promise<StudioTextGeneratePayload> {
+  const binding = await resolveStudioRuntimeRouteBinding({
+    runtime,
+    capability: 'text.generate',
+    preferredModel: payload.params.model,
+  });
+  return bindTextPayloadToRoute(payload, binding);
+}
+
 export async function runStudioTextGenerate(
   payload: StudioTextGeneratePayload,
   runtime: StudioRuntimeAIClient,
 ): Promise<StudioTextGenerationOutput> {
+  const boundPayload = await bindStudioTextGeneratePayload(payload, runtime);
   const model = createNimiRuntimeAIModel({
     runtime,
     appId: STUDIO_APP_ID,
-    model: payload.request.model,
-    routePolicy: payload.params.route,
-    connectorId: payload.params.connectorId,
-    timeoutMs: payload.params.timeoutMs,
-    metadata: toStudioCoreMetadata(payload.surfaceId, payload.request.parameters?.metadata),
+    model: boundPayload.request.model,
+    routePolicy: boundPayload.params.route,
+    connectorId: boundPayload.params.connectorId,
+    timeoutMs: boundPayload.params.timeoutMs,
+    metadata: toStudioCoreMetadata(boundPayload.surfaceId, boundPayload.request.parameters?.metadata),
   });
   const result = await runNimiTextGenerate({
     runtime: { model },
-    request: payload.request,
+    request: boundPayload.request,
   });
   if (!result.ok) {
     throw result.error.cause instanceof Error
@@ -171,6 +328,7 @@ export async function runStudioTextGenerate(
     : {};
   return {
     text: result.text,
+    submitted: boundPayload,
     finishReason: result.result.finishReason,
     trace: {
       ...(typeof raw.traceId === 'string' && raw.traceId ? { traceId: raw.traceId } : {}),
@@ -198,9 +356,6 @@ export type StudioImageGeneratePayload = {
   readonly request: ExecuteScenarioRequest;
 };
 
-/**
- * Default image-generate call params.
- */
 export function resolveStudioImageCallParams(
   _surfaceId: StudioAISurfaceId,
   defaults: StudioImageCallDefaults = {},
@@ -252,13 +407,50 @@ export function createStudioImageGeneratePayload(input: {
   };
 }
 
+function bindScenarioPayloadToRoute<TPayload extends StudioImageGeneratePayload | StudioSpeechSynthesizePayload>(
+  payload: TPayload,
+  binding: StudioResolvedRuntimeRouteBinding,
+): TPayload {
+  return {
+    ...payload,
+    params: {
+      ...payload.params,
+      model: binding.model,
+      route: binding.route,
+      ...(binding.connectorId ? { connectorId: binding.connectorId } : {}),
+    },
+    request: {
+      ...payload.request,
+      head: createScenarioRequestHead({
+        ...payload.params,
+        model: binding.model,
+        route: binding.route,
+        connectorId: binding.connectorId,
+      }),
+    },
+  };
+}
+
+export async function bindStudioImageGeneratePayload(
+  payload: StudioImageGeneratePayload,
+  runtime: Runtime,
+): Promise<StudioImageGeneratePayload> {
+  const binding = await resolveStudioRuntimeRouteBinding({
+    runtime,
+    capability: 'image.generate',
+    preferredModel: payload.params.model,
+  });
+  return bindScenarioPayloadToRoute(payload, binding);
+}
+
 export async function executeStudioImageGenerate(
   payload: StudioImageGeneratePayload,
   runtime: Runtime,
 ): Promise<ExecuteScenarioResponse> {
-  return runtime.ai.executeScenario(payload.request, {
-    timeoutMs: payload.params.timeoutMs,
-    metadata: toStudioCoreMetadata(payload.surfaceId, undefined),
+  const boundPayload = await bindStudioImageGeneratePayload(payload, runtime);
+  return runtime.ai.executeScenario(boundPayload.request, {
+    timeoutMs: boundPayload.params.timeoutMs,
+    metadata: toStudioCoreMetadata(boundPayload.surfaceId, undefined),
   });
 }
 
@@ -283,9 +475,6 @@ export type StudioSpeechSynthesizePayload = {
   readonly request: ExecuteScenarioRequest;
 };
 
-/**
- * Default speech-synthesize call params.
- */
 export function resolveStudioSpeechCallParams(
   _surfaceId: StudioAISurfaceId,
   defaults: StudioSpeechCallDefaults = {},
@@ -321,13 +510,26 @@ export function createStudioSpeechSynthesizePayload(input: {
   };
 }
 
+export async function bindStudioSpeechSynthesizePayload(
+  payload: StudioSpeechSynthesizePayload,
+  runtime: Runtime,
+): Promise<StudioSpeechSynthesizePayload> {
+  const binding = await resolveStudioRuntimeRouteBinding({
+    runtime,
+    capability: 'audio.synthesize',
+    preferredModel: payload.params.model,
+  });
+  return bindScenarioPayloadToRoute(payload, binding);
+}
+
 export async function executeStudioSpeechSynthesize(
   payload: StudioSpeechSynthesizePayload,
   runtime: Runtime,
 ): Promise<ExecuteScenarioResponse> {
-  return runtime.ai.executeScenario(payload.request, {
-    timeoutMs: payload.params.timeoutMs,
-    metadata: toStudioCoreMetadata(payload.surfaceId, undefined),
+  const boundPayload = await bindStudioSpeechSynthesizePayload(payload, runtime);
+  return runtime.ai.executeScenario(boundPayload.request, {
+    timeoutMs: boundPayload.params.timeoutMs,
+    metadata: toStudioCoreMetadata(boundPayload.surfaceId, undefined),
   });
 }
 

@@ -31,8 +31,8 @@ import { TechnicalReviewDetails } from '@renderer/features/portfolio/OwnerPortfo
 function createVoiceDemoCandidateInput(agent: OwnerPortfolioAgentDetail): VoiceDemoCandidateInput {
   return {
     scriptText: agent.greeting.value || '',
-    // `'auto'` lets the Runtime layer pick the configured TTS model. Owner
-    // can override with an explicit model id.
+    // Unspecified model marker. The Runtime route resolver must bind this to a
+    // concrete audio.synthesize route before dispatch.
     model: 'auto',
   };
 }

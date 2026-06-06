@@ -301,8 +301,8 @@ export async function proposeReviewedOwnerAgentSettings(
   current: RealmOwnerAgentSettings,
   runtime?: RuntimeTextClient | null,
 ): Promise<RuntimeOwnerSettingsProposalResult> {
-  // Model is resolved by Runtime via `'auto'`; a future Studio AI-settings
-  // store will plug in here via studio-ai-runtime helpers.
+  // The prompt starts with the unresolved marker; studio-ai-runtime must bind a
+  // concrete text.generate route before dispatch.
   const built = buildRuntimeOwnerSettingsProposalPrompt({
     agentId,
     draft,
@@ -344,7 +344,7 @@ export async function proposeReviewedOwnerAgentSettings(
         candidate: true,
         truthWrite: false,
         proposal,
-        submitted: built.payload,
+        submitted: output.submitted,
         runtime: {
           ...(output.trace?.traceId ? { traceId: output.trace.traceId } : {}),
           ...(output.trace?.modelResolved ? { modelResolved: output.trace.modelResolved } : {}),
@@ -359,7 +359,7 @@ export async function proposeReviewedOwnerAgentSettings(
         truthWrite: false,
         failure: 'runtime-settings-proposal-invalid-output',
         message: error instanceof Error ? error.message : 'Runtime settings proposal output invalid.',
-        submitted: built.payload,
+        submitted: output.submitted,
       };
     }
   } catch (error) {
@@ -370,7 +370,7 @@ export async function proposeReviewedOwnerAgentSettings(
       truthWrite: false,
       failure: 'runtime-settings-proposal-failed',
       message: `Runtime runtime.ai.text.generate failed: ${error instanceof Error ? error.message : 'runtime transport call failed.'}`,
-      submitted: built.payload,
+      submitted: null,
     };
   }
 }
