@@ -4,7 +4,7 @@ import type {
 } from '@nimiplatform/sdk/realm/generated';
 import { createStudioRealmClient, type StudioRealmSurface } from '@renderer/data/realm-client.js';
 import {
-  normalizeCbdbCuratedSystemPortfolio,
+  normalizeForgeImportedSystemPortfolio,
   normalizeOwnerPortfolio,
   normalizeOwnerPortfolioAgentDetail,
   type OwnerPortfolioAgent,
@@ -187,11 +187,11 @@ export async function listOwnerPortfolioAgents(realm: StudioRealmClient = create
   return normalizeOwnerPortfolio(agents);
 }
 
-export async function listCbdbCuratedSystemPortfolioAgents(
+export async function listForgeImportedSystemPortfolioAgents(
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<OwnerPortfolioAgent[]> {
-  const agents = await realm.listCbdbCuratedSystemAgents({ path: {} });
-  return normalizeCbdbCuratedSystemPortfolio(agents);
+  const agents = await realm.listForgeImportedSystemAgents({ path: {} });
+  return normalizeForgeImportedSystemPortfolio(agents);
 }
 
 export async function listRealmAgentStudioPortfolioAgents(
@@ -199,7 +199,7 @@ export async function listRealmAgentStudioPortfolioAgents(
 ): Promise<OwnerPortfolioAgent[]> {
   const [ownerAgents, cbdbAgents] = await Promise.all([
     listOwnerPortfolioAgents(realm),
-    listCbdbCuratedSystemPortfolioAgents(realm),
+    listForgeImportedSystemPortfolioAgents(realm),
   ]);
   return [...ownerAgents, ...cbdbAgents];
 }
@@ -212,12 +212,12 @@ export async function getOwnerPortfolioAgentDetail(
   return normalizeOwnerPortfolioAgentDetail(agent);
 }
 
-export async function getCbdbCuratedSystemPortfolioAgentDetail(
+export async function getForgeImportedSystemPortfolioAgentDetail(
   agentId: string,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<OwnerPortfolioAgentDetail> {
-  const agent = await realm.getCbdbCuratedSystemAgent({ path: { agentId } });
-  return normalizeOwnerPortfolioAgentDetail(agent, 'cbdb-curated-system');
+  const agent = await realm.getForgeImportedSystemAgent({ path: { agentId } });
+  return normalizeOwnerPortfolioAgentDetail(agent, 'forge-imported-system');
 }
 
 export async function getRealmAgentStudioPortfolioAgentDetail(
@@ -228,7 +228,7 @@ export async function getRealmAgentStudioPortfolioAgentDetail(
     return await getOwnerPortfolioAgentDetail(agentId, realm);
   } catch (ownerError) {
     try {
-      return await getCbdbCuratedSystemPortfolioAgentDetail(agentId, realm);
+      return await getForgeImportedSystemPortfolioAgentDetail(agentId, realm);
     } catch {
       throw ownerError;
     }

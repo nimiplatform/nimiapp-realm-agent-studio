@@ -4,13 +4,13 @@ import type { OwnerPortfolioAgentDetail } from './portfolio-data.js';
 import {
   generateReviewedAvatarPackageCandidate,
   generateReviewedVisualImageCandidate,
-  promoteReviewedCbdbCuratedProfileMedia,
-  promoteReviewedCbdbCuratedVoice,
+  promoteReviewedForgeImportedProfileMedia,
+  promoteReviewedForgeImportedVoice,
   selectReviewedAgentAvatarUrl,
   synthesizeReviewedVoiceDemo,
-  type CbdbCuratedProfileMediaPromotionResult,
-  type CbdbCuratedVoiceInput,
-  type CbdbCuratedVoicePromotionResult,
+  type ForgeImportedProfileMediaPromotionResult,
+  type ForgeImportedVoiceInput,
+  type ForgeImportedVoicePromotionResult,
   type RealmAgentAvatarSelectResult,
   type RuntimeVisualImageGenerationResult,
   type RuntimeVoiceDemoSynthesisResult,
@@ -120,7 +120,7 @@ function normalizeOptionalNumberText(value: string): number | undefined {
   return Number.isFinite(number) ? number : undefined;
 }
 
-function buildReviewedVoiceConfigInput(draft: ReviewedVoiceConfigDraft): CbdbCuratedVoiceInput {
+function buildReviewedVoiceConfigInput(draft: ReviewedVoiceConfigDraft): ForgeImportedVoiceInput {
   return {
     ...(draft.voiceId.trim() ? { voiceId: draft.voiceId.trim() } : {}),
     ...(draft.description.trim() ? { description: draft.description.trim() } : {}),
@@ -147,11 +147,11 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
   const [avatarUrlDraft, setAvatarUrlDraft] = useState(() => agent.avatarUrl || '');
   const [avatarReviewed, setAvatarReviewed] = useState(false);
   const [profileCoverUrlDraft, setProfileCoverUrlDraft] = useState(() => agent.profileCoverUrl.value || '');
-  const [avatarResult, setAvatarResult] = useState<RealmAgentAvatarSelectResult | CbdbCuratedProfileMediaPromotionResult | null>(null);
+  const [avatarResult, setAvatarResult] = useState<RealmAgentAvatarSelectResult | ForgeImportedProfileMediaPromotionResult | null>(null);
   const [isSelectingAvatar, setIsSelectingAvatar] = useState(false);
   const [voiceConfigDraft, setVoiceConfigDraft] = useState<ReviewedVoiceConfigDraft>(() => createReviewedVoiceConfigDraft(agent));
   const [voiceConfigReviewed, setVoiceConfigReviewed] = useState(false);
-  const [voiceConfigResult, setVoiceConfigResult] = useState<CbdbCuratedVoicePromotionResult | null>(null);
+  const [voiceConfigResult, setVoiceConfigResult] = useState<ForgeImportedVoicePromotionResult | null>(null);
   const [isPromotingVoiceConfig, setIsPromotingVoiceConfig] = useState(false);
   const [voiceDraft, setVoiceDraft] = useState<VoiceDemoCandidateInput>(() => createVoiceDemoCandidateInput(agent));
   const [voiceResult, setVoiceResult] = useState<RuntimeVoiceDemoSynthesisResult | null>(null);
@@ -161,7 +161,7 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
   const voicePayload = useMemo(() => buildReviewedVoiceDemoCandidatePayload(voiceDraft, agent), [agent, voiceDraft]);
   const avatarUrlChanged = avatarUrlDraft.trim() !== (agent.avatarUrl || '');
   const profileCoverUrlChanged = profileCoverUrlDraft.trim() !== (agent.profileCoverUrl.value || '');
-  const profileMediaChanged = avatarUrlChanged || (agent.ownerScope === 'cbdb-curated-system' && profileCoverUrlChanged);
+  const profileMediaChanged = avatarUrlChanged || (agent.ownerScope === 'forge-imported-system' && profileCoverUrlChanged);
   const voiceConfigChanged = JSON.stringify(createReviewedVoiceConfigDraft(agent)) !== JSON.stringify(voiceConfigDraft);
   const visualResourceTypes = MEDIA_CANDIDATE_RESOURCE_TYPES.filter((resourceType): resourceType is VisualCandidateResourceType => resourceType === 'IMAGE');
   const visualBindingPoints = MEDIA_CANDIDATE_BINDING_POINTS.filter((bindingPoint) => bindingPoint !== 'AGENT_VOICE_SAMPLE');
@@ -232,8 +232,8 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
     setIsSelectingAvatar(true);
     setAvatarResult(null);
     try {
-      const result = agent.ownerScope === 'cbdb-curated-system'
-        ? await promoteReviewedCbdbCuratedProfileMedia(agent, {
+      const result = agent.ownerScope === 'forge-imported-system'
+        ? await promoteReviewedForgeImportedProfileMedia(agent, {
           ...(avatarUrlChanged ? { avatarUrl: avatarUrlDraft } : {}),
           ...(profileCoverUrlChanged ? { profileCoverUrl: profileCoverUrlDraft } : {}),
         })
@@ -251,7 +251,7 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
     setIsPromotingVoiceConfig(true);
     setVoiceConfigResult(null);
     try {
-      const result = await promoteReviewedCbdbCuratedVoice(agent, buildReviewedVoiceConfigInput(voiceConfigDraft));
+      const result = await promoteReviewedForgeImportedVoice(agent, buildReviewedVoiceConfigInput(voiceConfigDraft));
       setVoiceConfigResult(result);
       if (result.ok) {
         await onAgentWrite();
@@ -385,11 +385,11 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
               <div className="flex min-w-0 flex-wrap items-center gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="font-medium">
-                    {agent.ownerScope === 'cbdb-curated-system' ? 'Reviewed profile media promotion' : 'Avatar URL selection'}
+                    {agent.ownerScope === 'forge-imported-system' ? 'Reviewed profile media promotion' : 'Avatar URL selection'}
                   </div>
                   <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                    {agent.ownerScope === 'cbdb-curated-system'
-                      ? 'Saves reviewed portrait and cover URLs through the CBDB curated system-agent lane.'
+                    {agent.ownerScope === 'forge-imported-system'
+                      ? 'Saves reviewed portrait and cover URLs through the Forge-imported system-agent lane.'
                       : 'Saves the reviewed avatar URL on the public profile. It does not publish generated asset candidates.'}
                   </div>
                 </div>
@@ -407,7 +407,7 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                       onChange={(event) => updateAvatarUrlDraft(event.currentTarget.value)}
                     />
                   </FieldShell>
-                  {agent.ownerScope === 'cbdb-curated-system' ? (
+                  {agent.ownerScope === 'forge-imported-system' ? (
                     <FieldShell label="Profile cover URL" message="Owner-reviewed http(s) URL only.">
                       <TextField
                         value={profileCoverUrlDraft}
@@ -427,7 +427,7 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                       loading={isSelectingAvatar}
                       onClick={() => void selectAvatarUrl()}
                     >
-                      {agent.ownerScope === 'cbdb-curated-system' ? 'Promote reviewed profile media' : 'Select avatar URL'}
+                      {agent.ownerScope === 'forge-imported-system' ? 'Promote reviewed profile media' : 'Select avatar URL'}
                     </Button>
                   </div>
                 </div>
@@ -731,13 +731,13 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
             <h3 className="m-0 text-xl font-semibold">Voice demo candidate</h3>
             <StatusBadge tone="info">AI assisted</StatusBadge>
             <StatusBadge tone="neutral">sample only</StatusBadge>
-            <StatusBadge tone={agent.ownerScope === 'cbdb-curated-system' ? 'success' : 'warning'}>
-              {agent.ownerScope === 'cbdb-curated-system' ? 'voice profile writable' : 'not published'}
+            <StatusBadge tone={agent.ownerScope === 'forge-imported-system' ? 'success' : 'warning'}>
+              {agent.ownerScope === 'forge-imported-system' ? 'voice profile writable' : 'not published'}
             </StatusBadge>
           </div>
           <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-            {agent.ownerScope === 'cbdb-curated-system'
-              ? 'Generate a voice sample for review, then promote reviewed voice identity into the CBDB RealmAgent profile.'
+            {agent.ownerScope === 'forge-imported-system'
+              ? 'Generate a voice sample for review, then promote reviewed voice identity into the Forge-imported RealmAgent profile.'
               : 'Generate a voice sample for review. Publishing the sample as a public profile asset is deferred until the owner asset path is available.'}
           </p>
           <div className="mt-4 grid gap-4">
@@ -753,7 +753,7 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                 </div>
               </div>
             </Surface>
-            {agent.ownerScope === 'cbdb-curated-system' ? (
+            {agent.ownerScope === 'forge-imported-system' ? (
               <Surface tone="card" padding="md">
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
                   <div className="min-w-0">

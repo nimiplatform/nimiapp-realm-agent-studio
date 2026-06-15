@@ -1,11 +1,11 @@
 import type {
   RealmAgentControllerGetVisibilityOperationResponse,
-  RealmGetCbdbCuratedSystemAgentChatReadinessOperationResponse,
-  RealmGetCbdbCuratedSystemAgentSettingsOperationResponse,
+  RealmGetForgeImportedSystemAgentChatReadinessOperationResponse,
+  RealmGetForgeImportedSystemAgentSettingsOperationResponse,
   RealmGetMyRealmAgentSettingsOperationResponse,
   RealmProjectRuntimePayloadOperationRequest,
   RealmProjectRuntimePayloadOperationResponse,
-  RealmUpdateCbdbCuratedSystemAgentSettingsOperationRequest,
+  RealmUpdateForgeImportedSystemAgentSettingsOperationRequest,
   RealmUpdateMyRealmAgentSettingsOperationRequest,
 } from '@nimiplatform/sdk/realm/generated';
 import { createStudioRealmClient, type StudioRealmSurface } from '@renderer/data/realm-client.js';
@@ -36,21 +36,21 @@ export type RealmAgentVisibilitySettings = RealmAgentControllerGetVisibilityOper
 type RealmAgentVisibilityUpdateInput = Partial<Record<AgentVisibilityField, AgentVisibilityValue>>;
 export type RealmOwnerAgentSettings =
   | RealmGetMyRealmAgentSettingsOperationResponse
-  | RealmGetCbdbCuratedSystemAgentSettingsOperationResponse;
+  | RealmGetForgeImportedSystemAgentSettingsOperationResponse;
 type RealmOwnerAgentSettingsUpdateInput = RealmUpdateMyRealmAgentSettingsOperationRequest['body'];
-type RealmCbdbCuratedSystemAgentSettingsUpdateInput = RealmUpdateCbdbCuratedSystemAgentSettingsOperationRequest['body'];
+type RealmForgeImportedSystemAgentSettingsUpdateInput = RealmUpdateForgeImportedSystemAgentSettingsOperationRequest['body'];
 type RealmRuntimeProjectionInput = RealmProjectRuntimePayloadOperationRequest['body'];
 type RealmRuntimeProjectionResponse = RealmProjectRuntimePayloadOperationResponse;
-type RealmCbdbCuratedAgentChatReadinessResponse = RealmGetCbdbCuratedSystemAgentChatReadinessOperationResponse;
+type RealmForgeImportedAgentChatReadinessResponse = RealmGetForgeImportedSystemAgentChatReadinessOperationResponse;
 type AgentChatReadinessSubmittedInput =
   | RealmRuntimeProjectionInput
-  | { readonly agentId: string; readonly ownerScope: 'cbdb-curated-system' };
+  | { readonly agentId: string; readonly ownerScope: 'forge-imported-system' };
 
 export const REALM_RUNTIME_PROJECTION_SOURCE = 'Realm RuntimeProjectionsService.projectRuntimePayload';
-export const CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE =
-  'Realm AgentCuratedSystemService.getCbdbCuratedSystemAgentChatReadiness';
+export const FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE =
+  'Realm AgentCuratedSystemService.getForgeImportedSystemAgentChatReadiness';
 export const REALM_AGENT_VISIBILITY_SOURCE = 'Realm AgentsService.agentControllerUpdateVisibility';
-export const CBDB_CURATED_SETTINGS_SAVE_SOURCE = 'Realm AgentCuratedSystemService.updateCbdbCuratedSystemAgentSettings';
+export const FORGE_IMPORTED_SETTINGS_SAVE_SOURCE = 'Realm AgentCuratedSystemService.updateForgeImportedSystemAgentSettings';
 export const AGENT_VISIBILITY_VALUES = ['PUBLIC', 'FRIENDS', 'PRIVATE'] as const;
 export const AGENT_VISIBILITY_FIELDS = [
   'accountVisibility',
@@ -76,11 +76,11 @@ export type AgentChatReadinessProjectionSummary = RuntimeProjectionSummary & {
   selectedOwnerSettingFields: string[];
 };
 
-export type CbdbCuratedAgentChatReadinessSummary = Omit<
+export type ForgeImportedAgentChatReadinessSummary = Omit<
   AgentChatReadinessProjectionSummary,
   'source' | 'consumerSurface'
 > & {
-  source: typeof CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE;
+  source: typeof FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE;
   consumerSurface: 'AGENT_CHAT_READINESS';
   profile: {
     displayName: string;
@@ -124,14 +124,14 @@ export type RuntimeProjectionSummaryResult =
 export type AgentChatReadinessSummaryResult =
   | {
     ok: true;
-    source: typeof REALM_RUNTIME_PROJECTION_SOURCE | typeof CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE;
+    source: typeof REALM_RUNTIME_PROJECTION_SOURCE | typeof FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE;
     truthWrite: false;
-    summary: AgentChatReadinessProjectionSummary | CbdbCuratedAgentChatReadinessSummary;
+    summary: AgentChatReadinessProjectionSummary | ForgeImportedAgentChatReadinessSummary;
     submitted: AgentChatReadinessSubmittedInput;
   }
   | {
     ok: false;
-    source: typeof REALM_RUNTIME_PROJECTION_SOURCE | typeof CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE;
+    source: typeof REALM_RUNTIME_PROJECTION_SOURCE | typeof FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE;
     truthWrite: false;
     failure:
       | 'runtime-projection-world-unavailable'
@@ -165,18 +165,18 @@ export type RealmAgentVisibilityUpdateResult =
 export type RealmOwnerAgentSettingsUpdateResult =
   | {
     ok: true;
-    source: typeof OWNER_SETTINGS_SAVE_SOURCE | typeof CBDB_CURATED_SETTINGS_SAVE_SOURCE;
+    source: typeof OWNER_SETTINGS_SAVE_SOURCE | typeof FORGE_IMPORTED_SETTINGS_SAVE_SOURCE;
     truthWrite: true;
-    submitted: RealmOwnerAgentSettingsUpdateInput | RealmCbdbCuratedSystemAgentSettingsUpdateInput;
+    submitted: RealmOwnerAgentSettingsUpdateInput | RealmForgeImportedSystemAgentSettingsUpdateInput;
     settings: RealmOwnerAgentSettings;
   }
   | {
     ok: false;
-    source: typeof OWNER_SETTINGS_SAVE_SOURCE | typeof CBDB_CURATED_SETTINGS_SAVE_SOURCE;
+    source: typeof OWNER_SETTINGS_SAVE_SOURCE | typeof FORGE_IMPORTED_SETTINGS_SAVE_SOURCE;
     truthWrite: false;
     failure: 'owner-settings-payload-invalid' | 'owner-settings-no-changes' | 'realm-update-owner-settings-failed';
     message: string;
-    submitted: RealmOwnerAgentSettingsUpdateInput | RealmCbdbCuratedSystemAgentSettingsUpdateInput | null;
+    submitted: RealmOwnerAgentSettingsUpdateInput | RealmForgeImportedSystemAgentSettingsUpdateInput | null;
     draft: OwnerAgentSettingsDraft;
   };
 
@@ -409,15 +409,15 @@ export function normalizeAgentChatReadinessProjectionSummary(
   };
 }
 
-export function normalizeCbdbCuratedAgentChatReadinessSummary(
-  response: RealmCbdbCuratedAgentChatReadinessResponse,
-): CbdbCuratedAgentChatReadinessSummary | null {
+export function normalizeForgeImportedAgentChatReadinessSummary(
+  response: RealmForgeImportedAgentChatReadinessResponse,
+): ForgeImportedAgentChatReadinessSummary | null {
   if (!response || typeof response !== 'object') {
     return null;
   }
   const record = response as unknown as Record<string, unknown>;
   if (
-    record.ownerScope !== 'cbdb-curated-system'
+    record.ownerScope !== 'forge-imported-system'
     || record.consumerSurface !== 'AGENT_CHAT_READINESS'
     || record.rawRuleContentExposed !== false
   ) {
@@ -490,7 +490,7 @@ export function normalizeCbdbCuratedAgentChatReadinessSummary(
   }
 
   return {
-    source: CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE,
+    source: FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE,
     consumerSurface: 'AGENT_CHAT_READINESS',
     worldId,
     checksum,
@@ -535,19 +535,19 @@ export async function getOwnerAgentSettings(
   return realm.getMyRealmAgentSettings({ path: { agentId } });
 }
 
-export async function getCbdbCuratedSystemAgentSettings(
+export async function getForgeImportedSystemAgentSettings(
   agentId: string,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<RealmOwnerAgentSettings> {
-  return realm.getCbdbCuratedSystemAgentSettings({ path: { agentId } });
+  return realm.getForgeImportedSystemAgentSettings({ path: { agentId } });
 }
 
 export async function getPortfolioAgentSettings(
   agent: OwnerPortfolioAgentDetail,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<RealmOwnerAgentSettings> {
-  if (agent.ownerScope === 'cbdb-curated-system') {
-    return getCbdbCuratedSystemAgentSettings(agent.id, realm);
+  if (agent.ownerScope === 'forge-imported-system') {
+    return getForgeImportedSystemAgentSettings(agent.id, realm);
   }
   return getOwnerAgentSettings(agent.id, realm);
 }
@@ -746,7 +746,7 @@ export async function updateReviewedPortfolioAgentSettings(
   current: RealmOwnerAgentSettings,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<RealmOwnerAgentSettingsUpdateResult> {
-  if (agent.ownerScope !== 'cbdb-curated-system') {
+  if (agent.ownerScope !== 'forge-imported-system') {
     return updateReviewedOwnerAgentSettings(agent.id, draft, current, realm);
   }
 
@@ -754,24 +754,24 @@ export async function updateReviewedPortfolioAgentSettings(
   if (!built.ok) {
     return {
       ok: false,
-      source: CBDB_CURATED_SETTINGS_SAVE_SOURCE,
+      source: FORGE_IMPORTED_SETTINGS_SAVE_SOURCE,
       truthWrite: false,
       failure: built.failure === 'owner-settings-invalid' ? 'owner-settings-payload-invalid' : 'owner-settings-no-changes',
-      message: built.errors.join('; ') || 'CBDB curated system-agent settings payload invalid.',
+      message: built.errors.join('; ') || 'Forge-imported system-agent settings payload invalid.',
       submitted: null,
       draft,
     };
   }
 
-  const submitted = built.input as RealmCbdbCuratedSystemAgentSettingsUpdateInput;
+  const submitted = built.input as RealmForgeImportedSystemAgentSettingsUpdateInput;
   try {
-    const settings = await realm.updateCbdbCuratedSystemAgentSettings({
+    const settings = await realm.updateForgeImportedSystemAgentSettings({
       path: { agentId: agent.id },
       body: submitted,
     });
     return {
       ok: true,
-      source: CBDB_CURATED_SETTINGS_SAVE_SOURCE,
+      source: FORGE_IMPORTED_SETTINGS_SAVE_SOURCE,
       truthWrite: true,
       submitted,
       settings,
@@ -779,10 +779,10 @@ export async function updateReviewedPortfolioAgentSettings(
   } catch (error) {
     return {
       ok: false,
-      source: CBDB_CURATED_SETTINGS_SAVE_SOURCE,
+      source: FORGE_IMPORTED_SETTINGS_SAVE_SOURCE,
       truthWrite: false,
       failure: 'realm-update-owner-settings-failed',
-      message: error instanceof Error ? error.message : 'Realm CBDB curated system-agent settings update failed.',
+      message: error instanceof Error ? error.message : 'Realm Forge-imported system-agent settings update failed.',
       submitted,
       draft,
     };
@@ -843,39 +843,39 @@ export async function projectAgentChatReadinessContextSummary(
   agent: OwnerPortfolioAgentDetail,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<AgentChatReadinessSummaryResult> {
-  if (agent.ownerScope === 'cbdb-curated-system') {
+  if (agent.ownerScope === 'forge-imported-system') {
     const submitted = agent.id.trim()
-      ? { agentId: agent.id.trim(), ownerScope: 'cbdb-curated-system' as const }
+      ? { agentId: agent.id.trim(), ownerScope: 'forge-imported-system' as const }
       : null;
     if (!submitted) {
       return {
         ok: false,
-        source: CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE,
+        source: FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE,
         truthWrite: false,
         failure: 'runtime-projection-world-unavailable',
-        message: 'CBDB Agent Chat readiness requires RealmAgent id evidence.',
+        message: 'Forge-imported Agent Chat readiness requires RealmAgent id evidence.',
         submitted: null,
       };
     }
 
     try {
-      const response = await realm.getCbdbCuratedSystemAgentChatReadiness({
+      const response = await realm.getForgeImportedSystemAgentChatReadiness({
         path: { agentId: submitted.agentId },
       });
-      const summary = normalizeCbdbCuratedAgentChatReadinessSummary(response);
+      const summary = normalizeForgeImportedAgentChatReadinessSummary(response);
       if (!summary) {
         return {
           ok: false,
-          source: CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE,
+          source: FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE,
           truthWrite: false,
           failure: 'runtime-projection-invalid-response',
-          message: 'CBDB Agent Chat readiness response did not include product-safe summary gates.',
+          message: 'Forge-imported Agent Chat readiness response did not include product-safe summary gates.',
           submitted,
         };
       }
       return {
         ok: true,
-        source: CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE,
+        source: FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE,
         truthWrite: false,
         summary,
         submitted,
@@ -883,10 +883,10 @@ export async function projectAgentChatReadinessContextSummary(
     } catch (error) {
       return {
         ok: false,
-        source: CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE,
+        source: FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE,
         truthWrite: false,
         failure: 'runtime-projection-failed',
-        message: error instanceof Error ? error.message : 'Realm CBDB Agent Chat readiness read failed.',
+        message: error instanceof Error ? error.message : 'Realm Forge-imported Agent Chat readiness read failed.',
         submitted,
       };
     }

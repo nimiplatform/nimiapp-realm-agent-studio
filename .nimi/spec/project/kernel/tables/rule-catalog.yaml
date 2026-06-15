@@ -400,7 +400,7 @@ rules:
   - rule_id: R-RAS-CORE-007
     level: must
     title: 'realm-agent-studio-must-scope'
-    statement: 'Realm Agent Studio MUST keep its default owner portfolio scoped to current-authenticated-user MASTER_OWNED Realm Agents. The only admitted WORLD_OWNED exception is the CBDB curated system-agent lane for Halliday-owned seeded agents; generic world-created agents, world NPCs, and world maintainer tooling remain out of scope.'
+    statement: 'Realm Agent Studio MUST keep its default owner portfolio scoped to current-authenticated-user MASTER_OWNED Realm Agents. The only admitted WORLD_OWNED exception is the Forge-imported system-agent lane for Halliday-owned Forge-imported agents; generic world-created agents, world NPCs, and world maintainer tooling remain out of scope.'
     doc_ref: project/kernel/core-rules.md
   - rule_id: R-RAS-CORE-008
     level: must_not
@@ -455,12 +455,12 @@ rules:
   - rule_id: R-RAS-SCOPE-002
     level: must_not
     title: 'no-localagent-or-world-or-forge-sources'
-    statement: 'Studio does not manage LocalAgent private runtime forks, generic world-created agents, world NPCs, or Forge package sources outside the admitted CBDB curated system-agent lane.'
+    statement: 'Studio does not manage LocalAgent private runtime forks, generic world-created agents, world NPCs, or Forge package sources outside the admitted Forge-imported system-agent lane.'
     doc_ref: project/kernel/product-scope.md
   - rule_id: R-RAS-SCOPE-003
     level: must_not
     title: 'owner-led-first-version-depth'
-    statement: 'First-version depth is owner-led plus the CBDB curated system-agent exception: no invited editors, no team workspace, and no world-owner override over owner-created agents.'
+    statement: 'First-version depth is owner-led plus the Forge-imported system-agent exception: no invited editors, no team workspace, and no world-owner override over owner-created agents.'
     doc_ref: project/kernel/product-scope.md
   - rule_id: R-RAS-SCOPE-004
     level: required
@@ -525,7 +525,7 @@ rules:
   - rule_id: R-RAS-SCOPE-016
     level: forbidden
     title: 'no-world-agent-or-npc-tooling'
-    statement: 'Generic world-created agents, world-owned NPCs, non-CBDB package-derived world agents, and world maintainer tooling are out of scope.'
+    statement: 'Generic world-created agents, world-owned NPCs, non-Forge-imported world agents, and world maintainer tooling are out of scope.'
     doc_ref: project/kernel/product-scope.md
   - rule_id: R-RAS-SCOPE-017
     level: forbidden
@@ -609,8 +609,8 @@ rules:
     doc_ref: project/kernel/product-scope.md
   - rule_id: R-RAS-SCOPE-033
     level: required
-    title: 'cbdb-curated-system-agent-lane'
-    statement: 'Halliday-owned CBDB seeded WORLD_OWNED RealmAgents may be updated only through the curated system-agent settings ingress; this lane is not owner quota/listing truth or generic world-created agent tooling.'
+    title: 'forge-imported-system-agent-lane'
+    statement: 'Halliday-owned Forge-imported WORLD_OWNED RealmAgents may be updated only through the curated system-agent settings ingress; this lane is not owner quota/listing truth or generic world-created agent tooling.'
     doc_ref: project/kernel/product-scope.md
   - rule_id: R-RAS-AGENT-001
     level: must_not
@@ -644,8 +644,8 @@ rules:
     doc_ref: project/kernel/realm-agent-object.md
   - rule_id: R-RAS-AGENT-007
     level: must
-    title: 'studio-manages-owner-and-cbdb-curated-only'
-    statement: 'Realm Agent Studio manages user-owned public Realm Agents and the admitted CBDB curated system-agent lane only.'
+    title: 'studio-manages-owner-and-forge-imported-only'
+    statement: 'Realm Agent Studio manages user-owned public Realm Agents and the admitted Forge-imported system-agent lane only.'
     doc_ref: project/kernel/realm-agent-object.md
   - rule_id: R-RAS-AGENT-008
     level: must_not
@@ -655,7 +655,7 @@ rules:
   - rule_id: R-RAS-AGENT-009
     level: must_not
     title: 'exclude-world-owned-agents'
-    statement: 'Studio owner-created scope excludes WORLD_OWNED agents and is limited to current user MASTER_OWNED except for the explicit CBDB curated system-agent lane.'
+    statement: 'Studio owner-created scope excludes WORLD_OWNED agents and is limited to current user MASTER_OWNED except for the explicit Forge-imported system-agent lane.'
     doc_ref: project/kernel/realm-agent-object.md
   - rule_id: R-RAS-AGENT-010
     level: must
@@ -789,13 +789,13 @@ rules:
     doc_ref: project/kernel/realm-agent-object.md
   - rule_id: R-RAS-AGENT-036
     level: must_not
-    title: 'cbdb-lane-does-not-weaken-owner-contract'
-    statement: 'The CBDB curated system-agent lane must not weaken /api/me/agents, owner-agent quotas, or generic world-created/NPC boundaries.'
+    title: 'forge-imported-lane-does-not-weaken-owner-contract'
+    statement: 'The Forge-imported system-agent lane must not weaken /api/me/agents, owner-agent quotas, or generic world-created/NPC boundaries.'
     doc_ref: project/kernel/realm-agent-object.md
   - rule_id: R-RAS-AGENT-037
     level: must
-    title: 'cbdb-curated-settings-system-provenance'
-    statement: 'Accepted CBDB curated settings writes use SYSTEM AgentRule provenance and curated-system-agent-settings source refs.'
+    title: 'forge-imported-settings-system-provenance'
+    statement: 'Accepted Forge-imported settings writes use SYSTEM AgentRule provenance and forge-imported-system-agent-settings source refs.'
     doc_ref: project/kernel/realm-agent-object.md
   - rule_id: R-RAS-SETTING-001
     level: required
@@ -1425,7 +1425,7 @@ rules:
   - rule_id: R-RAS-METRIC-012
     level: forbidden
     title: 'no-world-owned-portfolio'
-    statement: 'Backend owner-portfolio semantics are current user scope and MASTER_OWNED only; WORLD_OWNED / NPC agents are not owner portfolio items. The CBDB curated system-agent lane is separate.'
+    statement: 'Backend owner-portfolio semantics are current user scope and MASTER_OWNED only; WORLD_OWNED / NPC agents are not owner portfolio items. The Forge-imported system-agent lane is separate.'
     doc_ref: project/kernel/metrics-and-realm-gaps.md
   - rule_id: R-RAS-METRIC-013
     level: must_not
@@ -1720,7 +1720,7 @@ rules:
   - rule_id: R-RAS-STORY-016
     level: must
     title: 'owner-authority-required'
-    statement: 'Owner-created agent edits require owner authority; generic world-created agents remain out of scope outside the admitted CBDB curated system-agent lane.'
+    statement: 'Owner-created agent edits require owner authority; generic world-created agents remain out of scope outside the admitted Forge-imported system-agent lane.'
     doc_ref: project/kernel/storybook.md
   - rule_id: R-RAS-STORY-017
     level: must
@@ -1755,7 +1755,7 @@ rules:
   - rule_id: R-RAS-STORY-023
     level: must_not
     title: 'portfolio-canonical-read-surfaces'
-    statement: 'Owner portfolio uses GET /api/me/agents and /{agentId}; the CBDB curated system-agent lane uses /api/agent/curated-system/cbdb/** and must not be confused with generic world-owned/NPC lists or creator/dev surfaces.'
+    statement: 'Owner portfolio uses GET /api/me/agents and /{agentId}; the Forge-imported system-agent lane uses /api/agent/forge-imported-system/** and must not be confused with generic world-owned/NPC lists or creator/dev surfaces.'
     doc_ref: project/kernel/storybook.md
   - rule_id: R-RAS-STORY-024
     level: must
@@ -1814,8 +1814,8 @@ rules:
     doc_ref: project/kernel/storybook.md
   - rule_id: R-RAS-STORY-035
     level: must
-    title: 'cbdb-curated-setting-save-surface'
-    statement: 'CBDB curated system-agent setting save uses PATCH /api/agent/curated-system/cbdb/agents/{agentId}/settings and preserves SYSTEM provenance.'
+    title: 'forge-imported-setting-save-surface'
+    statement: 'Forge-imported system-agent setting save uses PATCH /api/agent/forge-imported-system/agents/{agentId}/settings and preserves SYSTEM provenance.'
     doc_ref: project/kernel/storybook.md
   - rule_id: R-RAS-ACCEPT-001
     level: required
@@ -1885,7 +1885,7 @@ rules:
   - rule_id: R-RAS-ACCEPT-014
     level: must_not
     title: 'no-placeholder-or-localagent-leak'
-    statement: 'No LocalAgent private state, generic world-created agent lane, creator/world-maintainer surface, fake return, or placeholder success leaks. The CBDB curated system-agent lane is the only admitted WORLD_OWNED exception.'
+    statement: 'No LocalAgent private state, generic world-created agent lane, creator/world-maintainer surface, fake return, or placeholder success leaks. The Forge-imported system-agent lane is the only admitted WORLD_OWNED exception.'
     doc_ref: project/kernel/product-acceptance-and-execution-plan.md
   - rule_id: R-RAS-ACCEPT-015
     level: required
@@ -1960,7 +1960,7 @@ rules:
   - rule_id: R-RAS-ACCEPT-029
     level: required
     title: 'wave-w3-portfolio-create-detail'
-    statement: 'W3 closure goal: finish owner list/filter/sort, create, world selection, post-create flow, detail state, owner boundaries, and the separately admitted CBDB curated boundary.'
+    statement: 'W3 closure goal: finish owner list/filter/sort, create, world selection, post-create flow, detail state, owner boundaries, and the separately admitted Forge-imported system-agent boundary.'
     doc_ref: project/kernel/product-acceptance-and-execution-plan.md
   - rule_id: R-RAS-ACCEPT-030
     level: required

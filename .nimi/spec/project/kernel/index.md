@@ -12,7 +12,7 @@ updated: 2026-05-25
 
 This kernel is the single authoritative product/app contract source for Realm Agent Studio. Every kernel document below carries explicit `R-RAS-<DOMAIN>-NNN` rule IDs. Implementation, tests, and review must cite these IDs; they must not duplicate kernel rule prose.
 
-Realm Agent Studio is the owner operation center for user-owned public Realm Agents as durable Agent IP, plus the admitted CBDB curated system-agent lane for Halliday-owned seeded agents. It is not a general agent management center. Generic world-created agents, world NPCs, LocalAgent private state, Forge package provenance, and provider/model routing are out of scope.
+Realm Agent Studio is the owner operation center for user-owned public Realm Agents as durable Agent IP, plus the admitted Forge-imported system-agent lane for Halliday-owned Forge-imported agents. It is not a general agent management center. Generic world-created agents, world NPCs, LocalAgent private state, Forge package provenance, and provider/model routing are out of scope.
 
 ## Rule ID Format
 
@@ -38,11 +38,11 @@ The canonical rule catalog enumerating every admitted rule ID lives in [`tables/
 
 - `GET /api/me/agents` is the Studio canonical owner my-agents portfolio list surface.
 - `GET /api/me/agents/{agentId}` is the Studio canonical owner my-agents detail surface.
-- `GET /api/agent/curated-system/cbdb/agents` and `GET /api/agent/curated-system/cbdb/agents/{agentId}` are the admitted CBDB curated system-agent read surfaces for Halliday-owned seeded `WORLD_OWNED` RealmAgents.
+- `GET /api/agent/forge-imported-system/agents` and `GET /api/agent/forge-imported-system/agents/{agentId}` are the admitted Forge-imported system-agent read surfaces for Halliday-owned Forge-imported `WORLD_OWNED` RealmAgents.
 - `POST /api/agent` / `AgentsService.agentControllerCreate` is the Studio owner-scoped Realm Agent create surface.
 - `GET /api/agent/handles/check` / `AgentsService.agentControllerCheckHandle` is the Studio create preflight handle availability surface; it writes no truth and must not replace Realm create confirmation.
 - `GET/PATCH /api/me/agents/{agentId}/settings` is the Studio owner-scoped settings read/write surface; the write surface compiles owner-reviewed structured settings into Realm profile writes and versioned `AgentRule` truth writes and is not raw `AgentRule` CRUD.
-- `GET/PATCH /api/agent/curated-system/cbdb/agents/{agentId}/settings` is the admitted CBDB curated system-agent settings surface. It writes reviewed settings for Halliday-owned seeded agents with `SYSTEM` AgentRule provenance and must not weaken the `/api/me/agents` owner quota/listing contract.
+- `GET/PATCH /api/agent/forge-imported-system/agents/{agentId}/settings` is the admitted Forge-imported system-agent settings surface. It writes reviewed settings for Halliday-owned Forge-imported agents with `SYSTEM` AgentRule provenance and must not weaken the `/api/me/agents` owner quota/listing contract.
 - `POST /api/agent/accounts/{id}/avatar` / `AgentsService.agentControllerSelectAvatar` is the Studio owner-scoped avatar URL selection surface; it is not a Resource/Binding upload path.
 - `GET/PATCH /api/agent/accounts/{id}/visibility` are owner-scoped social visibility setting surfaces; they must not be mapped into a Realm Agent lifecycle or publication state machine.
 - `GET /api/creator/agents` and `GET /api/agent/dev/my-agents` are evidence inputs only and must not become Studio canonical surfaces.

@@ -41,10 +41,10 @@ type RealmSelectAvatarInput = RealmAgentControllerSelectAvatarOperationRequest['
 type RealmSelectAvatarResponse = RealmAgentControllerSelectAvatarOperationResponse;
 
 export const REALM_AGENT_AVATAR_SELECT_SOURCE = 'Realm AgentsService.agentControllerSelectAvatar';
-export const CBDB_CURATED_PROFILE_MEDIA_SOURCE =
-  'Realm AgentCuratedSystemService.updateCbdbCuratedSystemAgentProfileMedia';
-export const CBDB_CURATED_VOICE_SOURCE =
-  'Realm AgentCuratedSystemService.updateCbdbCuratedSystemAgentVoice';
+export const FORGE_IMPORTED_PROFILE_MEDIA_SOURCE =
+  'Realm AgentCuratedSystemService.updateForgeImportedSystemAgentProfileMedia';
+export const FORGE_IMPORTED_VOICE_SOURCE =
+  'Realm AgentCuratedSystemService.updateForgeImportedSystemAgentVoice';
 
 type RuntimeVoiceClient = Runtime;
 type RuntimeImageClient = Runtime;
@@ -68,12 +68,12 @@ export type RealmAgentAvatarSelectResult =
     submitted: RealmSelectAvatarInput | null;
   };
 
-export type CbdbCuratedProfileMediaInput = {
+export type ForgeImportedProfileMediaInput = {
   avatarUrl?: string;
   profileCoverUrl?: string;
 };
 
-export type CbdbCuratedVoiceInput = {
+export type ForgeImportedVoiceInput = {
   voiceId?: string;
   description?: string;
   emotionEnabled?: boolean;
@@ -83,31 +83,31 @@ export type CbdbCuratedVoiceInput = {
   speechRoutePolicy?: 'local' | 'cloud';
 };
 
-type CbdbCuratedProfileMediaFailure =
+type ForgeImportedProfileMediaFailure =
   | 'profile-media-scope-unsupported'
   | 'profile-media-no-reviewed-changes'
   | 'avatar-url-invalid'
   | 'profile-cover-url-invalid'
   | 'realm-update-profile-media-failed';
 
-export type CbdbCuratedProfileMediaPromotionResult =
+export type ForgeImportedProfileMediaPromotionResult =
   | {
     ok: true;
-    source: typeof CBDB_CURATED_PROFILE_MEDIA_SOURCE;
+    source: typeof FORGE_IMPORTED_PROFILE_MEDIA_SOURCE;
     publicTruth: true;
-    submitted: CbdbCuratedProfileMediaInput;
+    submitted: ForgeImportedProfileMediaInput;
     agent: unknown;
   }
   | {
     ok: false;
-    source: typeof CBDB_CURATED_PROFILE_MEDIA_SOURCE;
+    source: typeof FORGE_IMPORTED_PROFILE_MEDIA_SOURCE;
     publicTruth: false;
-    failure: CbdbCuratedProfileMediaFailure;
+    failure: ForgeImportedProfileMediaFailure;
     message: string;
-    submitted: CbdbCuratedProfileMediaInput | null;
+    submitted: ForgeImportedProfileMediaInput | null;
   };
 
-type CbdbCuratedVoiceFailure =
+type ForgeImportedVoiceFailure =
   | 'voice-scope-unsupported'
   | 'voice-no-reviewed-changes'
   | 'voice-id-invalid'
@@ -118,21 +118,21 @@ type CbdbCuratedVoiceFailure =
   | 'voice-speech-route-invalid'
   | 'realm-update-voice-failed';
 
-export type CbdbCuratedVoicePromotionResult =
+export type ForgeImportedVoicePromotionResult =
   | {
     ok: true;
-    source: typeof CBDB_CURATED_VOICE_SOURCE;
+    source: typeof FORGE_IMPORTED_VOICE_SOURCE;
     publicTruth: true;
-    submitted: CbdbCuratedVoiceInput;
+    submitted: ForgeImportedVoiceInput;
     agent: unknown;
   }
   | {
     ok: false;
-    source: typeof CBDB_CURATED_VOICE_SOURCE;
+    source: typeof FORGE_IMPORTED_VOICE_SOURCE;
     publicTruth: false;
-    failure: CbdbCuratedVoiceFailure;
+    failure: ForgeImportedVoiceFailure;
     message: string;
-    submitted: CbdbCuratedVoiceInput | null;
+    submitted: ForgeImportedVoiceInput | null;
   };
 export type RuntimeVisualImageGenerationResult =
   | {
@@ -310,14 +310,14 @@ export function buildRealmSelectAvatarInput(avatarUrl: string): RealmSelectAvata
   };
 }
 
-export function buildCbdbCuratedProfileMediaInput(
-  input: CbdbCuratedProfileMediaInput,
+export function buildForgeImportedProfileMediaInput(
+  input: ForgeImportedProfileMediaInput,
 ): {
-  input: CbdbCuratedProfileMediaInput | null;
-  failure?: Exclude<CbdbCuratedProfileMediaFailure, 'profile-media-scope-unsupported' | 'realm-update-profile-media-failed'>;
+  input: ForgeImportedProfileMediaInput | null;
+  failure?: Exclude<ForgeImportedProfileMediaFailure, 'profile-media-scope-unsupported' | 'realm-update-profile-media-failed'>;
   message?: string;
 } {
-  const built: CbdbCuratedProfileMediaInput = {};
+  const built: ForgeImportedProfileMediaInput = {};
   if (Object.prototype.hasOwnProperty.call(input, 'avatarUrl')) {
     const avatarUrl = normalizeAvatarUrl(String(input.avatarUrl || ''));
     if (!avatarUrl) {
@@ -364,14 +364,14 @@ function normalizeVoiceNumber(value: unknown): number | null {
   return Number.isFinite(number) ? number : null;
 }
 
-export function buildCbdbCuratedVoiceInput(
-  input: CbdbCuratedVoiceInput,
+export function buildForgeImportedVoiceInput(
+  input: ForgeImportedVoiceInput,
 ): {
-  input: CbdbCuratedVoiceInput | null;
-  failure?: Exclude<CbdbCuratedVoiceFailure, 'voice-scope-unsupported' | 'realm-update-voice-failed'>;
+  input: ForgeImportedVoiceInput | null;
+  failure?: Exclude<ForgeImportedVoiceFailure, 'voice-scope-unsupported' | 'realm-update-voice-failed'>;
   message?: string;
 } {
-  const built: CbdbCuratedVoiceInput = {};
+  const built: ForgeImportedVoiceInput = {};
   if (Object.prototype.hasOwnProperty.call(input, 'voiceId')) {
     const voiceId = normalizeVoiceText(input.voiceId);
     if (!voiceId) {
@@ -477,26 +477,26 @@ export function normalizeRealmAgentAvatarSelectResult(
   };
 }
 
-export async function promoteReviewedCbdbCuratedProfileMedia(
+export async function promoteReviewedForgeImportedProfileMedia(
   agent: OwnerPortfolioAgentDetail,
-  input: CbdbCuratedProfileMediaInput,
+  input: ForgeImportedProfileMediaInput,
   realm: StudioRealmClient = createStudioRealmClient(),
-): Promise<CbdbCuratedProfileMediaPromotionResult> {
-  if (agent.ownerScope !== 'cbdb-curated-system') {
+): Promise<ForgeImportedProfileMediaPromotionResult> {
+  if (agent.ownerScope !== 'forge-imported-system') {
     return {
       ok: false,
-      source: CBDB_CURATED_PROFILE_MEDIA_SOURCE,
+      source: FORGE_IMPORTED_PROFILE_MEDIA_SOURCE,
       publicTruth: false,
       failure: 'profile-media-scope-unsupported',
-      message: 'CBDB curated profile media promotion requires a curated system-agent target.',
+      message: 'Forge-imported profile media promotion requires a curated system-agent target.',
       submitted: null,
     };
   }
-  const built = buildCbdbCuratedProfileMediaInput(input);
+  const built = buildForgeImportedProfileMediaInput(input);
   if (!built.input) {
     return {
       ok: false,
-      source: CBDB_CURATED_PROFILE_MEDIA_SOURCE,
+      source: FORGE_IMPORTED_PROFILE_MEDIA_SOURCE,
       publicTruth: false,
       failure: built.failure || 'profile-media-no-reviewed-changes',
       message: built.message || 'Reviewed profile media payload invalid.',
@@ -504,13 +504,13 @@ export async function promoteReviewedCbdbCuratedProfileMedia(
     };
   }
   try {
-    const updatedAgent = await realm.updateCbdbCuratedSystemAgentProfileMedia({
+    const updatedAgent = await realm.updateForgeImportedSystemAgentProfileMedia({
       path: { agentId: agent.id },
       body: built.input,
     });
     return {
       ok: true,
-      source: CBDB_CURATED_PROFILE_MEDIA_SOURCE,
+      source: FORGE_IMPORTED_PROFILE_MEDIA_SOURCE,
       publicTruth: true,
       submitted: built.input,
       agent: updatedAgent,
@@ -518,35 +518,35 @@ export async function promoteReviewedCbdbCuratedProfileMedia(
   } catch (error) {
     return {
       ok: false,
-      source: CBDB_CURATED_PROFILE_MEDIA_SOURCE,
+      source: FORGE_IMPORTED_PROFILE_MEDIA_SOURCE,
       publicTruth: false,
       failure: 'realm-update-profile-media-failed',
-      message: error instanceof Error ? error.message : 'Realm CBDB curated profile media update failed.',
+      message: error instanceof Error ? error.message : 'Realm Forge-imported profile media update failed.',
       submitted: built.input,
     };
   }
 }
 
-export async function promoteReviewedCbdbCuratedVoice(
+export async function promoteReviewedForgeImportedVoice(
   agent: OwnerPortfolioAgentDetail,
-  input: CbdbCuratedVoiceInput,
+  input: ForgeImportedVoiceInput,
   realm: StudioRealmClient = createStudioRealmClient(),
-): Promise<CbdbCuratedVoicePromotionResult> {
-  if (agent.ownerScope !== 'cbdb-curated-system') {
+): Promise<ForgeImportedVoicePromotionResult> {
+  if (agent.ownerScope !== 'forge-imported-system') {
     return {
       ok: false,
-      source: CBDB_CURATED_VOICE_SOURCE,
+      source: FORGE_IMPORTED_VOICE_SOURCE,
       publicTruth: false,
       failure: 'voice-scope-unsupported',
-      message: 'CBDB curated voice promotion requires a curated system-agent target.',
+      message: 'Forge-imported voice promotion requires a curated system-agent target.',
       submitted: null,
     };
   }
-  const built = buildCbdbCuratedVoiceInput(input);
+  const built = buildForgeImportedVoiceInput(input);
   if (!built.input) {
     return {
       ok: false,
-      source: CBDB_CURATED_VOICE_SOURCE,
+      source: FORGE_IMPORTED_VOICE_SOURCE,
       publicTruth: false,
       failure: built.failure || 'voice-no-reviewed-changes',
       message: built.message || 'Reviewed voice payload invalid.',
@@ -554,13 +554,13 @@ export async function promoteReviewedCbdbCuratedVoice(
     };
   }
   try {
-    const updatedAgent = await realm.updateCbdbCuratedSystemAgentVoice({
+    const updatedAgent = await realm.updateForgeImportedSystemAgentVoice({
       path: { agentId: agent.id },
       body: built.input,
     });
     return {
       ok: true,
-      source: CBDB_CURATED_VOICE_SOURCE,
+      source: FORGE_IMPORTED_VOICE_SOURCE,
       publicTruth: true,
       submitted: built.input,
       agent: updatedAgent,
@@ -568,10 +568,10 @@ export async function promoteReviewedCbdbCuratedVoice(
   } catch (error) {
     return {
       ok: false,
-      source: CBDB_CURATED_VOICE_SOURCE,
+      source: FORGE_IMPORTED_VOICE_SOURCE,
       publicTruth: false,
       failure: 'realm-update-voice-failed',
-      message: error instanceof Error ? error.message : 'Realm CBDB curated voice update failed.',
+      message: error instanceof Error ? error.message : 'Realm Forge-imported voice update failed.',
       submitted: built.input,
     };
   }

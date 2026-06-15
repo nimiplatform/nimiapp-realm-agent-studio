@@ -37,7 +37,7 @@ implementation.
 | Understand Friend Count | **[R-RAS-STORY-013]** At most `friendCount` / 好友数 may appear, only after source-backed owner-visible read admission. Unavailable count is source unavailable, not zero. |
 | Operate Many Agents | **[R-RAS-STORY-014]** List/filter/sort support manual operation across many agents. Saved filters are local view preferences, not queue/campaign truth. |
 | Handle Capability Failure | **[R-RAS-STORY-015]** Failures name the exact unavailable capability or source and preserve valid draft/candidate state. |
-| Owner-Led Operation | **[R-RAS-STORY-016]** Owner-created agent edits require owner authority. Generic world-created agents remain out of scope outside the admitted CBDB curated system-agent lane. |
+| Owner-Led Operation | **[R-RAS-STORY-016]** Owner-created agent edits require owner authority. Generic world-created agents remain out of scope outside the admitted Forge-imported system-agent lane. |
 | Use AI As Creative Assistance | **[R-RAS-STORY-017]** AI is embedded in setting, visual, voice, post, and source-backed suggestion workflows. **[R-RAS-STORY-018]** AI output never bypasses human review. |
 | Preview Agent Voice And Behavior | **[R-RAS-STORY-019]** Preview is advisory, cannot mutate LocalAgent state, cannot create posts, and cannot become truth without owner save. |
 | Deferred Post Performance Review | **[R-RAS-STORY-020]** Post performance, economic views, and causal attribution are deferred. |
@@ -48,7 +48,7 @@ implementation.
 - **[R-RAS-STORY-023]** Portfolio read surfaces for user-owned Realm Agent list/read are
   `GET /api/me/agents` and `GET /api/me/agents/{agentId}`; Studio consumes only
   current-user `MASTER_OWNED` Realm Agents for the owner portfolio. The CBDB
-  curated system-agent lane uses `/api/agent/curated-system/cbdb/**` and must
+  curated system-agent lane uses `/api/agent/forge-imported-system/**` and must
   not be confused with generic world-owned/NPC lists. `GET /api/creator/agents` and
   `GET /api/agent/dev/my-agents` are not Studio canonical surfaces.
 - **[R-RAS-STORY-024]** Owner create surface is `POST /api/agent` through
@@ -60,8 +60,8 @@ implementation.
 - **[R-RAS-STORY-026]** Owner-facing setting save uses `PATCH /api/me/agents/{agentId}/settings`, a
   canonical owner-scoped Realm settings/truth ingress that compiles or derives
   canonical `AgentRule` truth writes.
-- **[R-RAS-STORY-035]** CBDB curated system-agent setting save uses
-  `PATCH /api/agent/curated-system/cbdb/agents/{agentId}/settings`, compiles
+- **[R-RAS-STORY-035]** Forge-imported system-agent setting save uses
+  `PATCH /api/agent/forge-imported-system/agents/{agentId}/settings`, compiles
   reviewed settings into Realm profile and `AgentRule` truth, and preserves
   `SYSTEM` provenance.
 - **[R-RAS-STORY-027]** Owner-facing canonical rule review remains deferred until Realm admits a

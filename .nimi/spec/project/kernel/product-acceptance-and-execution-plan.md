@@ -40,7 +40,7 @@ acceptance. Acceptance requires the whole owner workflow to be coherent:
 - **[R-RAS-ACCEPT-013]** source failures preserve valid drafts and name the next valid action;
 - **[R-RAS-ACCEPT-014]** no LocalAgent private state, generic world-created
   agent lane, creator/world-maintainer surface, fake return, or placeholder
-  success leaks into the product. The CBDB curated system-agent lane is the only
+  success leaks into the product. The Forge-imported system-agent lane is the only
   admitted `WORLD_OWNED` exception.
 
 ## Acceptance Gates
@@ -112,7 +112,7 @@ P2 gaps:
 | W0 Acceptance authority | active | none | **[R-RAS-ACCEPT-026]** Admit this product acceptance standard, gap audit, waves, and preflight. | This document exists, is indexed, and spec governance passes. |
 | W1 Desktop shell hard cut | closed | W0 | **[R-RAS-ACCEPT-027]** Build a real desktop app shell equivalent in posture to parentOS: `src-tauri`, `dev:shell`, shell bridge/runtime defaults, desktop launch, Runtime session, SDK client custody. | A1 shell baseline passed. Renderer-only launch is no longer treated as product acceptance. |
 | W2 Product information architecture | closed | W1 | **[R-RAS-ACCEPT-028]** Replace the single mega-surface with functional Studio workspaces: Portfolio, Create, Agent Detail, Settings, Assets, Posts, Local Schedule. | A2 and A3 passed with interaction evidence, local shell failure-state evidence, and verification commands. |
-| W3 Owner portfolio/create/detail completion | closed | W2 | **[R-RAS-ACCEPT-029]** Finish owner list/filter/sort, create, world selection, post-create flow, detail state, friendCount, source failures, owner boundaries, and the separately admitted CBDB curated boundary. | A4 and relevant A9 cases passed for portfolio/create/detail. |
+| W3 Owner portfolio/create/detail completion | closed | W2 | **[R-RAS-ACCEPT-029]** Finish owner list/filter/sort, create, world selection, post-create flow, detail state, friendCount, source failures, owner boundaries, and the separately admitted Forge-imported system-agent boundary. | A4 and relevant A9 cases passed for portfolio/create/detail. |
 | W4 Settings and AI proposal workflow | closed | W3 | **[R-RAS-ACCEPT-030]** Natural-language setting edits, Runtime-assisted proposal/rewrite, structured field review, owner settings save, no raw rule CRUD. | A5 and A8 settings subset passed. |
 | W5 Creative identity and media workflow | closed | W3 | **[R-RAS-ACCEPT-031]** Avatar/profile cover strategy, visual/image candidates, upload, local durable history, clear blocked/deferred public asset publishing. | A6 and A8 visual subset passed for admitted surfaces; blocked Realm profile/binding publication is explicitly deferred. |
 | W6 Agent post and local schedule | closed | W3 | **[R-RAS-ACCEPT-032]** Agent-authored post composer, AI copy assistance, attachments, human review, publish, and real app-local single schedule. | A7 and A8 post-copy subset passed. App-local schedule is persisted and foreground-executable when due. |

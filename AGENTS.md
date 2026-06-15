@@ -7,7 +7,7 @@
 - **App name (English)**: Realm Agent Studio
 - **Canonical Nimi app_id**: `nimi.realm-agent-studio`
 - **Tauri identifier**: `nimi.realm-agent-studio`
-- **One-line**: Owner-facing creation and operation desktop app for user-owned public Realm Agents, plus the admitted CBDB curated system-agent lane.
+- **One-line**: Owner-facing creation and operation desktop app for user-owned public Realm Agents, plus the admitted Forge-imported system-agent lane.
 - **Status**: Pre-Alpha, not yet launched.
 
 ## Architecture
@@ -43,9 +43,9 @@ Studio canonical "my agents" surfaces are `/api/me/agents` and
 `/api/agent/dev/my-agents` are evidence-only and must not be promoted into
 Studio canonical surfaces.
 
-The only admitted `WORLD_OWNED` Studio lane is the CBDB curated system-agent
-lane under `/api/agent/curated-system/cbdb/**`. It is limited to Halliday-owned
-CBDB seeded agents and must not become a generic world-created/NPC management
+The only admitted `WORLD_OWNED` Studio lane is the Forge-imported system-agent
+lane under `/api/agent/forge-imported-system/**`. It is limited to Halliday-owned
+Forge-imported agents and must not become a generic world-created/NPC management
 surface.
 
 The first-version owner-visible metric field is top-level `friendCount`.
@@ -55,7 +55,7 @@ unavailable — render an explicit "source unavailable" state.
 ## Hard Boundaries
 
 ### Scope boundary
-- **In scope:** owner-created Realm Agents, the CBDB curated system-agent lane, public profile/settings, visual identity candidates, agent-authored posts, single local schedule, source-backed `friendCount`.
+- **In scope:** owner-created Realm Agents, the Forge-imported system-agent lane, public profile/settings, visual identity candidates, agent-authored posts, single local schedule, source-backed `friendCount`.
 - **Out of scope:** LocalAgent private runtime / memory / emotion state, generic world-created agent management, agent direct chat from Studio, version history / rollback diffs, performance analytics, gift/economic settlement, team collaboration.
 
 ### Failure mode

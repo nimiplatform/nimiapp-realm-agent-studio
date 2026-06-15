@@ -121,7 +121,7 @@ export function SettingProposalWorkspace({ agent, onAgentWrite }: { agent: Owner
           <div className="flex min-w-0 flex-wrap items-center gap-3">
             <h3 className="m-0 text-xl font-semibold">Agent settings</h3>
             <StatusBadge tone="success">Realm save</StatusBadge>
-            <StatusBadge tone="neutral">{agent.ownerScope === 'cbdb-curated-system' ? 'system-curated' : 'owner-reviewed'}</StatusBadge>
+            <StatusBadge tone="neutral">{agent.ownerScope === 'forge-imported-system' ? 'system-curated' : 'owner-reviewed'}</StatusBadge>
           </div>
           <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
             Edit the agent's public identity, behavior notes, and communication style. Changes are reviewed before save.

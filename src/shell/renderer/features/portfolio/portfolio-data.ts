@@ -1,22 +1,22 @@
 import type {
-  RealmGetCbdbCuratedSystemAgentOperationResponse,
+  RealmGetForgeImportedSystemAgentOperationResponse,
   RealmGetMyRealmAgentOperationResponse,
-  RealmListCbdbCuratedSystemAgentsOperationResponse,
+  RealmListForgeImportedSystemAgentsOperationResponse,
   RealmListMyRealmAgentsOperationResponse,
 } from '@nimiplatform/sdk/realm/generated';
 
 export type MyRealmAgentDto = RealmListMyRealmAgentsOperationResponse[number];
 export type MyRealmAgentDetailDto = RealmGetMyRealmAgentOperationResponse;
-export type CbdbCuratedSystemAgentDto = RealmListCbdbCuratedSystemAgentsOperationResponse[number];
-export type CbdbCuratedSystemAgentDetailDto = RealmGetCbdbCuratedSystemAgentOperationResponse;
+export type ForgeImportedSystemAgentDto = RealmListForgeImportedSystemAgentsOperationResponse[number];
+export type ForgeImportedSystemAgentDetailDto = RealmGetForgeImportedSystemAgentOperationResponse;
 
-export type PortfolioAgentOwnerScope = 'owner-created' | 'cbdb-curated-system';
+export type PortfolioAgentOwnerScope = 'owner-created' | 'forge-imported-system';
 export type PortfolioAgentListSource =
   | 'Realm MeService.listMyRealmAgents'
-  | 'Realm AgentCuratedSystemService.listCbdbCuratedSystemAgents';
+  | 'Realm AgentCuratedSystemService.listForgeImportedSystemAgents';
 export type PortfolioAgentDetailSource =
   | 'Realm MeService.getMyRealmAgent'
-  | 'Realm AgentCuratedSystemService.getCbdbCuratedSystemAgent';
+  | 'Realm AgentCuratedSystemService.getForgeImportedSystemAgent';
 
 export type FriendCountMetric =
   | { status: 'available'; value: number }
@@ -169,7 +169,7 @@ function readUpdatedAt(agent: MyRealmAgentDto): string | null {
   return readString(profile?.updatedAt) || readString(metadata?.updatedAt) || readString(record.createdAt);
 }
 
-export function normalizeFriendCount(agent: MyRealmAgentDto | CbdbCuratedSystemAgentDto): FriendCountMetric {
+export function normalizeFriendCount(agent: MyRealmAgentDto | ForgeImportedSystemAgentDto): FriendCountMetric {
   if (Object.prototype.hasOwnProperty.call(agent, 'friendCount') && typeof agent.friendCount === 'number') {
     return { status: 'available', value: agent.friendCount };
   }
@@ -177,12 +177,12 @@ export function normalizeFriendCount(agent: MyRealmAgentDto | CbdbCuratedSystemA
 }
 
 export function normalizeOwnerPortfolioAgent(
-  agent: MyRealmAgentDto | CbdbCuratedSystemAgentDto,
+  agent: MyRealmAgentDto | ForgeImportedSystemAgentDto,
   scope: PortfolioAgentOwnerScope = 'owner-created',
 ): OwnerPortfolioAgent {
   const profile = readOptionalRecord(agent.agentProfile);
-  const source: PortfolioAgentListSource = scope === 'cbdb-curated-system'
-    ? 'Realm AgentCuratedSystemService.listCbdbCuratedSystemAgents'
+  const source: PortfolioAgentListSource = scope === 'forge-imported-system'
+    ? 'Realm AgentCuratedSystemService.listForgeImportedSystemAgents'
     : 'Realm MeService.listMyRealmAgents';
 
   return {
@@ -204,8 +204,8 @@ export function normalizeOwnerPortfolio(agents: readonly MyRealmAgentDto[]): Own
   return agents.map((agent) => normalizeOwnerPortfolioAgent(agent));
 }
 
-export function normalizeCbdbCuratedSystemPortfolio(agents: readonly CbdbCuratedSystemAgentDto[]): OwnerPortfolioAgent[] {
-  return agents.map((agent) => normalizeOwnerPortfolioAgent(agent, 'cbdb-curated-system'));
+export function normalizeForgeImportedSystemPortfolio(agents: readonly ForgeImportedSystemAgentDto[]): OwnerPortfolioAgent[] {
+  return agents.map((agent) => normalizeOwnerPortfolioAgent(agent, 'forge-imported-system'));
 }
 
 function compareText(left: string, right: string): number {
@@ -354,14 +354,14 @@ function readAgentVoiceConfig(profile: Record<string, unknown> | null): Portfoli
 }
 
 export function normalizeOwnerPortfolioAgentDetail(
-  agent: MyRealmAgentDetailDto | CbdbCuratedSystemAgentDetailDto,
+  agent: MyRealmAgentDetailDto | ForgeImportedSystemAgentDetailDto,
   scope: PortfolioAgentOwnerScope = 'owner-created',
 ): OwnerPortfolioAgentDetail {
   const agentRecord = agent as unknown as Record<string, unknown>;
   const profile = readOptionalRecord(agent.agentProfile);
   const bio = readFirstStringField(agentRecord, ['bio', 'description']);
-  const source: PortfolioAgentDetailSource = scope === 'cbdb-curated-system'
-    ? 'Realm AgentCuratedSystemService.getCbdbCuratedSystemAgent'
+  const source: PortfolioAgentDetailSource = scope === 'forge-imported-system'
+    ? 'Realm AgentCuratedSystemService.getForgeImportedSystemAgent'
     : 'Realm MeService.getMyRealmAgent';
   return {
     id: agent.id,

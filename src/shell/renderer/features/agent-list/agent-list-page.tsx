@@ -167,7 +167,7 @@ export function AgentListPage() {
             <p className="ras-page-header__eyebrow">Realm Agent Studio</p>
             <h1 className="ras-page-header__title">Realm Agent portfolio</h1>
             <p className="ras-page-header__description">
-              Owner-created agents and admitted CBDB curated system agents. Pick one to open its workspaces.
+              Owner-created agents and admitted Forge-imported system agents. Pick one to open its workspaces.
             </p>
           </div>
           <div className="ras-page-header__actions">
@@ -212,7 +212,7 @@ export function AgentListPage() {
             <div className="ras-stack-tight">
               <h2 className="ras-hero-empty__title">No Realm Agents available</h2>
               <p className="ras-hero-empty__description">
-                Realm returned no owner-created agents or admitted CBDB curated system agents.
+                Realm returned no owner-created agents or admitted Forge-imported system agents.
               </p>
             </div>
             <Button

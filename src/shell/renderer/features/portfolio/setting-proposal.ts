@@ -98,7 +98,7 @@ export type RuntimeOwnerSettingsProposal = {
 };
 
 export type OwnerAgentSettingsProposalContext = {
-  ownerScope?: 'owner-created' | 'cbdb-curated-system';
+  ownerScope?: 'owner-created' | 'forge-imported-system';
   displayName?: string | null;
   handle?: string | null;
   worldId?: string | null;
@@ -224,7 +224,7 @@ const RUNTIME_PROPOSAL_OUTPUT_KEYS = [
   'rationale',
 ] as const;
 
-const CBDB_CURATED_ENRICHMENT_LANES = [
+const FORGE_IMPORTED_SOURCE_ENRICHMENT_LANES = [
   'self-introduction -> description/greeting/personalitySummary/publicRole/worldview',
   'accent/speech posture -> communication.contentStyle only',
   'portrait/final look -> visual image or avatar package candidate outside owner settings',
@@ -394,7 +394,7 @@ export function buildRuntimeOwnerSettingsProposalPrompt(input: {
 }): { ok: true; errors: []; payload: StudioTextGeneratePayload } | { ok: false; errors: string[]; payload: null } {
   const normalizedDraft = normalizeOwnerAgentSettingsDraft(input.draft);
   const agentContext = input.agentContext;
-  const cbdbCurated = agentContext?.ownerScope === 'cbdb-curated-system';
+  const forgeImported = agentContext?.ownerScope === 'forge-imported-system';
   const callParams = resolveStudioTextCallParams('realm-agent-studio.settings-proposal', {
     maxTokens: 900,
     temperature: 0.2,
@@ -426,8 +426,8 @@ export function buildRuntimeOwnerSettingsProposalPrompt(input: {
             'Return one JSON object with admitted draft field names only.',
             'Allowed fields: displayName, description, greeting, naturalLanguageIntent, publicRole, worldview, personalitySummary, relationshipMode, interestsText, goalsText, contentStyle, formality, responseLength, sentiment, allowedThemesText, disallowedThemesText, targetAudience, positioning, rawRuleTextCandidate, rationale.',
             'Do not include provider, model, LocalAgent, lifecycle, state, worldId, handle, avatarUrl, profileCoverUrl, dna, agentRule, or agentRules.',
-            ...(cbdbCurated ? [
-              'This is a CBDB curated system-agent lane. Preserve source-backed historical facts; do not invent biography, timeline, relationships, dates, titles, or events.',
+            ...(forgeImported ? [
+              'This is a Forge-imported system-agent lane. Preserve source-backed historical facts; do not invent biography, timeline, relationships, dates, titles, or events.',
               'Map self-introduction and greeting work into description, greeting, personalitySummary, publicRole, or worldview.',
               'Map accent and speech posture into contentStyle only. Visual portrait, final look, and voice/audio are candidate-only asset work outside owner settings.',
             ] : []),
@@ -444,8 +444,8 @@ export function buildRuntimeOwnerSettingsProposalPrompt(input: {
                 worldName: agentContext.worldName ?? null,
               },
             } : {}),
-            ...(cbdbCurated ? {
-              cbdbEnrichmentLanes: CBDB_CURATED_ENRICHMENT_LANES,
+            ...(forgeImported ? {
+              forgeImportedEnrichmentLanes: FORGE_IMPORTED_SOURCE_ENRICHMENT_LANES,
               sourcePolicy: 'source-backed historical facts only; unsupported portrait and voice details remain reviewed candidates outside settings',
             } : {}),
             ownerIntent: intent,

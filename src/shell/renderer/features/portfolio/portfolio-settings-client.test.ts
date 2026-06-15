@@ -16,7 +16,7 @@ import {
   createReviewedRealmAgent,
   generateReviewedVisualImageCandidate,
   getAgentVisibilitySettings,
-  getCbdbCuratedSystemPortfolioAgentDetail,
+  getForgeImportedSystemPortfolioAgentDetail,
   getCreateRealmAgentWorldPreview,
   getOwnerAgentSettings,
   getPortfolioAgentSettings,
@@ -30,13 +30,13 @@ import {
   normalizeRealmAgentCreateResult,
   normalizeRealmPostPublishResult,
   normalizeRealmTextResourceCreateResult,
-  normalizeCbdbCuratedAgentChatReadinessSummary,
+  normalizeForgeImportedAgentChatReadinessSummary,
   normalizeAgentChatReadinessProjectionSummary,
   normalizeRuntimeProjectionSummary,
   projectAgentChatReadinessContextSummary,
   projectAgentRuntimeContextSummary,
-  promoteReviewedCbdbCuratedProfileMedia,
-  promoteReviewedCbdbCuratedVoice,
+  promoteReviewedForgeImportedProfileMedia,
+  promoteReviewedForgeImportedVoice,
   proposeReviewedOwnerAgentSettings,
   proposeReviewedPortfolioAgentSettings,
   proposeReviewedPostCopy,
@@ -134,9 +134,9 @@ describe('owner portfolio settings client', () => {
       });
     });
 
-     it('reads and updates CBDB curated system settings through the curated endpoint', async () => {
+     it('reads and updates Forge-imported system settings through the curated endpoint', async () => {
       const realm = mockRealm();
-      const agent = await getCbdbCuratedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
+      const agent = await getForgeImportedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
       const current = await getPortfolioAgentSettings(agent, realm);
       const draft = {
         ...createOwnerAgentSettingsDraft(current),
@@ -145,10 +145,10 @@ describe('owner portfolio settings client', () => {
       };
       const result = await updateReviewedPortfolioAgentSettings(agent, draft, current, realm);
 
-      expect(realm.getCbdbCuratedSystemAgentSettings).toHaveBeenCalledWith({
+      expect(realm.getForgeImportedSystemAgentSettings).toHaveBeenCalledWith({
         path: { agentId: 'cbdb-agent-su-shi' },
       });
-      expect(realm.updateCbdbCuratedSystemAgentSettings).toHaveBeenCalledWith({
+      expect(realm.updateForgeImportedSystemAgentSettings).toHaveBeenCalledWith({
         path: { agentId: 'cbdb-agent-su-shi' },
         body: {
           greeting: '大江东去。',
@@ -160,7 +160,7 @@ describe('owner portfolio settings client', () => {
       expect(realm.updateMyRealmAgentSettings).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: true,
-        source: 'Realm AgentCuratedSystemService.updateCbdbCuratedSystemAgentSettings',
+        source: 'Realm AgentCuratedSystemService.updateForgeImportedSystemAgentSettings',
         truthWrite: true,
         settings: {
           agentRuleVersion: 2,
@@ -243,9 +243,9 @@ describe('owner portfolio settings client', () => {
       expect(realm.updateMyRealmAgentSettings).not.toHaveBeenCalled();
     });
 
-     it('uses CBDB curated context for AI-assisted settings candidates before curated Realm save', async () => {
+     it('uses Forge-imported context for AI-assisted settings candidates before curated Realm save', async () => {
       const realm = mockRealm();
-      const agent = await getCbdbCuratedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
+      const agent = await getForgeImportedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
       const current = await getPortfolioAgentSettings(agent, realm);
       const draft = {
         ...createOwnerAgentSettingsDraft(current),
@@ -292,9 +292,9 @@ describe('owner portfolio settings client', () => {
         ?.spec?.textGenerate;
       const submittedUserInput = JSON.stringify(textGenerate?.input ?? []);
 
-      expect(submittedUserInput).toContain('cbdb-curated-system');
+      expect(submittedUserInput).toContain('forge-imported-system');
       expect(submittedUserInput).toContain('self-introduction -> description/greeting/personalitySummary/publicRole/worldview');
-      expect(submittedUserInput).toContain('portrait/final look -> visual image candidate outside owner settings');
+      expect(submittedUserInput).toContain('portrait/final look -> visual image or avatar package candidate outside owner settings');
       expect(submittedUserInput).not.toContain('LocalAgent');
       expect(proposalResult).toMatchObject({
         ok: true,
@@ -313,7 +313,7 @@ describe('owner portfolio settings client', () => {
 
       const reviewedDraft = applyRuntimeOwnerSettingsProposal(draft, proposalResult.proposal);
       const saveResult = await updateReviewedPortfolioAgentSettings(agent, reviewedDraft, current, realm);
-      const updateSettings = realm.updateCbdbCuratedSystemAgentSettings;
+      const updateSettings = realm.updateForgeImportedSystemAgentSettings;
       const submittedRequest = vi.mocked(updateSettings).mock.calls[0]?.[0];
       const submittedBody = submittedRequest?.body;
       const submittedKeys = collectKeys(submittedBody);
@@ -340,11 +340,11 @@ describe('owner portfolio settings client', () => {
       expect(submittedKeys.has('model')).toBe(false);
       expect(saveResult).toMatchObject({
         ok: true,
-        source: 'Realm AgentCuratedSystemService.updateCbdbCuratedSystemAgentSettings',
+        source: 'Realm AgentCuratedSystemService.updateForgeImportedSystemAgentSettings',
         truthWrite: true,
       });
 
-      vi.mocked(realm.getCbdbCuratedSystemAgentSettings).mockResolvedValueOnce({
+      vi.mocked(realm.getForgeImportedSystemAgentSettings).mockResolvedValueOnce({
         ...current,
         description: 'Source-backed Song literatus introduction for public profile review.',
         greeting: 'I speak from the Song record; ask what is known before what is imagined.',
@@ -372,17 +372,17 @@ describe('owner portfolio settings client', () => {
       });
 
       const chatReadiness = await projectAgentChatReadinessContextSummary(agent, realm);
-      expect(realm.getCbdbCuratedSystemAgentChatReadiness).toHaveBeenCalledWith({
+      expect(realm.getForgeImportedSystemAgentChatReadiness).toHaveBeenCalledWith({
         path: { agentId: 'cbdb-agent-su-shi' },
       });
       expect(realm.projectRuntimePayload).not.toHaveBeenCalled();
       expect(chatReadiness).toMatchObject({
         ok: true,
-        source: 'Realm AgentCuratedSystemService.getCbdbCuratedSystemAgentChatReadiness',
+        source: 'Realm AgentCuratedSystemService.getForgeImportedSystemAgentChatReadiness',
         truthWrite: false,
         submitted: {
           agentId: 'cbdb-agent-su-shi',
-          ownerScope: 'cbdb-curated-system',
+          ownerScope: 'forge-imported-system',
         },
         summary: {
           consumerSurface: 'AGENT_CHAT_READINESS',
@@ -407,14 +407,14 @@ describe('owner portfolio settings client', () => {
 
      it('promotes reviewed CBDB portrait URLs through the curated profile-media endpoint', async () => {
       const realm = mockRealm();
-      const agent = await getCbdbCuratedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
+      const agent = await getForgeImportedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
 
-      const result = await promoteReviewedCbdbCuratedProfileMedia(agent, {
+      const result = await promoteReviewedForgeImportedProfileMedia(agent, {
         avatarUrl: ' https://cdn.example.com/cbdb/su-shi-reviewed.png ',
         profileCoverUrl: 'https://cdn.example.com/cbdb/song-literati-cover.png',
       }, realm);
 
-      expect(realm.updateCbdbCuratedSystemAgentProfileMedia).toHaveBeenCalledWith({
+      expect(realm.updateForgeImportedSystemAgentProfileMedia).toHaveBeenCalledWith({
         path: { agentId: 'cbdb-agent-su-shi' },
         body: {
           avatarUrl: 'https://cdn.example.com/cbdb/su-shi-reviewed.png',
@@ -424,7 +424,7 @@ describe('owner portfolio settings client', () => {
       expect(realm.agentControllerSelectAvatar).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: true,
-        source: 'Realm AgentCuratedSystemService.updateCbdbCuratedSystemAgentProfileMedia',
+        source: 'Realm AgentCuratedSystemService.updateForgeImportedSystemAgentProfileMedia',
         publicTruth: true,
         submitted: {
           avatarUrl: 'https://cdn.example.com/cbdb/su-shi-reviewed.png',
@@ -435,9 +435,9 @@ describe('owner portfolio settings client', () => {
       expect(collectKeys(result).has('model')).toBe(false);
     });
 
-     it('keeps CBDB curated profile media promotion scoped to curated system agents', async () => {
+     it('keeps Forge-imported profile media promotion scoped to curated system agents', async () => {
       const realm = mockRealm();
-      const result = await promoteReviewedCbdbCuratedProfileMedia(ownerAgentDetail(), {
+      const result = await promoteReviewedForgeImportedProfileMedia(ownerAgentDetail(), {
         avatarUrl: 'https://cdn.example.com/cbdb/su-shi-reviewed.png',
       }, realm);
 
@@ -446,13 +446,13 @@ describe('owner portfolio settings client', () => {
         failure: 'profile-media-scope-unsupported',
         publicTruth: false,
       });
-      expect(realm.updateCbdbCuratedSystemAgentProfileMedia).not.toHaveBeenCalled();
+      expect(realm.updateForgeImportedSystemAgentProfileMedia).not.toHaveBeenCalled();
     });
 
-     it('fails closed for invalid CBDB curated profile media URLs', async () => {
+     it('fails closed for invalid Forge-imported profile media URLs', async () => {
       const realm = mockRealm();
-      const agent = await getCbdbCuratedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
-      const result = await promoteReviewedCbdbCuratedProfileMedia(agent, {
+      const agent = await getForgeImportedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
+      const result = await promoteReviewedForgeImportedProfileMedia(agent, {
         avatarUrl: 'file:///tmp/not-admitted.png',
       }, realm);
 
@@ -461,14 +461,14 @@ describe('owner portfolio settings client', () => {
         failure: 'avatar-url-invalid',
         publicTruth: false,
       });
-      expect(realm.updateCbdbCuratedSystemAgentProfileMedia).not.toHaveBeenCalled();
+      expect(realm.updateForgeImportedSystemAgentProfileMedia).not.toHaveBeenCalled();
     });
 
      it('promotes reviewed CBDB voice config through the curated voice endpoint', async () => {
       const realm = mockRealm();
-      const agent = await getCbdbCuratedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
+      const agent = await getForgeImportedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
 
-      const result = await promoteReviewedCbdbCuratedVoice(agent, {
+      const result = await promoteReviewedForgeImportedVoice(agent, {
         voiceId: ' zh_narrator ',
         description: ' Reviewed Song literati narrator with measured cadence. ',
         emotionEnabled: true,
@@ -478,7 +478,7 @@ describe('owner portfolio settings client', () => {
         speechRoutePolicy: 'local',
       }, realm);
 
-      expect(realm.updateCbdbCuratedSystemAgentVoice).toHaveBeenCalledWith({
+      expect(realm.updateForgeImportedSystemAgentVoice).toHaveBeenCalledWith({
         path: { agentId: 'cbdb-agent-su-shi' },
         body: {
           voiceId: 'zh_narrator',
@@ -492,7 +492,7 @@ describe('owner portfolio settings client', () => {
       });
       expect(result).toMatchObject({
         ok: true,
-        source: 'Realm AgentCuratedSystemService.updateCbdbCuratedSystemAgentVoice',
+        source: 'Realm AgentCuratedSystemService.updateForgeImportedSystemAgentVoice',
         publicTruth: true,
         submitted: {
           voiceId: 'zh_narrator',
@@ -505,9 +505,9 @@ describe('owner portfolio settings client', () => {
       expect(collectKeys(result).has('model')).toBe(false);
     });
 
-     it('keeps CBDB curated voice promotion scoped to curated system agents', async () => {
+     it('keeps Forge-imported voice promotion scoped to curated system agents', async () => {
       const realm = mockRealm();
-      const result = await promoteReviewedCbdbCuratedVoice(ownerAgentDetail(), {
+      const result = await promoteReviewedForgeImportedVoice(ownerAgentDetail(), {
         voiceId: 'zh_narrator',
       }, realm);
 
@@ -516,13 +516,13 @@ describe('owner portfolio settings client', () => {
         failure: 'voice-scope-unsupported',
         publicTruth: false,
       });
-      expect(realm.updateCbdbCuratedSystemAgentVoice).not.toHaveBeenCalled();
+      expect(realm.updateForgeImportedSystemAgentVoice).not.toHaveBeenCalled();
     });
 
-     it('fails closed for invalid CBDB curated voice numeric ranges', async () => {
+     it('fails closed for invalid Forge-imported voice numeric ranges', async () => {
       const realm = mockRealm();
-      const agent = await getCbdbCuratedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
-      const result = await promoteReviewedCbdbCuratedVoice(agent, {
+      const agent = await getForgeImportedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
+      const result = await promoteReviewedForgeImportedVoice(agent, {
         voiceId: 'zh_narrator',
         speed: 999,
       }, realm);
@@ -532,7 +532,7 @@ describe('owner portfolio settings client', () => {
         failure: 'voice-speed-invalid',
         publicTruth: false,
       });
-      expect(realm.updateCbdbCuratedSystemAgentVoice).not.toHaveBeenCalled();
+      expect(realm.updateForgeImportedSystemAgentVoice).not.toHaveBeenCalled();
     });
 
      it('fails closed for Runtime settings proposal when intent is missing', async () => {
@@ -804,11 +804,11 @@ describe('owner portfolio settings client', () => {
       expect(collectKeys(summary).has('contentStyle')).toBe(false);
     });
 
-     it('normalizes CBDB curated Agent Chat readiness summary without raw projection payloads', () => {
-      const summary = normalizeCbdbCuratedAgentChatReadinessSummary({
+     it('normalizes Forge-imported Agent Chat readiness summary without raw projection payloads', () => {
+      const summary = normalizeForgeImportedAgentChatReadinessSummary({
         agentId: 'cbdb-agent-su-shi',
         worldId: 'cbdb-song-slice-real-20260614-world',
-        ownerScope: 'cbdb-curated-system',
+        ownerScope: 'forge-imported-system',
         consumerSurface: 'AGENT_CHAT_READINESS',
         runtimeProjectionChecksum: 'checksum-cbdb-chat-readiness-1',
         selectedInputCount: 2,
@@ -834,10 +834,10 @@ describe('owner portfolio settings client', () => {
           voiceReferenceReady: true,
           speechRouteReady: true,
         },
-      } as unknown as Awaited<ReturnType<StudioRealmSurface['getCbdbCuratedSystemAgentChatReadiness']>>);
+      } as unknown as Awaited<ReturnType<StudioRealmSurface['getForgeImportedSystemAgentChatReadiness']>>);
 
       expect(summary).toEqual({
-        source: 'Realm AgentCuratedSystemService.getCbdbCuratedSystemAgentChatReadiness',
+        source: 'Realm AgentCuratedSystemService.getForgeImportedSystemAgentChatReadiness',
         consumerSurface: 'AGENT_CHAT_READINESS',
         worldId: 'cbdb-song-slice-real-20260614-world',
         checksum: 'checksum-cbdb-chat-readiness-1',

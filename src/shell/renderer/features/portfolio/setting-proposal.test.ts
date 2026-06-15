@@ -178,7 +178,7 @@ describe('owner settings proposal normalization', () => {
     expect(userText).not.toContain('LocalAgent');
   });
 
-  it('builds a CBDB curated Runtime proposal request with source-backed enrichment lanes', () => {
+  it('builds a Forge-imported Runtime proposal request with source-backed enrichment lanes', () => {
     const draft = {
       ...createOwnerAgentSettingsDraft(settings),
       naturalLanguageIntent: 'Add a self-introduction, Song speech posture, and final portrait direction.',
@@ -188,7 +188,7 @@ describe('owner settings proposal normalization', () => {
       current: settings,
       draft,
       agentContext: {
-        ownerScope: 'cbdb-curated-system',
+        ownerScope: 'forge-imported-system',
         displayName: 'Su Shi',
         handle: 'su-shi',
         worldId: 'cbdb-song-slice-real-20260614-world',
@@ -205,17 +205,17 @@ describe('owner settings proposal normalization', () => {
       ?.content.find((part) => part.type === 'text')?.text || '';
     const userPayload = JSON.parse(userText) as Record<string, unknown>;
 
-    expect(systemText).toContain('CBDB curated system-agent lane');
+    expect(systemText).toContain('Forge-imported system-agent lane');
     expect(systemText).toContain('Preserve source-backed historical facts');
     expect(systemText).toContain('contentStyle only');
     expect(userPayload).toMatchObject({
       agentContext: {
-        ownerScope: 'cbdb-curated-system',
+        ownerScope: 'forge-imported-system',
         handle: 'su-shi',
         worldId: 'cbdb-song-slice-real-20260614-world',
       },
     });
-    expect(userPayload.cbdbEnrichmentLanes).toEqual([
+    expect(userPayload.forgeImportedEnrichmentLanes).toEqual([
       'self-introduction -> description/greeting/personalitySummary/publicRole/worldview',
       'accent/speech posture -> communication.contentStyle only',
       'portrait/final look -> visual image or avatar package candidate outside owner settings',

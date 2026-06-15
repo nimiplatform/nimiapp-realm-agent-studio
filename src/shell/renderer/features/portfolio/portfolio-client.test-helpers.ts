@@ -149,7 +149,7 @@ export function mockRealm(): StudioRealmSurface {
         id: request.path.agentId,
         bio: 'Detail bio',
       })),
-      listCbdbCuratedSystemAgents: vi.fn(async () => [{
+      listForgeImportedSystemAgents: vi.fn(async () => [{
         id: 'cbdb-agent-su-shi',
         handle: 'su-shi',
         displayName: 'CBDB Su Shi',
@@ -161,7 +161,7 @@ export function mockRealm(): StudioRealmSurface {
           state: 'PUBLIC',
         },
       }]),
-      getCbdbCuratedSystemAgent: vi.fn(async (request: { readonly path: { readonly agentId: string } }) => ({
+      getForgeImportedSystemAgent: vi.fn(async (request: { readonly path: { readonly agentId: string } }) => ({
         id: request.path.agentId,
         handle: 'su-shi',
         displayName: 'CBDB Su Shi',
@@ -251,7 +251,7 @@ export function mockRealm(): StudioRealmSurface {
           updatedAt: '2026-05-22T00:00:00.000Z',
         };
       }),
-      getCbdbCuratedSystemAgentSettings: vi.fn(async (request: { readonly path: { readonly agentId: string } }) => ({
+      getForgeImportedSystemAgentSettings: vi.fn(async (request: { readonly path: { readonly agentId: string } }) => ({
           agentId: request.path.agentId,
           worldId: 'cbdb-song-slice-real-20260614-world',
           agentRuleVersion: 1,
@@ -285,7 +285,7 @@ export function mockRealm(): StudioRealmSurface {
           },
           updatedAt: '2026-06-14T00:00:00.000Z',
       })),
-      updateCbdbCuratedSystemAgentSettings: vi.fn(async (request: { readonly path: { readonly agentId: string }; readonly body: Record<string, unknown> }) => {
+      updateForgeImportedSystemAgentSettings: vi.fn(async (request: { readonly path: { readonly agentId: string }; readonly body: Record<string, unknown> }) => {
         const input = request.body;
         return {
           agentId: request.path.agentId,
@@ -327,7 +327,7 @@ export function mockRealm(): StudioRealmSurface {
           updatedAt: '2026-06-15T00:00:00.000Z',
         };
       }),
-      updateCbdbCuratedSystemAgentProfileMedia: vi.fn(async (
+      updateForgeImportedSystemAgentProfileMedia: vi.fn(async (
         request: {
           readonly path: { readonly agentId: string };
           readonly body: { readonly avatarUrl?: string | null; readonly profileCoverUrl?: string | null };
@@ -349,7 +349,7 @@ export function mockRealm(): StudioRealmSurface {
           importance: 'SECONDARY',
         },
       })),
-      updateCbdbCuratedSystemAgentVoice: vi.fn(async (
+      updateForgeImportedSystemAgentVoice: vi.fn(async (
         request: {
           readonly path: { readonly agentId: string };
           readonly body: {
@@ -380,12 +380,12 @@ export function mockRealm(): StudioRealmSurface {
           },
         },
       })),
-      getCbdbCuratedSystemAgentChatReadiness: vi.fn(async (
+      getForgeImportedSystemAgentChatReadiness: vi.fn(async (
         request: { readonly path: { readonly agentId: string } },
       ) => ({
         agentId: request.path.agentId,
         worldId: 'cbdb-song-slice-real-20260614-world',
-        ownerScope: 'cbdb-curated-system',
+        ownerScope: 'forge-imported-system',
         consumerSurface: 'AGENT_CHAT_READINESS',
         runtimeProjectionChecksum: 'checksum-cbdb-chat-readiness-1',
         selectedInputCount: 2,

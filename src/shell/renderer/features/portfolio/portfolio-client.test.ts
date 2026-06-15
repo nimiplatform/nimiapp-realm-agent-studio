@@ -15,14 +15,14 @@ import {
   createReviewedRealmAgentWithProfileSettings,
   generateReviewedVisualImageCandidate,
   getAgentVisibilitySettings,
-  getCbdbCuratedSystemPortfolioAgentDetail,
+  getForgeImportedSystemPortfolioAgentDetail,
   getCreateRealmAgentWorldPreview,
   getOwnerAgentSettings,
   getOwnerPortfolioAgentDetail,
   getPortfolioAgentSettings,
   getRealmAgentStudioPortfolioAgentDetail,
   listCreateRealmAgentSelectableWorlds,
-  listCbdbCuratedSystemPortfolioAgents,
+  listForgeImportedSystemPortfolioAgents,
   listOwnerPortfolioAgents,
   listRealmAgentStudioPortfolioAgents,
   listReadyPostAttachmentResources,
@@ -74,37 +74,37 @@ describe('owner portfolio core client', () => {
       expect(agents[0]?.source).toBe('Realm MeService.listMyRealmAgents');
     });
 
-    it('lists owner-created and CBDB curated system agents through admitted portfolio lanes', async () => {
+    it('lists owner-created and Forge-imported system agents through admitted portfolio lanes', async () => {
       const realm = mockRealm();
       const agents = await listRealmAgentStudioPortfolioAgents(realm);
 
       expect(realm.listMyRealmAgents).toHaveBeenCalledTimes(1);
-      expect(realm.listCbdbCuratedSystemAgents).toHaveBeenCalledTimes(1);
+      expect(realm.listForgeImportedSystemAgents).toHaveBeenCalledTimes(1);
       expect(agents.map((item) => [item.id, item.ownerScope, item.source])).toEqual([
         ['agent-1', 'owner-created', 'Realm MeService.listMyRealmAgents'],
-        ['cbdb-agent-su-shi', 'cbdb-curated-system', 'Realm AgentCuratedSystemService.listCbdbCuratedSystemAgents'],
+        ['cbdb-agent-su-shi', 'forge-imported-system', 'Realm AgentCuratedSystemService.listForgeImportedSystemAgents'],
       ]);
     });
 
-    it('reads CBDB curated system agent details through the curated lane', async () => {
+    it('reads Forge-imported system agent details through the curated lane', async () => {
       const realm = mockRealm();
-      const detail = await getCbdbCuratedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
+      const detail = await getForgeImportedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
 
-      expect(realm.getCbdbCuratedSystemAgent).toHaveBeenCalledWith({ path: { agentId: 'cbdb-agent-su-shi' } });
-      expect(detail.ownerScope).toBe('cbdb-curated-system');
-      expect(detail.source).toBe('Realm AgentCuratedSystemService.getCbdbCuratedSystemAgent');
+      expect(realm.getForgeImportedSystemAgent).toHaveBeenCalledWith({ path: { agentId: 'cbdb-agent-su-shi' } });
+      expect(detail.ownerScope).toBe('forge-imported-system');
+      expect(detail.source).toBe('Realm AgentCuratedSystemService.getForgeImportedSystemAgent');
       expect(detail.world.value).toBe('cbdb-song-slice-real-20260614-world');
     });
 
-    it('falls through to CBDB curated system detail when owner authority does not contain the agent', async () => {
+    it('falls through to Forge-imported system detail when owner authority does not contain the agent', async () => {
       const realm = mockRealm();
       vi.mocked(realm.getMyRealmAgent).mockRejectedValueOnce(new Error('owner authority missing'));
 
       const detail = await getRealmAgentStudioPortfolioAgentDetail('cbdb-agent-su-shi', realm);
 
       expect(realm.getMyRealmAgent).toHaveBeenCalledWith({ path: { agentId: 'cbdb-agent-su-shi' } });
-      expect(realm.getCbdbCuratedSystemAgent).toHaveBeenCalledWith({ path: { agentId: 'cbdb-agent-su-shi' } });
-      expect(detail.ownerScope).toBe('cbdb-curated-system');
+      expect(realm.getForgeImportedSystemAgent).toHaveBeenCalledWith({ path: { agentId: 'cbdb-agent-su-shi' } });
+      expect(detail.ownerScope).toBe('forge-imported-system');
     });
 
     it('fetches selected detail through getMyRealmAgent', async () => {
@@ -120,11 +120,11 @@ describe('owner portfolio core client', () => {
 
     it('keeps standalone CBDB list reads off owner-created portfolio methods', async () => {
       const realm = mockRealm();
-      const agents = await listCbdbCuratedSystemPortfolioAgents(realm);
+      const agents = await listForgeImportedSystemPortfolioAgents(realm);
 
-      expect(realm.listCbdbCuratedSystemAgents).toHaveBeenCalledTimes(1);
+      expect(realm.listForgeImportedSystemAgents).toHaveBeenCalledTimes(1);
       expect(realm.listMyRealmAgents).not.toHaveBeenCalled();
-      expect(agents[0]?.ownerScope).toBe('cbdb-curated-system');
+      expect(agents[0]?.ownerScope).toBe('forge-imported-system');
     });
 
     it('uses WorldsService only for create readiness world list reads', async () => {
