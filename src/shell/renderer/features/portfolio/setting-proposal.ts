@@ -227,7 +227,7 @@ const RUNTIME_PROPOSAL_OUTPUT_KEYS = [
 const CBDB_CURATED_ENRICHMENT_LANES = [
   'self-introduction -> description/greeting/personalitySummary/publicRole/worldview',
   'accent/speech posture -> communication.contentStyle only',
-  'portrait/final look -> visual image candidate outside owner settings',
+  'portrait/final look -> visual image or avatar package candidate outside owner settings',
   'voice demo -> audio candidate outside owner settings',
 ] as const;
 

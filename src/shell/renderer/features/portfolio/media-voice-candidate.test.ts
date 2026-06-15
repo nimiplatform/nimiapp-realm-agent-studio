@@ -3,6 +3,8 @@ import type { OwnerPortfolioAgentDetail, SettingField } from './portfolio-data.j
 import { resetStudioAIConfigForTest } from './portfolio-client.test-helpers.js';
 import {
   assertNoForbiddenMediaCandidateFields,
+  buildReviewedAvatarPackageCandidatePayload,
+  buildReviewedAvatarPackageImageGenerationPayload,
   buildReviewedVisualImageCandidatePayload,
   buildReviewedVisualImageGenerationPayload,
   buildReviewedVoiceDemoCandidatePayload,
@@ -11,6 +13,7 @@ import {
   isAllowedMediaCandidateResourceType,
   normalizeVisualMediaCandidateInput,
   normalizeVoiceDemoCandidateInput,
+  normalizeAvatarPackageTarget,
 } from './media-voice-candidate.js';
 
 function settingField(key: SettingField['key'], label: string, value: string): SettingField {
@@ -92,6 +95,12 @@ describe('media and voice candidate normalization', () => {
       scriptText: 'Hello\nfrom the public demo.',
     });
   });
+
+  it('normalizes avatar package targets to admitted presentation families', () => {
+    expect(normalizeAvatarPackageTarget('LIVE2D')).toBe('LIVE2D');
+    expect(normalizeAvatarPackageTarget('VRM')).toBe('VRM');
+    expect(normalizeAvatarPackageTarget('unknown')).toBe('LIVE2D');
+  });
 });
 
 describe('reviewed media and voice candidate payloads', () => {
@@ -170,6 +179,95 @@ describe('reviewed media and voice candidate payloads', () => {
         },
       },
     });
+  });
+
+  it('builds a Live2D avatar package candidate as a design-sheet request only', () => {
+    const result = buildReviewedAvatarPackageImageGenerationPayload({
+      resourceType: 'IMAGE',
+      bindingPoint: 'AGENT_AVATAR',
+      prompt: 'Song literati portrait identity.',
+      notes: 'Keep source-backed clothing details.',
+      aspectRatio: '1:1',
+      packageTarget: 'LIVE2D',
+      motionNotes: 'Idle breathing, speaking mouth shapes, listening nod.',
+      interactionNotes: 'No unsupported props.',
+    }, agent);
+
+    expect(result).toMatchObject({
+      changed: true,
+      errors: [],
+      payload: {
+        surfaceId: 'realm-agent-studio.avatar-package-candidate',
+        request: {
+          head: {
+            appId: 'nimi.realm-agent-studio',
+            modelId: 'auto',
+          },
+          spec: {
+            spec: {
+              oneofKind: 'imageGenerate',
+              imageGenerate: {
+                prompt: expect.stringContaining('Avatar package target: LIVE2D.'),
+                responseFormat: 'url',
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(result.payload?.request.spec?.spec.oneofKind).toBe('imageGenerate');
+    expect(collectKeys(result.payload).has('provider')).toBe(false);
+    expect(collectKeys(result.payload).has('localAgent')).toBe(false);
+  });
+
+  it('builds avatar package candidate evidence without claiming published Live2D or VRM assets', () => {
+    const result = buildReviewedAvatarPackageCandidatePayload({
+      resourceType: 'IMAGE',
+      bindingPoint: 'AGENT_AVATAR',
+      prompt: 'Song literati portrait identity.',
+      notes: '',
+      aspectRatio: '1:1',
+      packageTarget: 'VRM',
+      motionNotes: '',
+      interactionNotes: '',
+    }, agent);
+
+    expect(result.payload).toMatchObject({
+      candidate: true,
+      publicTruth: false,
+      source: 'realm-agent-studio.reviewed-avatar-package-candidate',
+      avatarPackage: {
+        target: 'VRM',
+        status: 'candidate-only',
+        generatedOutput: 'design-sheet-and-rigging-brief',
+        publishState: 'not-published',
+        requiredArtifacts: ['vrm model', 'humanoid rig metadata', 'expression preset map', 'spring bone settings'],
+      },
+      futureEvidencePath: {
+        resource: {
+          carrier: 'Resource',
+          type: 'IMAGE',
+          role: 'avatar-design-sheet',
+          status: 'candidate-only',
+        },
+        binding: {
+          family: 'Binding',
+          hostType: 'AGENT',
+          objectType: 'RESOURCE',
+          bindingPoint: 'AGENT_AVATAR',
+          status: 'candidate-only',
+        },
+        runtimePresentation: {
+          backendKind: 'vrm',
+          status: 'requires-reviewed-package-artifacts',
+        },
+      },
+    });
+    expect(collectKeys(result.payload).has('publicSuccess')).toBe(false);
+    expect(collectKeys(result.payload).has('bindingSuccess')).toBe(false);
+    expect(collectKeys(result.payload).has('resourceReady')).toBe(false);
+    expect(collectKeys(result.payload).has('provider')).toBe(false);
+    expect(collectKeys(result.payload).has('localAgent')).toBe(false);
   });
 
   it('fails closed when Runtime image generation prompt is missing', () => {

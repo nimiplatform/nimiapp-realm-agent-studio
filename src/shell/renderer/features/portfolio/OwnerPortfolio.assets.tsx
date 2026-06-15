@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, Checkbox, EmptyState, FieldShell, InlineAlert, SelectField, StatusBadge, Surface, TextareaField, TextField } from '@nimiplatform/kit/ui';
 import type { OwnerPortfolioAgentDetail } from './portfolio-data.js';
 import {
+  generateReviewedAvatarPackageCandidate,
   generateReviewedVisualImageCandidate,
   promoteReviewedCbdbCuratedProfileMedia,
   promoteReviewedCbdbCuratedVoice,
@@ -19,12 +20,16 @@ import {
   type DirectMediaResourceUploadResult,
 } from './portfolio-client.js';
 import {
+  AVATAR_PACKAGE_CANDIDATE_NOTICE,
+  AVATAR_PACKAGE_TARGETS,
   MEDIA_CANDIDATE_BINDING_POINTS,
   MEDIA_CANDIDATE_RESOURCE_TYPES,
   VISUAL_IMAGE_CANDIDATE_NOTICE,
   VOICE_DEMO_CANDIDATE_NOTICE,
+  buildReviewedAvatarPackageCandidatePayload,
   buildReviewedVisualImageCandidatePayload,
   buildReviewedVoiceDemoCandidatePayload,
+  type AvatarPackageTarget,
   type MediaCandidateBindingPoint,
   type VisualCandidateResourceType,
   type VisualMediaCandidateInput,
@@ -50,6 +55,22 @@ export function createVisualImageGenerationDraft(): VisualMediaCandidateInput & 
   return {
     ...createVisualMediaCandidateInput(),
     aspectRatio: '1:1',
+  };
+}
+
+export function createAvatarPackageCandidateDraft(): VisualMediaCandidateInput & {
+  aspectRatio: string;
+  packageTarget: AvatarPackageTarget;
+  motionNotes: string;
+  interactionNotes: string;
+} {
+  return {
+    ...createVisualMediaCandidateInput(),
+    bindingPoint: 'AGENT_AVATAR',
+    aspectRatio: '1:1',
+    packageTarget: 'LIVE2D',
+    motionNotes: '',
+    interactionNotes: '',
   };
 }
 
@@ -115,6 +136,9 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
   const [visualImageDraft, setVisualImageDraft] = useState(() => createVisualImageGenerationDraft());
   const [visualImageResult, setVisualImageResult] = useState<RuntimeVisualImageGenerationResult | null>(null);
   const [isGeneratingVisualImage, setIsGeneratingVisualImage] = useState(false);
+  const [avatarPackageDraft, setAvatarPackageDraft] = useState(() => createAvatarPackageCandidateDraft());
+  const [avatarPackageResult, setAvatarPackageResult] = useState<RuntimeVisualImageGenerationResult | null>(null);
+  const [isGeneratingAvatarPackage, setIsGeneratingAvatarPackage] = useState(false);
   const [identityUploadReviewed, setIdentityUploadReviewed] = useState(false);
   const [identityUploadFile, setIdentityUploadFile] = useState<File | null>(null);
   const [identityUploadResult, setIdentityUploadResult] = useState<DirectMediaResourceUploadResult | null>(null);
@@ -133,6 +157,7 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
   const [voiceResult, setVoiceResult] = useState<RuntimeVoiceDemoSynthesisResult | null>(null);
   const [isSynthesizingVoice, setIsSynthesizingVoice] = useState(false);
   const visualImagePayload = useMemo(() => buildReviewedVisualImageCandidatePayload(visualImageDraft, agent), [agent, visualImageDraft]);
+  const avatarPackagePayload = useMemo(() => buildReviewedAvatarPackageCandidatePayload(avatarPackageDraft, agent), [agent, avatarPackageDraft]);
   const voicePayload = useMemo(() => buildReviewedVoiceDemoCandidatePayload(voiceDraft, agent), [agent, voiceDraft]);
   const avatarUrlChanged = avatarUrlDraft.trim() !== (agent.avatarUrl || '');
   const profileCoverUrlChanged = profileCoverUrlDraft.trim() !== (agent.profileCoverUrl.value || '');
@@ -141,12 +166,16 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
   const visualResourceTypes = MEDIA_CANDIDATE_RESOURCE_TYPES.filter((resourceType): resourceType is VisualCandidateResourceType => resourceType === 'IMAGE');
   const visualBindingPoints = MEDIA_CANDIDATE_BINDING_POINTS.filter((bindingPoint) => bindingPoint !== 'AGENT_VOICE_SAMPLE');
   const visualPreviewUrl = visualImageResult?.ok ? visualImageResult.runtime.previewUrls[0] || '' : '';
+  const avatarPackagePreviewUrl = avatarPackageResult?.ok ? avatarPackageResult.runtime.previewUrls[0] || '' : '';
   const voicePreviewUrl = voiceResult?.ok ? voiceResult.runtime.previewUrls[0] || '' : '';
 
   useEffect(() => {
     setVisualImageDraft(createVisualImageGenerationDraft());
     setVisualImageResult(null);
     setIsGeneratingVisualImage(false);
+    setAvatarPackageDraft(createAvatarPackageCandidateDraft());
+    setAvatarPackageResult(null);
+    setIsGeneratingAvatarPackage(false);
     setIdentityUploadReviewed(false);
     setIdentityUploadFile(null);
     setIdentityUploadResult(null);
@@ -169,6 +198,11 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
   function updateVisualImageDraft(patch: Partial<typeof visualImageDraft>) {
     setVisualImageDraft((current) => ({ ...current, ...patch }));
     setVisualImageResult(null);
+  }
+
+  function updateAvatarPackageDraft(patch: Partial<typeof avatarPackageDraft>) {
+    setAvatarPackageDraft((current) => ({ ...current, ...patch }));
+    setAvatarPackageResult(null);
   }
 
   function updateAvatarUrlDraft(value: string) {
@@ -245,6 +279,33 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
       }
     } finally {
       setIsGeneratingVisualImage(false);
+    }
+  }
+
+  async function generateAvatarPackageCandidate() {
+    setIsGeneratingAvatarPackage(true);
+    setAvatarPackageResult(null);
+    try {
+      const result = await generateReviewedAvatarPackageCandidate(avatarPackageDraft, agent);
+      setAvatarPackageResult(result);
+      if (result.ok) {
+        const avatarPackage = result.draft.source === 'realm-agent-studio.reviewed-avatar-package-candidate'
+          ? result.draft.avatarPackage
+          : null;
+        setCreativeHistory(appendLocalCreativeAssetHistory(agent.id, {
+          kind: 'avatar-package-candidate',
+          label: 'Avatar package candidate',
+          source: result.source,
+          detail: [
+            avatarPackage ? avatarPackage.target : avatarPackageDraft.packageTarget,
+            result.runtime.previewUrls[0] || result.runtime.artifactUris[0] || result.runtime.artifactIds[0] || result.runtime.jobId || 'avatar package design sheet generated',
+          ].filter(Boolean).join(' / '),
+          artifactIds: result.runtime.artifactIds,
+          ...(result.runtime.traceId ? { traceId: result.runtime.traceId } : {}),
+        }));
+      }
+    } finally {
+      setIsGeneratingAvatarPackage(false);
     }
   }
 
@@ -493,6 +554,106 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                     request: visualImagePayload.payload.runtime.request,
                     result: visualImageResult,
                   }, null, 2) : visualImagePayload.errors.join('; ')}
+                </pre>
+              </TechnicalReviewDetails>
+            </Surface>
+            <Surface tone="card" padding="md">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-medium">Avatar package candidate</div>
+                  <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
+                    Generate a reviewed design sheet and rigging brief for a future Sprite2D, Live2D, or VRM package.
+                  </div>
+                </div>
+                <StatusBadge tone="warning">candidate only</StatusBadge>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-[150px_1fr]">
+                <FieldShell label="Target">
+                  <SelectField
+                    value={avatarPackageDraft.packageTarget}
+                    options={AVATAR_PACKAGE_TARGETS.map((target) => ({ value: target, label: target }))}
+                    onValueChange={(value) => updateAvatarPackageDraft({ packageTarget: value as AvatarPackageTarget })}
+                  />
+                </FieldShell>
+                <FieldShell label="Aspect ratio">
+                  <SelectField
+                    value={avatarPackageDraft.aspectRatio}
+                    options={[
+                      { value: '1:1', label: '1:1' },
+                      { value: '4:5', label: '4:5' },
+                      { value: '16:9', label: '16:9' },
+                    ]}
+                    onValueChange={(value) => updateAvatarPackageDraft({ aspectRatio: value })}
+                  />
+                </FieldShell>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <FieldShell label="Motion notes" message="Idle, speaking, listening, and expression posture.">
+                  <TextareaField
+                    value={avatarPackageDraft.motionNotes}
+                    placeholder="Idle and speaking posture for review"
+                    onChange={(event) => updateAvatarPackageDraft({ motionNotes: event.currentTarget.value })}
+                  />
+                </FieldShell>
+                <FieldShell label="Interaction notes" message="Allowed avatar reactions and presentation boundaries.">
+                  <TextareaField
+                    value={avatarPackageDraft.interactionNotes}
+                    placeholder="Interaction boundaries for future rigging"
+                    onChange={(event) => updateAvatarPackageDraft({ interactionNotes: event.currentTarget.value })}
+                  />
+                </FieldShell>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-3">
+                <Button
+                  disabled={!avatarPackagePayload.changed || isGeneratingAvatarPackage}
+                  loading={isGeneratingAvatarPackage}
+                  onClick={() => void generateAvatarPackageCandidate()}
+                >
+                  Generate avatar package candidate
+                </Button>
+              </div>
+              <InlineAlert tone={avatarPackagePayload.changed ? 'info' : 'warning'} className="mt-3">
+                {avatarPackagePayload.changed ? AVATAR_PACKAGE_CANDIDATE_NOTICE : avatarPackagePayload.errors.join('; ')}
+              </InlineAlert>
+              {avatarPackageResult ? (
+                <InlineAlert tone={avatarPackageResult.ok ? 'success' : 'danger'} className="mt-3">
+                  {avatarPackageResult.ok
+                    ? 'Avatar package candidate generated for local review. It is not a published Live2D/VRM asset.'
+                    : avatarPackageResult.message}
+                </InlineAlert>
+              ) : null}
+              {avatarPackageResult?.ok ? (
+                <div className="mt-3 grid gap-3">
+                  {avatarPackagePreviewUrl ? (
+                    <Surface tone="panel" padding="md">
+                      <div className="mb-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">Design sheet preview</div>
+                      <div className="overflow-hidden rounded-[var(--nimi-radius-panel)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-panel)]">
+                        <img src={avatarPackagePreviewUrl} alt="Generated avatar package design sheet" className="block h-auto max-h-80 w-full object-contain" />
+                      </div>
+                    </Surface>
+                  ) : null}
+                  <CandidateFactGrid
+                    facts={[{
+                      label: 'Package target',
+                      value: avatarPackageResult.draft.source === 'realm-agent-studio.reviewed-avatar-package-candidate'
+                        ? avatarPackageResult.draft.avatarPackage.target
+                        : avatarPackageDraft.packageTarget,
+                    }, {
+                      label: 'Generated output',
+                      value: 'Design sheet and rigging brief',
+                    }, {
+                      label: 'Public state',
+                      value: 'Candidate only',
+                    }]}
+                  />
+                </div>
+              ) : null}
+              <TechnicalReviewDetails title="Avatar package technical details">
+                <pre className="ras-json-preview m-0 min-h-32 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-panel)] p-3 text-xs">
+                  {avatarPackagePayload.payload ? JSON.stringify({
+                    candidate: avatarPackagePayload.payload,
+                    result: avatarPackageResult,
+                  }, null, 2) : avatarPackagePayload.errors.join('; ')}
                 </pre>
               </TechnicalReviewDetails>
             </Surface>

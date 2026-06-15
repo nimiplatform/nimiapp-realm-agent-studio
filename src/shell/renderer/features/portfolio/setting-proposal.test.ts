@@ -218,7 +218,7 @@ describe('owner settings proposal normalization', () => {
     expect(userPayload.cbdbEnrichmentLanes).toEqual([
       'self-introduction -> description/greeting/personalitySummary/publicRole/worldview',
       'accent/speech posture -> communication.contentStyle only',
-      'portrait/final look -> visual image candidate outside owner settings',
+      'portrait/final look -> visual image or avatar package candidate outside owner settings',
       'voice demo -> audio candidate outside owner settings',
     ]);
     expect(userText).not.toContain('avatarUrl');

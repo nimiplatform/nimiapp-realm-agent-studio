@@ -79,4 +79,29 @@ describe('local creative asset history', () => {
       resourceId: 'resource-2',
     }]);
   });
+
+  it('persists avatar package candidates as local-only history', () => {
+    const storage = createStorage();
+
+    const next = appendLocalCreativeAssetHistory('agent-1', {
+      id: 'avatar-package-1',
+      createdAt: '2026-05-22T00:00:00.000Z',
+      kind: 'avatar-package-candidate',
+      label: 'Avatar package candidate',
+      source: 'Runtime ScenarioService.executeScenario image.generate',
+      detail: 'LIVE2D / artifact-avatar-design-sheet',
+      artifactIds: ['artifact-avatar-design-sheet'],
+    }, storage);
+
+    expect(next[0]).toMatchObject({
+      id: 'avatar-package-1',
+      agentId: 'agent-1',
+      kind: 'avatar-package-candidate',
+      label: 'Avatar package candidate',
+      publicTruth: false,
+      detail: 'LIVE2D / artifact-avatar-design-sheet',
+      artifactIds: ['artifact-avatar-design-sheet'],
+    });
+    expect(loadLocalCreativeAssetHistory('agent-1', storage)).toEqual(next);
+  });
 });

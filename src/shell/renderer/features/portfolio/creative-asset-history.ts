@@ -1,5 +1,6 @@
 export type CreativeAssetHistoryKind =
   | 'runtime-image-candidate'
+  | 'avatar-package-candidate'
   | 'identity-resource-upload'
   | 'voice-demo-candidate';
 
@@ -28,6 +29,7 @@ function historyKey(agentId: string): string {
 
 function isHistoryKind(value: string): value is CreativeAssetHistoryKind {
   return value === 'runtime-image-candidate'
+    || value === 'avatar-package-candidate'
     || value === 'identity-resource-upload'
     || value === 'voice-demo-candidate';
 }

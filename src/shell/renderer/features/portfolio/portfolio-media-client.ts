@@ -17,10 +17,14 @@ import type { OwnerPortfolioAgentDetail } from './portfolio-data.js';
 import {
   VISUAL_IMAGE_GENERATION_SOURCE,
   VOICE_DEMO_SYNTHESIS_SOURCE,
+  buildReviewedAvatarPackageCandidatePayload,
+  buildReviewedAvatarPackageImageGenerationPayload,
   buildReviewedVisualImageCandidatePayload,
   buildReviewedVisualImageGenerationPayload,
   buildReviewedVoiceDemoCandidatePayload,
   buildReviewedVoiceSynthesisPayload,
+  type AvatarPackageCandidateInput,
+  type ReviewedAvatarPackageCandidatePayload,
   type ReviewedVisualImageCandidatePayload,
   type ReviewedVoiceDemoCandidatePayload,
   type VisualImageGenerationInput,
@@ -136,7 +140,7 @@ export type RuntimeVisualImageGenerationResult =
     source: typeof VISUAL_IMAGE_GENERATION_SOURCE;
     candidate: true;
     publicTruth: false;
-    draft: ReviewedVisualImageCandidatePayload;
+    draft: ReviewedVisualImageCandidatePayload | ReviewedAvatarPackageCandidatePayload;
     runtime: {
       jobId?: string;
       artifactIds: string[];
@@ -157,7 +161,7 @@ export type RuntimeVisualImageGenerationResult =
       | 'runtime-generate-failed'
       | 'runtime-output-missing';
     message: string;
-    draft: ReviewedVisualImageCandidatePayload | null;
+    draft: ReviewedVisualImageCandidatePayload | ReviewedAvatarPackageCandidatePayload | null;
   };
 
 export type RuntimeVoiceDemoSynthesisResult =
@@ -252,7 +256,7 @@ async function normalizeRuntimeVoiceDemoSynthesisOutput(
 async function normalizeRuntimeVisualImageGenerationOutput(
   runtime: Runtime,
   output: ExecuteScenarioResponse,
-  draft: ReviewedVisualImageCandidatePayload,
+  draft: ReviewedVisualImageCandidatePayload | ReviewedAvatarPackageCandidatePayload,
 ): Promise<RuntimeVisualImageGenerationResult> {
   const scenarioOutput = output.output?.output;
   const artifacts: readonly ScenarioArtifact[] = scenarioOutput?.oneofKind === 'imageGenerate'
@@ -709,6 +713,60 @@ export async function generateReviewedVisualImageCandidate(
       source: VISUAL_IMAGE_GENERATION_SOURCE,
       failure: routeUnbound ? 'runtime-route-unbound' : 'runtime-generate-failed',
       message: routeUnbound ? message : `Runtime imageGenerate scenario failed: ${message}`,
+      draft: draft.payload,
+    };
+  }
+}
+
+export async function generateReviewedAvatarPackageCandidate(
+  input: AvatarPackageCandidateInput,
+  agent: OwnerPortfolioAgentDetail,
+  runtime?: RuntimeImageClient | null,
+): Promise<RuntimeVisualImageGenerationResult> {
+  const draft = buildReviewedAvatarPackageCandidatePayload(input, agent);
+  const imagePayload = buildReviewedAvatarPackageImageGenerationPayload(input, agent);
+
+  if (!draft.payload || !imagePayload.payload) {
+    return {
+      ok: false,
+      source: VISUAL_IMAGE_GENERATION_SOURCE,
+      failure: 'runtime-payload-invalid',
+      message: imagePayload.errors.join('; ') || 'Runtime avatar package imageGenerate scenario payload invalid.',
+      draft: draft.payload,
+    };
+  }
+
+  const runtimeClient = runtime === undefined ? await createStudioRuntimeClient() : runtime;
+
+  if (!runtimeClient) {
+    return {
+      ok: false,
+      source: VISUAL_IMAGE_GENERATION_SOURCE,
+      failure: 'runtime-transport-unavailable',
+      message: 'Runtime avatar package imageGenerate scenario transport unavailable: Tauri IPC runtime transport is required.',
+      draft: draft.payload,
+    };
+  }
+
+  try {
+    const boundPayload = await bindStudioImageGeneratePayload(imagePayload.payload, runtimeClient);
+    const boundDraft = {
+      ...draft.payload,
+      runtime: {
+        ...draft.payload.runtime,
+        request: boundPayload,
+      },
+    };
+    const output = await executeStudioImageGenerate(boundPayload, runtimeClient);
+    return await normalizeRuntimeVisualImageGenerationOutput(runtimeClient, output, boundDraft);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'runtime transport call failed.';
+    const routeUnbound = isStudioAIRouteBindingFailure(error);
+    return {
+      ok: false,
+      source: VISUAL_IMAGE_GENERATION_SOURCE,
+      failure: routeUnbound ? 'runtime-route-unbound' : 'runtime-generate-failed',
+      message: routeUnbound ? message : `Runtime avatar package imageGenerate scenario failed: ${message}`,
       draft: draft.payload,
     };
   }

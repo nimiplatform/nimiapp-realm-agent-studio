@@ -49,6 +49,7 @@ export type StudioAISurfaceId =
   | 'realm-agent-studio.settings-proposal'
   | 'realm-agent-studio.post-copy'
   | 'realm-agent-studio.visual-image-candidate'
+  | 'realm-agent-studio.avatar-package-candidate'
   | 'realm-agent-studio.voice-demo-candidate'
   | 'realm-agent-studio.world-context-projection';
 
