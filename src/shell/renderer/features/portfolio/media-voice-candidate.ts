@@ -17,10 +17,8 @@ export const MEDIA_CANDIDATE_BINDING_POINTS = [
   'AGENT_VOICE_SAMPLE',
 ] as const;
 
-export const VISUAL_MEDIA_BLOCKED_REASON = 'visual media candidate blocked: image generation and owner-scoped Resource-to-Agent binding ingress are not admitted; READY Resources may be used for post attachments only';
-export const VOICE_DEMO_BLOCKED_REASON = 'voice demo candidate blocked: Runtime synthesis and Resource upload/finalize are not called in this local preview slice';
-export const VISUAL_IMAGE_CANDIDATE_NOTICE = 'visual image candidate uses Runtime ScenarioService.executeScenario image.generate only; public profile Resource-to-Agent binding requires a dedicated owner-scoped Realm ingress';
-export const VOICE_DEMO_CANDIDATE_NOTICE = 'voice demo candidate uses Runtime ScenarioService.executeScenario audio.synthesize only; public voice/sample binding requires a dedicated owner-scoped Realm ingress';
+export const VISUAL_IMAGE_CANDIDATE_NOTICE = 'Image candidates stay local for owner review until a reviewed profile publishing path is available.';
+export const VOICE_DEMO_CANDIDATE_NOTICE = 'Voice candidates stay local for owner review until a reviewed voice publishing path is available.';
 export const VISUAL_IMAGE_GENERATION_SOURCE = 'Runtime ScenarioService.executeScenario image.generate';
 export const VOICE_DEMO_SYNTHESIS_SOURCE = 'Runtime ScenarioService.executeScenario audio.synthesize';
 
@@ -37,13 +35,11 @@ export type VisualMediaCandidateInput = {
 };
 
 export type VisualImageGenerationInput = VisualMediaCandidateInput & {
-  model: string;
   aspectRatio: string;
 };
 
 export type VoiceDemoCandidateInput = {
   scriptText: string;
-  model: string;
 };
 
 export type NormalizedVisualMediaCandidateInput = {
@@ -57,7 +53,6 @@ export type NormalizedVoiceDemoCandidateInput = {
   resourceType: VoiceCandidateResourceType;
   bindingPoint: Extract<MediaCandidateBindingPoint, 'AGENT_VOICE_SAMPLE'>;
   scriptText: string;
-  model: string;
 };
 
 export type CandidateAgentContext = {
@@ -68,69 +63,6 @@ export type CandidateAgentContext = {
   bio?: string;
   greeting?: string;
   profileCoverUrl?: string;
-};
-
-export type BlockedVisualAssetCandidatePayload = {
-  candidate: true;
-  blocked: true;
-  publicTruth: false;
-  blockedReason: typeof VISUAL_MEDIA_BLOCKED_REASON;
-  source: 'realm-agent-studio.local-visual-media-candidate';
-  agentContext: CandidateAgentContext;
-  localDraft: {
-    prompt: string;
-    notes?: string;
-  };
-  futureEvidencePath: {
-    resource: {
-      carrier: 'Resource';
-      type: VisualCandidateResourceType;
-      status: 'candidate-only';
-    };
-    binding: {
-      family: 'Binding';
-      hostType: 'AGENT';
-      objectType: 'RESOURCE';
-      bindingPoint: Exclude<MediaCandidateBindingPoint, 'AGENT_VOICE_SAMPLE'>;
-      status: 'candidate-blocked';
-    };
-  };
-};
-
-export type BlockedVoiceDemoRequestPayload = {
-  candidate: true;
-  blocked: true;
-  publicTruth: false;
-  blockedReason: typeof VOICE_DEMO_BLOCKED_REASON;
-  source: 'realm-agent-studio.local-voice-demo-candidate';
-  agentContext: CandidateAgentContext;
-  runtimePreview: {
-    capabilityToken: 'audio.synthesize';
-    runtimeScenario: 'speechSynthesize';
-    requestCandidate: {
-      model: string;
-      text: string;
-      metadata: {
-        source: 'realm-agent-studio.local-voice-demo-candidate';
-        agentKey: string;
-      };
-    };
-    status: 'candidate-blocked';
-  };
-  futureEvidencePath: {
-    resource: {
-      carrier: 'Resource';
-      type: VoiceCandidateResourceType;
-      status: 'candidate-only';
-    };
-    binding: {
-      family: 'Binding';
-      hostType: 'AGENT';
-      objectType: 'RESOURCE';
-      bindingPoint: Extract<MediaCandidateBindingPoint, 'AGENT_VOICE_SAMPLE'>;
-      status: 'candidate-blocked';
-    };
-  };
 };
 
 export type ReviewedVoiceDemoCandidatePayload = {
@@ -188,20 +120,6 @@ export type ReviewedVisualImageCandidatePayload = {
     };
   };
 };
-
-export type MediaCandidateBuildResult<TPayload> =
-  | {
-    blocked: true;
-    changed: true;
-    errors: [];
-    payload: TPayload;
-  }
-  | {
-    blocked: true;
-    changed: false;
-    errors: string[];
-    payload: null;
-  };
 
 export type VisualImageCandidateBuildResult<TPayload> = VoiceDemoCandidateBuildResult<TPayload>;
 
@@ -306,7 +224,6 @@ export function normalizeVoiceDemoCandidateInput(input: VoiceDemoCandidateInput)
     resourceType: 'AUDIO',
     bindingPoint: 'AGENT_VOICE_SAMPLE',
     scriptText: normalizeLineText(input.scriptText),
-    model: normalizeSingleLine(input.model),
   };
 }
 
@@ -315,7 +232,6 @@ export function buildReviewedVisualImageGenerationPayload(
   agent: OwnerPortfolioAgentDetail,
 ): VisualImageCandidateBuildResult<StudioImageGeneratePayload> {
   const normalized = normalizeVisualMediaCandidateInput(input);
-  const model = normalizeSingleLine(input.model);
   const aspectRatio = normalizeSingleLine(input.aspectRatio) || '1:1';
   const callParams = resolveStudioImageCallParams('realm-agent-studio.visual-image-candidate', {
     aspectRatio,
@@ -323,10 +239,7 @@ export function buildReviewedVisualImageGenerationPayload(
   const errors: string[] = [];
 
   if (!normalized.prompt) {
-    errors.push('visual prompt missing for Runtime ScenarioService.executeScenario image.generate');
-  }
-  if (!model) {
-    errors.push('Runtime ScenarioService.executeScenario image.generate model config missing');
+    errors.push('visual prompt missing for image candidate generation');
   }
 
   if (errors.length > 0) {
@@ -337,7 +250,7 @@ export function buildReviewedVisualImageGenerationPayload(
     normalized.prompt,
     normalized.notes ? `Owner notes: ${normalized.notes}` : '',
     agent.displayName.value ? `Realm Agent display name: ${agent.displayName.value}` : '',
-    agent.bio.value ? `Public bio context: ${agent.bio.value}` : '',
+    agent.bio.value ? `Profile description context: ${agent.bio.value}` : '',
   ].filter(Boolean);
 
   return {
@@ -347,20 +260,19 @@ export function buildReviewedVisualImageGenerationPayload(
       surfaceId: 'realm-agent-studio.visual-image-candidate',
       params: {
         ...callParams,
-        model,
       },
       spec: {
         prompt: promptParts.join('\n'),
         negativePrompt: '',
         n: 1,
-        size: '',
+        size: callParams.size || '',
         aspectRatio,
         quality: '',
         style: '',
-        seed: '',
+        seed: callParams.seed || '',
         referenceImages: [],
         mask: '',
-        responseFormat: 'url',
+        responseFormat: callParams.responseFormat || 'url',
       },
     }),
   };
@@ -418,10 +330,7 @@ export function buildReviewedVoiceSynthesisPayload(
   const errors: string[] = [];
 
   if (!normalized.scriptText) {
-    errors.push('voice demo script missing for Runtime ScenarioService.executeScenario audio.synthesize');
-  }
-  if (!normalized.model) {
-    errors.push('Runtime ScenarioService.executeScenario audio.synthesize model config missing');
+    errors.push('voice demo script missing for voice candidate generation');
   }
 
   if (errors.length > 0) {
@@ -432,16 +341,15 @@ export function buildReviewedVoiceSynthesisPayload(
     surfaceId: 'realm-agent-studio.voice-demo-candidate',
     params: {
       ...callParams,
-      model: normalized.model,
     },
     spec: {
       text: normalizeSingleLine(normalized.scriptText),
-      language: '',
-      audioFormat: '',
+      language: callParams.language || '',
+      audioFormat: callParams.audioFormat || '',
       sampleRateHz: 0,
       speed: callParams.speed ?? 0,
-      pitch: 0,
-      volume: 0,
+      pitch: callParams.pitch ?? 0,
+      volume: callParams.volume ?? 0,
       emotion: '',
       timingMode: STUDIO_DEFAULT_SPEECH_TIMING_MODE,
     },
@@ -492,132 +400,4 @@ export function buildReviewedVoiceDemoCandidatePayload(
       },
     },
   };
-}
-
-export function buildBlockedVisualAssetCandidatePayload(
-  input: VisualMediaCandidateInput,
-  agent: OwnerPortfolioAgentDetail,
-): MediaCandidateBuildResult<BlockedVisualAssetCandidatePayload> {
-  const normalized = normalizeVisualMediaCandidateInput(input);
-  const errors: string[] = [];
-
-  if (!normalized.prompt) {
-    errors.push('visual prompt missing');
-  }
-  if (!isAllowedMediaCandidateResourceType(normalized.resourceType)) {
-    errors.push('resource type not admitted');
-  }
-  if (!isAllowedMediaCandidateBindingPoint(normalized.bindingPoint)) {
-    errors.push('binding point not admitted');
-  }
-
-  if (errors.length > 0) {
-    return { blocked: true, changed: false, errors, payload: null };
-  }
-
-  const payload: BlockedVisualAssetCandidatePayload = {
-    candidate: true,
-    blocked: true,
-    publicTruth: false,
-    blockedReason: VISUAL_MEDIA_BLOCKED_REASON,
-    source: 'realm-agent-studio.local-visual-media-candidate',
-    agentContext: createAgentContext(agent),
-    localDraft: {
-      prompt: normalized.prompt,
-      ...(normalized.notes ? { notes: normalized.notes } : {}),
-    },
-    futureEvidencePath: {
-      resource: {
-        carrier: 'Resource',
-        type: normalized.resourceType,
-        status: 'candidate-only',
-      },
-      binding: {
-        family: 'Binding',
-        hostType: 'AGENT',
-        objectType: 'RESOURCE',
-        bindingPoint: normalized.bindingPoint,
-        status: 'candidate-blocked',
-      },
-    },
-  };
-
-  const forbiddenKey = assertNoForbiddenMediaCandidateFields(payload);
-  if (forbiddenKey) {
-    return {
-      blocked: true,
-      changed: false,
-      errors: [`media candidate rejected: forbidden ${forbiddenKey} present`],
-      payload: null,
-    };
-  }
-
-  return { blocked: true, changed: true, errors: [], payload };
-}
-
-export function buildBlockedVoiceDemoRequestPayload(
-  input: VoiceDemoCandidateInput,
-  agent: OwnerPortfolioAgentDetail,
-): MediaCandidateBuildResult<BlockedVoiceDemoRequestPayload> {
-  const normalized = normalizeVoiceDemoCandidateInput(input);
-  const errors: string[] = [];
-
-  if (!normalized.scriptText) {
-    errors.push('voice demo script missing for Runtime ScenarioService.executeScenario audio.synthesize');
-  }
-  if (!normalized.model) {
-    errors.push('Runtime ScenarioService.executeScenario audio.synthesize model config missing');
-  }
-
-  if (errors.length > 0) {
-    return { blocked: true, changed: false, errors, payload: null };
-  }
-
-  const payload: BlockedVoiceDemoRequestPayload = {
-    candidate: true,
-    blocked: true,
-    publicTruth: false,
-    blockedReason: VOICE_DEMO_BLOCKED_REASON,
-    source: 'realm-agent-studio.local-voice-demo-candidate',
-    agentContext: createAgentContext(agent),
-    runtimePreview: {
-      capabilityToken: 'audio.synthesize',
-      runtimeScenario: 'speechSynthesize',
-      requestCandidate: {
-        model: normalized.model,
-        text: normalizeSingleLine(normalized.scriptText),
-        metadata: {
-          source: 'realm-agent-studio.local-voice-demo-candidate',
-          agentKey: agent.id,
-        },
-      },
-      status: 'candidate-blocked',
-    },
-    futureEvidencePath: {
-      resource: {
-        carrier: 'Resource',
-        type: normalized.resourceType,
-        status: 'candidate-only',
-      },
-      binding: {
-        family: 'Binding',
-        hostType: 'AGENT',
-        objectType: 'RESOURCE',
-        bindingPoint: normalized.bindingPoint,
-        status: 'candidate-blocked',
-      },
-    },
-  };
-
-  const forbiddenKey = assertNoForbiddenMediaCandidateFields(payload);
-  if (forbiddenKey) {
-    return {
-      blocked: true,
-      changed: false,
-      errors: [`media candidate rejected: forbidden ${forbiddenKey} present`],
-      payload: null,
-    };
-  }
-
-  return { blocked: true, changed: true, errors: [], payload };
 }

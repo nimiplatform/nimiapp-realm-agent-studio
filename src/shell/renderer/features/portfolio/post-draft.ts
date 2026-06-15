@@ -1,10 +1,12 @@
 import type { OwnerPortfolioAgentDetail } from './portfolio-data.js';
 import {
+  buildStudioTextRequestParameters,
   buildStudioRuntimeMetadata,
   resolveStudioTextCallParams,
   studioTextMessage,
   type StudioTextGeneratePayload,
 } from './studio-ai-runtime.js';
+import { parseStrictRuntimeJsonObject } from './strict-runtime-json.js';
 
 export const ATTACHMENT_TARGET_TYPES = ['RESOURCE', 'ASSET', 'BUNDLE'] as const;
 export const POST_COPY_ASSISTANCE_SOURCE = 'Runtime runtime.ai.text.generate';
@@ -60,7 +62,6 @@ export type LocalPostScheduleInput = {
 
 export type RuntimePostCopyDraftInput = {
   intent: string;
-  model: string;
   draft: LocalPostDraftInput;
 };
 
@@ -136,6 +137,7 @@ const FORBIDDEN_POST_PAYLOAD_KEYS = new Set([
 ]);
 
 const POST_COPY_PROPOSAL_FIELDS = ['caption', 'tagsText'] as const;
+const POST_COPY_PROPOSAL_OUTPUT_KEYS = [...POST_COPY_PROPOSAL_FIELDS, 'rationale'] as const;
 
 function normalizeTags(tagsText: string): string[] {
   const seen = new Set<string>();
@@ -173,15 +175,6 @@ function assertNoForbiddenPayloadKeys(value: unknown): string | null {
   }
 
   return null;
-}
-
-function extractFirstJsonObject(text: string): unknown {
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) {
-    throw new Error('Runtime post copy proposal did not return a JSON object.');
-  }
-  return JSON.parse(text.slice(start, end + 1));
 }
 
 function proposalValueToText(value: unknown): string | null {
@@ -367,20 +360,15 @@ export function buildRuntimePostCopyPrompt(input: {
   agent: OwnerPortfolioAgentDetail;
   draft: LocalPostDraftInput;
   intent: string;
-  model: string;
 }): { ok: true; errors: []; payload: StudioTextGeneratePayload } | { ok: false; errors: string[]; payload: null } {
   const callParams = resolveStudioTextCallParams('realm-agent-studio.post-copy', {
     maxTokens: 700,
     temperature: 0.5,
   });
-  const model = (input.model.trim() || callParams.model).trim();
   const intent = input.intent.trim();
   const normalizedDraft = normalizeLocalPostDraft(input.draft);
   const errors: string[] = [];
 
-  if (!model) {
-    errors.push('Runtime runtime.ai.text.generate model config missing');
-  }
   if (!intent) {
     errors.push('post copy intent missing');
   }
@@ -396,10 +384,9 @@ export function buildRuntimePostCopyPrompt(input: {
       surfaceId: 'realm-agent-studio.post-copy',
       params: {
         ...callParams,
-        model,
       },
       request: {
-        model: { modelId: model },
+        model: { modelId: callParams.model },
         messages: [
           studioTextMessage('system', [
             'You draft candidate Realm Agent post copy for owner review.',
@@ -420,14 +407,13 @@ export function buildRuntimePostCopyPrompt(input: {
             },
           })),
         ],
-        parameters: {
-          maxTokens: 700,
-          temperature: 0.5,
-          metadata: {
+        parameters: buildStudioTextRequestParameters(
+          callParams,
+          {
             ...buildStudioRuntimeMetadata('realm-agent-studio.post-copy'),
             domain: 'realm-agent-studio.post-copy',
           },
-        },
+        ),
       },
     },
   };
@@ -437,17 +423,17 @@ export function normalizeRuntimePostCopyProposal(
   outputText: string,
   baseDraft: LocalPostDraftInput,
 ): RuntimePostCopyProposal {
-  const parsed = extractFirstJsonObject(outputText);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Runtime post copy proposal JSON must be an object.');
-  }
+  const record = parseStrictRuntimeJsonObject({
+    rawText: outputText,
+    label: 'Runtime post copy proposal',
+    allowedKeys: POST_COPY_PROPOSAL_OUTPUT_KEYS,
+  });
 
-  const forbiddenKey = assertNoForbiddenPayloadKeys(parsed);
+  const forbiddenKey = assertNoForbiddenPayloadKeys(record);
   if (forbiddenKey) {
     throw new Error(`Runtime post copy proposal rejected forbidden ${forbiddenKey}.`);
   }
 
-  const record = parsed as Record<string, unknown>;
   const draftPatch: RuntimePostCopyProposal['draftPatch'] = {};
   const changedPostKeys: string[] = [];
 

@@ -47,10 +47,11 @@ export type SettingField = {
   key: SettingFieldKey;
   label: string;
   value: string;
-  status: 'available' | 'source-unavailable';
+  status: 'available' | 'available-empty' | 'source-unavailable';
   source: 'Realm MeService.getMyRealmAgent';
   readOnly: true;
-  unavailableLabel?: 'setting read unavailable';
+  unavailableLabel?: 'setting source unavailable';
+  emptyLabel?: 'not set';
 };
 
 export type OwnerPortfolioAgentDetail = {
@@ -99,15 +100,34 @@ function readString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+type StringFieldRead = { present: true; value: string } | { present: false };
+
+function readStringField(record: Record<string, unknown> | null, key: string): StringFieldRead {
+  if (!record || !Object.prototype.hasOwnProperty.call(record, key)) {
+    return { present: false };
+  }
+  const value = record[key];
+  return typeof value === 'string'
+    ? { present: true, value: value.trim() }
+    : { present: false };
+}
+
+function readFirstStringField(
+  record: Record<string, unknown> | null,
+  keys: readonly string[],
+): StringFieldRead {
+  for (const key of keys) {
+    const field = readStringField(record, key);
+    if (field.present) {
+      return field;
+    }
+  }
+  return { present: false };
+}
+
 function readWorldName(agentProfile: Record<string, unknown> | null): string | null {
   const world = readOptionalRecord(agentProfile?.world);
   return readString(world?.name) || readString(agentProfile?.worldName) || readString(agentProfile?.worldId);
-}
-
-function readWorldEvidence(agentProfile: Record<string, unknown> | null): string | null {
-  return readString(agentProfile?.activeWorldId)
-    || readString(agentProfile?.ownerWorldId)
-    || readString(agentProfile?.worldId);
 }
 
 function readUpdatedAt(agent: MyRealmAgentDto): string | null {
@@ -234,30 +254,55 @@ export function applyOwnerPortfolioView(
   });
 }
 
-function settingField(key: SettingFieldKey, label: string, value: string | null): SettingField {
+function settingField(key: SettingFieldKey, label: string, field: StringFieldRead): SettingField {
+  if (!field.present) {
+    return {
+      key,
+      label,
+      value: '',
+      status: 'source-unavailable',
+      source: 'Realm MeService.getMyRealmAgent',
+      readOnly: true,
+      unavailableLabel: 'setting source unavailable',
+    };
+  }
+
+  if (!field.value) {
+    return {
+      key,
+      label,
+      value: '',
+      status: 'available-empty',
+      source: 'Realm MeService.getMyRealmAgent',
+      readOnly: true,
+      emptyLabel: 'not set',
+    };
+  }
+
   return {
     key,
     label,
-    value: value || '',
-    status: value ? 'available' : 'source-unavailable',
+    value: field.value,
+    status: 'available',
     source: 'Realm MeService.getMyRealmAgent',
     readOnly: true,
-    unavailableLabel: value ? undefined : 'setting read unavailable',
   };
 }
 
 export function normalizeOwnerPortfolioAgentDetail(agent: MyRealmAgentDetailDto): OwnerPortfolioAgentDetail {
+  const agentRecord = agent as unknown as Record<string, unknown>;
   const profile = readOptionalRecord(agent.agentProfile);
+  const bio = readFirstStringField(agentRecord, ['bio', 'description']);
   return {
     id: agent.id,
-    displayName: settingField('displayName', 'Display name', readString(agent.displayName)),
-    handle: settingField('handle', 'Handle', readString(agent.handle)),
-    bio: settingField('bio', 'Bio', readString(agent.bio)),
-    greeting: settingField('greeting', 'Greeting', readString(profile?.greeting)),
-    profileCoverUrl: settingField('profileCoverUrl', 'Profile cover URL', readString(agent.profileCoverUrl)),
-    ownership: settingField('ownership', 'Ownership evidence', readString(profile?.ownershipType)),
-    world: settingField('world', 'World evidence', readWorldEvidence(profile)),
-    state: settingField('state', 'State evidence', readString(profile?.state)),
+    displayName: settingField('displayName', 'Display name', readStringField(agentRecord, 'displayName')),
+    handle: settingField('handle', 'Handle', readStringField(agentRecord, 'handle')),
+    bio: settingField('bio', 'Profile description', bio.present ? bio : readFirstStringField(profile, ['bio', 'description'])),
+    greeting: settingField('greeting', 'Greeting', readStringField(profile, 'greeting')),
+    profileCoverUrl: settingField('profileCoverUrl', 'Profile cover URL', readStringField(agentRecord, 'profileCoverUrl')),
+    ownership: settingField('ownership', 'Ownership evidence', readStringField(profile, 'ownershipType')),
+    world: settingField('world', 'World evidence', readFirstStringField(profile, ['activeWorldId', 'ownerWorldId', 'worldId'])),
+    state: settingField('state', 'State evidence', readStringField(profile, 'state')),
     avatarUrl: agent.avatarUrl || null,
     friendCount: normalizeFriendCount(agent),
     source: 'Realm MeService.getMyRealmAgent',

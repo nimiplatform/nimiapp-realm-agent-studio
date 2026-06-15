@@ -73,7 +73,6 @@ export const DNA_SECONDARY_MAX_RECOMMENDED = 3;
 export type CreateRealmAgentDraftInput = {
   handle: string;
   displayName: string;
-  publicBio: string;
   concept: string;
   description: string;
   ruleText: string;
@@ -91,7 +90,6 @@ export type CreateRealmAgentDraftInput = {
 export type NormalizedCreateRealmAgentDraft = {
   handle: string;
   displayName: string;
-  publicBio: string;
   concept: string;
   description: string;
   ruleText: string;
@@ -146,7 +144,6 @@ export type ReviewedCreateRealmAgentPayload = {
   publicFields: {
     handle: string;
     displayName: string;
-    publicBio?: string;
     concept?: string;
     description?: string;
     rulesText?: string;
@@ -226,8 +223,12 @@ function normalizeDnaSecondary(values: readonly DnaSecondaryTrait[] | readonly s
 function normalizeReferenceImageUrl(value: string): string {
   const trimmed = String(value || '').trim();
   if (!trimmed) return '';
-  if (/^(https?:|data:|blob:|runtime:\/\/)/i.test(trimmed)) return trimmed;
-  return '';
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : '';
+  } catch {
+    return '';
+  }
 }
 
 export function normalizeCreateRealmAgentDraft(input: CreateRealmAgentDraftInput): NormalizedCreateRealmAgentDraft {
@@ -238,7 +239,6 @@ export function normalizeCreateRealmAgentDraft(input: CreateRealmAgentDraftInput
   return {
     handle: normalizeHandle(input.handle),
     displayName: input.displayName.trim(),
-    publicBio: input.publicBio.trim(),
     concept: input.concept.trim(),
     description: input.description.trim(),
     ruleText: input.ruleText.trim(),
@@ -396,7 +396,6 @@ export function validateCreateRealmAgentReadiness(
       publicFields: {
         handle: draft.handle,
         displayName: draft.displayName,
-        ...(draft.publicBio ? { publicBio: draft.publicBio } : {}),
         ...(draft.concept ? { concept: draft.concept } : {}),
         ...(draft.description ? { description: draft.description } : {}),
         ...(draft.ruleText ? { rulesText: draft.ruleText } : {}),

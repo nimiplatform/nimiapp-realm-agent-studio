@@ -1,5 +1,12 @@
-import type { Realm } from '@nimiplatform/sdk/realm';
 import type { Runtime } from '@nimiplatform/sdk/runtime';
+import type { NimiAIConfigTargetRef } from '@nimiplatform/sdk/ai';
+import type { NimiJsonValue } from '@nimiplatform/sdk/contracts';
+import type { StudioRealmSurface } from '@renderer/data/realm-client.js';
+import {
+  createStudioAIScopeRef,
+  loadStudioAIConfig,
+  saveStudioAIConfig,
+} from '@renderer/features/ai-config/studio-ai-config-store.js';
 import { vi } from 'vitest';
 import type { MyRealmAgentDto, OwnerPortfolioAgentDetail, SettingField } from './portfolio-data.js';
 import {
@@ -16,6 +23,49 @@ export type MockRuntimeRoute = {
   readonly model: string;
   readonly connectorId?: string;
 };
+
+export function createStudioLocalRuntimeTargetRefForTest(model: string): NimiAIConfigTargetRef {
+  return {
+    kind: 'local-runtime',
+    profileId: model,
+  };
+}
+
+export function resetStudioAIConfigForTest(): void {
+  const scopeRef = createStudioAIScopeRef();
+  saveStudioAIConfig({
+    scopeRef,
+    capabilities: {
+      targetRefs: {},
+      selectedParams: {},
+    },
+    profileOrigin: null,
+  }, scopeRef);
+}
+
+export function configureStudioAIConfigTargetRefsForTest(input: {
+  readonly targetRefs: Partial<Record<MockRuntimeRoute['capability'], NimiAIConfigTargetRef | string>>;
+  readonly selectedParams?: Partial<Record<MockRuntimeRoute['capability'], NimiJsonValue>>;
+}): void {
+  const scopeRef = createStudioAIScopeRef();
+  const current = loadStudioAIConfig(scopeRef);
+  const targetRefs: Record<string, NimiAIConfigTargetRef> = {};
+  for (const [capability, targetRef] of Object.entries(input.targetRefs)) {
+    targetRefs[capability] = typeof targetRef === 'string'
+      ? createStudioLocalRuntimeTargetRefForTest(targetRef)
+      : targetRef;
+  }
+  saveStudioAIConfig({
+    ...current,
+    capabilities: {
+      targetRefs,
+      selectedParams: {
+        ...(input.selectedParams || {}),
+      },
+    },
+    profileOrigin: null,
+  }, scopeRef);
+}
 
 export const agent: MyRealmAgentDto = {
   id: 'agent-1',
@@ -55,9 +105,8 @@ export const world: RealmAgentCreationWorldDto = {
   },
 };
 
-export function mockRealm() {
+export function mockRealm(): StudioRealmSurface {
   return {
-    generated: {
       agentControllerCheckHandle: vi.fn(async (request: { readonly query?: { readonly handle?: string } }) => {
         const handle = String(request.query?.handle || '');
         return {
@@ -378,8 +427,7 @@ export function mockRealm() {
             agentRules: [],
           },
       })),
-    },
-  } as unknown as Realm;
+  } as unknown as StudioRealmSurface;
 }
 
 function localKindForCapability(capability: MockRuntimeRoute['capability']): string {
@@ -454,14 +502,24 @@ export function collectKeys(value: unknown, keys = new Set<string>()): Set<strin
 }
 
 export function detailField(key: SettingField['key'], label: string, value: string): SettingField {
+  if (!value) {
+    return {
+      key,
+      label,
+      value,
+      status: 'available-empty',
+      source: 'Realm MeService.getMyRealmAgent',
+      readOnly: true,
+      emptyLabel: 'not set',
+    };
+  }
   return {
     key,
     label,
     value,
-    status: value ? 'available' : 'source-unavailable',
+    status: 'available',
     source: 'Realm MeService.getMyRealmAgent',
     readOnly: true,
-    ...(value ? {} : { unavailableLabel: 'setting read unavailable' }),
   };
 }
 
@@ -470,7 +528,7 @@ export function ownerAgentDetail(): OwnerPortfolioAgentDetail {
     id: 'agent-1',
     displayName: detailField('displayName', 'Display name', 'Mira'),
     handle: detailField('handle', 'Handle', 'mira'),
-    bio: detailField('bio', 'Bio', ''),
+    bio: detailField('bio', 'Profile description', ''),
     greeting: detailField('greeting', 'Greeting', ''),
     profileCoverUrl: detailField('profileCoverUrl', 'Profile cover URL', ''),
     ownership: detailField('ownership', 'Ownership evidence', 'MASTER_OWNED'),
@@ -517,7 +575,6 @@ export const createPayload: ReviewedCreateRealmAgentPayload = {
   publicFields: {
     handle: 'mira.agent',
     displayName: 'Mira Agent',
-    publicBio: 'Local draft only',
     concept: 'Durable public Realm Agent',
     description: 'Owner-created public identity',
     rulesText: 'Stay visible.\nStay owner-reviewed.',

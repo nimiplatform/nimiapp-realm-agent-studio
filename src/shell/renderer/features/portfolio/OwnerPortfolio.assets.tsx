@@ -18,8 +18,6 @@ import {
   MEDIA_CANDIDATE_RESOURCE_TYPES,
   VISUAL_IMAGE_CANDIDATE_NOTICE,
   VOICE_DEMO_CANDIDATE_NOTICE,
-  VISUAL_MEDIA_BLOCKED_REASON,
-  buildBlockedVisualAssetCandidatePayload,
   buildReviewedVisualImageCandidatePayload,
   buildReviewedVoiceDemoCandidatePayload,
   type MediaCandidateBindingPoint,
@@ -32,7 +30,7 @@ import {
   loadLocalCreativeAssetHistory,
   type CreativeAssetHistoryRecord,
 } from './creative-asset-history.js';
-import { TechnicalReviewDetails } from './OwnerPortfolio.shared.js';
+import { CandidateFactGrid, TechnicalReviewDetails } from './OwnerPortfolio.shared.js';
 
 export function createVisualMediaCandidateInput(): VisualMediaCandidateInput {
   return {
@@ -43,12 +41,9 @@ export function createVisualMediaCandidateInput(): VisualMediaCandidateInput {
   };
 }
 
-export function createVisualImageGenerationDraft(): VisualMediaCandidateInput & { model: string; aspectRatio: string } {
+export function createVisualImageGenerationDraft(): VisualMediaCandidateInput & { aspectRatio: string } {
   return {
     ...createVisualMediaCandidateInput(),
-    // Unspecified model marker. The Runtime route resolver must bind this to a
-    // concrete image.generate route before dispatch.
-    model: 'auto',
     aspectRatio: '1:1',
   };
 }
@@ -56,14 +51,10 @@ export function createVisualImageGenerationDraft(): VisualMediaCandidateInput & 
 export function createVoiceDemoCandidateInput(agent: OwnerPortfolioAgentDetail): VoiceDemoCandidateInput {
   return {
     scriptText: agent.greeting.value || '',
-    // Unspecified model marker. The Runtime route resolver must bind this to a
-    // concrete audio.synthesize route before dispatch.
-    model: 'auto',
   };
 }
 
 export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: OwnerPortfolioAgentDetail; onAgentWrite: () => Promise<void> }) {
-  const [visualDraft, setVisualDraft] = useState<VisualMediaCandidateInput>(() => createVisualMediaCandidateInput());
   const [visualImageDraft, setVisualImageDraft] = useState(() => createVisualImageGenerationDraft());
   const [visualImageResult, setVisualImageResult] = useState<RuntimeVisualImageGenerationResult | null>(null);
   const [isGeneratingVisualImage, setIsGeneratingVisualImage] = useState(false);
@@ -79,15 +70,15 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
   const [voiceDraft, setVoiceDraft] = useState<VoiceDemoCandidateInput>(() => createVoiceDemoCandidateInput(agent));
   const [voiceResult, setVoiceResult] = useState<RuntimeVoiceDemoSynthesisResult | null>(null);
   const [isSynthesizingVoice, setIsSynthesizingVoice] = useState(false);
-  const visualPayload = useMemo(() => buildBlockedVisualAssetCandidatePayload(visualDraft, agent), [agent, visualDraft]);
   const visualImagePayload = useMemo(() => buildReviewedVisualImageCandidatePayload(visualImageDraft, agent), [agent, visualImageDraft]);
   const voicePayload = useMemo(() => buildReviewedVoiceDemoCandidatePayload(voiceDraft, agent), [agent, voiceDraft]);
   const avatarUrlChanged = avatarUrlDraft.trim() !== (agent.avatarUrl || '');
   const visualResourceTypes = MEDIA_CANDIDATE_RESOURCE_TYPES.filter((resourceType): resourceType is VisualCandidateResourceType => resourceType === 'IMAGE');
   const visualBindingPoints = MEDIA_CANDIDATE_BINDING_POINTS.filter((bindingPoint) => bindingPoint !== 'AGENT_VOICE_SAMPLE');
+  const visualPreviewUrl = visualImageResult?.ok ? visualImageResult.runtime.previewUrls[0] || '' : '';
+  const voicePreviewUrl = voiceResult?.ok ? voiceResult.runtime.previewUrls[0] || '' : '';
 
   useEffect(() => {
-    setVisualDraft(createVisualMediaCandidateInput());
     setVisualImageDraft(createVisualImageGenerationDraft());
     setVisualImageResult(null);
     setIsGeneratingVisualImage(false);
@@ -104,12 +95,6 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
     setVoiceResult(null);
     setIsSynthesizingVoice(false);
   }, [agent.id]);
-
-  function updateVisualDraft(patch: Partial<VisualMediaCandidateInput>) {
-    setVisualDraft((current) => ({ ...current, ...patch }));
-    setVisualImageDraft((current) => ({ ...current, ...patch }));
-    setVisualImageResult(null);
-  }
 
   function updateVisualImageDraft(patch: Partial<typeof visualImageDraft>) {
     setVisualImageDraft((current) => ({ ...current, ...patch }));
@@ -152,7 +137,7 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
           kind: 'runtime-image-candidate',
           label: 'Runtime image candidate',
           source: result.source,
-          detail: result.runtime.artifactUris[0] || result.runtime.artifactIds[0] || result.runtime.jobId || 'image artifact generated',
+          detail: result.runtime.previewUrls[0] || result.runtime.artifactUris[0] || result.runtime.artifactIds[0] || result.runtime.jobId || 'image artifact generated',
           artifactIds: result.runtime.artifactIds,
           ...(result.runtime.traceId ? { traceId: result.runtime.traceId } : {}),
         }));
@@ -211,7 +196,7 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
           kind: 'voice-demo-candidate',
           label: 'Voice demo candidate',
           source: result.source,
-          detail: result.runtime.artifactIds[0] || result.runtime.jobId || 'voice artifact generated',
+          detail: result.runtime.previewUrls[0] || result.runtime.artifactIds[0] || result.runtime.jobId || 'voice artifact generated',
           artifactIds: result.runtime.artifactIds,
           ...(result.runtime.traceId ? { traceId: result.runtime.traceId } : {}),
         }));
@@ -290,31 +275,31 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
             <div className="grid gap-3 md:grid-cols-[160px_1fr]">
               <FieldShell label="Asset type" message="Local preview category.">
                 <SelectField
-                  value={visualDraft.resourceType}
+                  value={visualImageDraft.resourceType}
                   options={visualResourceTypes.map((resourceType) => ({ value: resourceType, label: resourceType }))}
-                  onValueChange={(value) => updateVisualDraft({ resourceType: value as VisualCandidateResourceType })}
+                  onValueChange={(value) => updateVisualImageDraft({ resourceType: value as VisualCandidateResourceType })}
                 />
               </FieldShell>
               <FieldShell label="Profile slot" message="Where this candidate would be used after review.">
                 <SelectField
-                  value={visualDraft.bindingPoint}
+                  value={visualImageDraft.bindingPoint}
                   options={visualBindingPoints.map((bindingPoint) => ({ value: bindingPoint, label: bindingPoint }))}
-                  onValueChange={(value) => updateVisualDraft({ bindingPoint: value as MediaCandidateBindingPoint })}
+                  onValueChange={(value) => updateVisualImageDraft({ bindingPoint: value as MediaCandidateBindingPoint })}
                 />
               </FieldShell>
             </div>
             <FieldShell label="Visual prompt" message="Describe the avatar, portrait, or visual direction.">
               <TextareaField
-                value={visualDraft.prompt}
+                value={visualImageDraft.prompt}
                 placeholder="Describe the avatar, portrait, or candidate visual"
-                onChange={(event) => updateVisualDraft({ prompt: event.currentTarget.value })}
+                onChange={(event) => updateVisualImageDraft({ prompt: event.currentTarget.value })}
               />
             </FieldShell>
             <FieldShell label="Notes" message="Composition, references, and review notes.">
               <TextareaField
-                value={visualDraft.notes}
+                value={visualImageDraft.notes}
                 placeholder="Composition, reference, or review notes"
-                onChange={(event) => updateVisualDraft({ notes: event.currentTarget.value })}
+                onChange={(event) => updateVisualImageDraft({ notes: event.currentTarget.value })}
               />
             </FieldShell>
             <Surface tone="card" padding="md">
@@ -327,14 +312,7 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                 </div>
                 <StatusBadge tone="info">AI candidate</StatusBadge>
               </div>
-              <div className="mt-3 grid gap-3 md:grid-cols-[1fr_150px]">
-                <FieldShell label="Image model" message="Configured Runtime image model.">
-                  <TextField
-                    value={visualImageDraft.model}
-                    placeholder="Configured Runtime image model"
-                    onChange={(event) => updateVisualImageDraft({ model: event.currentTarget.value })}
-                  />
-                </FieldShell>
+              <div className="mt-3 grid gap-3 md:grid-cols-[150px_1fr]">
                 <FieldShell label="Aspect ratio">
                   <SelectField
                     value={visualImageDraft.aspectRatio}
@@ -346,6 +324,12 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                     onValueChange={(value) => updateVisualImageDraft({ aspectRatio: value })}
                   />
                 </FieldShell>
+                <CandidateFactGrid
+                  facts={[{
+                    label: 'Model source',
+                    value: 'AI model config / image.generate',
+                  }]}
+                />
               </div>
               <div className="mt-3 flex flex-wrap gap-3">
                 <Button
@@ -367,22 +351,34 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                 </InlineAlert>
               ) : null}
               {visualImageResult?.ok ? (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <Surface tone="panel" padding="md">
-                    <div className="text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">Generated artifacts</div>
-                    <div className="ras-break-anywhere mt-1 font-medium">
-                      {visualImageResult.runtime.artifactUris.concat(visualImageResult.runtime.artifactIds).join(', ') || 'artifact unavailable'}
-                    </div>
-                  </Surface>
-                  <Surface tone="panel" padding="md">
-                    <div className="text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">Public state</div>
-                    <div className="mt-1 font-medium">Candidate only</div>
-                  </Surface>
+                <div className="mt-3 grid gap-3">
+                  {visualPreviewUrl ? (
+                    <Surface tone="panel" padding="md">
+                      <div className="mb-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">Preview</div>
+                      <div className="overflow-hidden rounded-[var(--nimi-radius-panel)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-panel)]">
+                        <img src={visualPreviewUrl} alt="Generated visual identity candidate" className="block h-auto max-h-80 w-full object-contain" />
+                      </div>
+                    </Surface>
+                  ) : null}
+                  <CandidateFactGrid
+                    facts={[{
+                      label: 'Candidate output',
+                      value: visualImageResult.runtime.artifacts.length > 0
+                        ? `${visualImageResult.runtime.artifacts.length} generated artifact${visualImageResult.runtime.artifacts.length === 1 ? '' : 's'}`
+                        : 'Runtime output recorded',
+                    }, {
+                      label: 'Public state',
+                      value: 'Candidate only',
+                    }]}
+                  />
                 </div>
               ) : null}
-              <TechnicalReviewDetails title="Image generation request details">
+              <TechnicalReviewDetails title="Image generation technical details">
                 <pre className="ras-json-preview m-0 min-h-32 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-panel)] p-3 text-xs">
-                  {visualImagePayload.payload ? JSON.stringify(visualImagePayload.payload.runtime.request, null, 2) : visualImagePayload.errors.join('; ')}
+                  {visualImagePayload.payload ? JSON.stringify({
+                    request: visualImagePayload.payload.runtime.request,
+                    result: visualImageResult,
+                  }, null, 2) : visualImagePayload.errors.join('; ')}
                 </pre>
               </TechnicalReviewDetails>
             </Surface>
@@ -439,14 +435,6 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                 </TechnicalReviewDetails>
               ) : null}
             </Surface>
-            <InlineAlert tone="warning">
-              {visualPayload.changed ? VISUAL_MEDIA_BLOCKED_REASON : visualPayload.errors.join('; ')}
-            </InlineAlert>
-            <TechnicalReviewDetails title="Visual candidate technical details">
-              <pre className="ras-json-preview m-0 min-h-72 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-card)] p-3 text-xs">
-                {visualPayload.payload ? JSON.stringify(visualPayload.payload, null, 2) : visualPayload.errors.join('; ')}
-              </pre>
-            </TechnicalReviewDetails>
             <Surface tone="card" padding="md">
               <div className="flex min-w-0 flex-wrap items-center gap-3">
                 <div className="min-w-0 flex-1">
@@ -493,13 +481,12 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                 onChange={(event) => updateVoiceDraft({ scriptText: event.currentTarget.value })}
               />
             </FieldShell>
-            <FieldShell label="Voice model" message="Use the Runtime voice model configured for this environment.">
-              <TextField
-                value={voiceDraft.model}
-                placeholder="Configured Runtime TTS model"
-                onChange={(event) => updateVoiceDraft({ model: event.currentTarget.value })}
-              />
-            </FieldShell>
+            <CandidateFactGrid
+              facts={[{
+                label: 'Model source',
+                value: 'AI model config / audio.synthesize',
+              }]}
+            />
             <InlineAlert tone={voicePayload.changed ? 'info' : 'warning'}>
               {voicePayload.changed ? VOICE_DEMO_CANDIDATE_NOTICE : voicePayload.errors.join('; ')}
             </InlineAlert>
@@ -516,30 +503,35 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
               </InlineAlert>
             ) : null}
             {voiceResult?.ok ? (
-              <Surface tone="card" padding="md">
-                <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3">
+                {voicePreviewUrl ? (
                   <div>
-                    <div className="text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">Generation job</div>
-                    <div className="ras-break-anywhere mt-1 font-medium">{voiceResult.runtime.jobId || 'job id unavailable'}</div>
+                    <div className="mb-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">Playback</div>
+                    <audio src={voicePreviewUrl} controls className="w-full" />
                   </div>
-                  <div>
-                    <div className="text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">Generated files</div>
-                    <div className="ras-break-anywhere mt-1 font-medium">{voiceResult.runtime.artifactIds.join(', ') || 'artifact id unavailable'}</div>
-                  </div>
-                  <div>
-                    <div className="text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">Status</div>
-                    <div className="mt-1 font-medium">Generated locally</div>
-                  </div>
-                  <div>
-                    <div className="text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">Trace</div>
-                    <div className="ras-break-anywhere mt-1 font-medium">{voiceResult.runtime.traceId || 'trace unavailable'}</div>
-                  </div>
-                </div>
-              </Surface>
+                ) : null}
+                <CandidateFactGrid
+                  facts={[{
+                    label: 'Candidate output',
+                    value: voiceResult.runtime.artifacts.length > 0
+                      ? `${voiceResult.runtime.artifacts.length} generated artifact${voiceResult.runtime.artifacts.length === 1 ? '' : 's'}`
+                      : 'Runtime output recorded',
+                  }, {
+                    label: 'Review state',
+                    value: 'Local review',
+                  }, {
+                    label: 'Trace',
+                    value: voiceResult.runtime.traceId ? 'Captured in technical details' : 'Not provided by Runtime',
+                  }]}
+                />
+              </div>
             ) : null}
-            <TechnicalReviewDetails title="Voice request technical details">
+            <TechnicalReviewDetails title="Voice generation technical details">
               <pre className="ras-json-preview m-0 min-h-72 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-card)] p-3 text-xs">
-                {voicePayload.payload ? JSON.stringify(voicePayload.payload, null, 2) : voicePayload.errors.join('; ')}
+                {voicePayload.payload ? JSON.stringify({
+                  request: voicePayload.payload,
+                  result: voiceResult,
+                }, null, 2) : voicePayload.errors.join('; ')}
               </pre>
             </TechnicalReviewDetails>
           </div>

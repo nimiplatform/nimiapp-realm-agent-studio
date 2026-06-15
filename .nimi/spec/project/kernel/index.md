@@ -85,16 +85,19 @@ Active inputs absorbed into the kernel above (not parallel authority):
 
 ## Desktop Runtime Caller Authority
 
-Realm Agent Studio's standalone Tauri shell uses a fixed local first-party Runtime account caller:
+Realm Agent Studio's standalone Tauri shell uses a fixed developer-registered
+local Runtime account caller:
 
 | Field | Value |
 | --- | --- |
-| `appId` | `app.nimi.realm-agent-studio` |
-| `appInstanceId` | `app.nimi.realm-agent-studio.local-first-party` |
-| `deviceId` | `local-first-party-device` |
-| `mode` | `ACCOUNT_CALLER_MODE_LOCAL_FIRST_PARTY_APP` |
+| `appId` | `nimi.realm-agent-studio` |
+| `appInstanceId` | `nimi.realm-agent-studio.local-developer` |
+| `deviceId` | `realm-agent-studio-local-developer-device` |
+| `mode` | `ACCOUNT_CALLER_MODE_LOCAL_DEVELOPER_APP` |
 
-The Platform Nimi App registry row is `nimi.realm-agent-studio` under `.nimi/spec/platform/kernel/tables/nimi-app-registry.yaml` and is admitted as developer-only for this cut.
+Desktop Developer Mode owns the Runtime developer-registration gate. Studio may
+request developer registration in dev builds, but it must not call first-party
+account-control or raw-token surfaces.
 
 ## Hard Boundaries
 

@@ -7,8 +7,8 @@ const buildProfile = readFileSync(new URL('../.nimi/admission/build-profile.yaml
 if (!manifest.includes('manifest_role: submitted-input')) {
   throw new Error('submitted manifest role marker missing in nimi.app.yaml');
 }
-if (!manifest.includes('app_id: app.nimi.realm-agent-studio')) {
-  throw new Error('manifest app_id must be app.nimi.realm-agent-studio');
+if (!manifest.includes('app_id: nimi.realm-agent-studio')) {
+  throw new Error('manifest app_id must be nimi.realm-agent-studio');
 }
 if (!submission.includes('submission_role: developer-submitted-input')) {
   throw new Error('developer submission role marker missing in submission.yaml');

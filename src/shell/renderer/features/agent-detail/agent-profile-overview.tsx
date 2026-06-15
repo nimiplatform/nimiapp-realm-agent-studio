@@ -4,6 +4,7 @@ import {
   EvidenceCard,
   ReadOnlySettingField,
   detailFriendCountLabel,
+  settingFieldDisplayValue,
 } from '@renderer/features/portfolio/OwnerPortfolio.shared.js';
 
 export function AgentProfileOverview({
@@ -32,13 +33,13 @@ export function AgentProfileOverview({
               <div className="ras-profile-cover__heading">
                 <div className="ras-profile-cover__title-row">
                   <h2 className="ras-break-anywhere ras-profile-cover__title">
-                    {agent.displayName.value || 'Display name unavailable'}
+                    {settingFieldDisplayValue(agent.displayName, 'Display name not set')}
                   </h2>
                   <StatusBadge tone="info">Realm Agent</StatusBadge>
                   <StatusBadge tone="neutral">current profile</StatusBadge>
                 </div>
                 <p className="ras-break-anywhere ras-profile-cover__handle">
-                  {agent.handle.value ? `@${agent.handle.value}` : 'handle setting read unavailable'}
+                  {agent.handle.value ? `@${agent.handle.value}` : settingFieldDisplayValue(agent.handle, 'handle not set')}
                 </p>
               </div>
               <div className="ras-profile-fields">
@@ -56,15 +57,15 @@ export function AgentProfileOverview({
             <>
               <div className="ras-profile-cover__title-row">
                 <h2 className="ras-break-anywhere ras-profile-cover__title">
-                  {agent.displayName.value || 'Display name unavailable'}
+                  {settingFieldDisplayValue(agent.displayName, 'Display name not set')}
                 </h2>
                 <StatusBadge tone="info">Realm Agent</StatusBadge>
               </div>
               <p className="ras-break-anywhere ras-text-secondary" style={{ margin: '4px 0 0' }}>
-                {agent.handle.value ? `@${agent.handle.value}` : 'handle setting read unavailable'}
+                {agent.handle.value ? `@${agent.handle.value}` : settingFieldDisplayValue(agent.handle, 'handle not set')}
               </p>
               <p className="ras-break-anywhere ras-text-muted" style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.55 }}>
-                {agent.bio.value || agent.bio.unavailableLabel || 'Public bio unavailable'}
+                {settingFieldDisplayValue(agent.bio, 'Profile description not set')}
               </p>
             </>
           ) : (
@@ -92,7 +93,7 @@ export function AgentProfileOverview({
             <StatusBadge tone={agent.friendCount.status === 'available' ? 'success' : 'warning'}>
               {detailFriendCountLabel(agent)}
             </StatusBadge>
-            <StatusBadge tone="neutral">{agent.world.value || 'world unavailable'}</StatusBadge>
+            <StatusBadge tone="neutral">{settingFieldDisplayValue(agent.world, 'world not set')}</StatusBadge>
           </div>
         ) : null}
       </div>

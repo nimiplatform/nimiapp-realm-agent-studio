@@ -164,7 +164,7 @@ describe('owner portfolio detail normalization', () => {
     expect(detail.bio).toMatchObject({
       status: 'source-unavailable',
       value: '',
-      unavailableLabel: 'setting read unavailable',
+      unavailableLabel: 'setting source unavailable',
     });
     expect(detail.greeting.status).toBe('source-unavailable');
     expect(detail.profileCoverUrl.status).toBe('source-unavailable');
@@ -175,6 +175,34 @@ describe('owner portfolio detail normalization', () => {
       status: 'source-unavailable',
       label: 'friendCount source unavailable',
     });
+  });
+
+  it('does not treat present empty setting fields as source unavailable', () => {
+    const detail = normalizeOwnerPortfolioAgentDetail({
+      ...baseAgent,
+      displayName: '',
+      handle: '',
+      bio: '',
+      profileCoverUrl: '',
+      agentProfile: {
+        greeting: '',
+        worldId: '',
+      },
+    });
+
+    expect(detail.displayName.status).toBe('available-empty');
+    expect(detail.handle.status).toBe('available-empty');
+    expect(detail.bio).toMatchObject({
+      status: 'available-empty',
+      value: '',
+      emptyLabel: 'not set',
+    });
+    expect(detail.greeting.status).toBe('available-empty');
+    expect(detail.profileCoverUrl.status).toBe('available-empty');
+    expect(detail.world.status).toBe('available-empty');
+    expect(detail.ownership.status).toBe('source-unavailable');
+    expect(detail.state.status).toBe('source-unavailable');
+    expect(detail.bio).not.toHaveProperty('unavailableLabel');
   });
 
   it('does not treat world display names as write-safe world id evidence', () => {

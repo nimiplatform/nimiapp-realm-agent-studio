@@ -22,11 +22,6 @@ const AgentSettingsReviewPage = lazy(() =>
 const AgentAssetsPage = lazy(() =>
   import('../features/agent-assets/agent-assets-page.js').then((m) => ({ default: m.AgentAssetsPage })),
 );
-const AgentAssetsVoicePage = lazy(() =>
-  import('../features/agent-assets-voice/agent-assets-voice-page.js').then((m) => ({
-    default: m.AgentAssetsVoicePage,
-  })),
-);
 const AgentPostsPage = lazy(() =>
   import('../features/agent-posts/agent-posts-page.js').then((m) => ({ default: m.AgentPostsPage })),
 );
@@ -37,6 +32,9 @@ const AgentPostsSchedulePage = lazy(() =>
 );
 const AgentInsightsPage = lazy(() =>
   import('../features/agent-insights/agent-insights-page.js').then((m) => ({ default: m.AgentInsightsPage })),
+);
+const StudioAIConfigPage = lazy(() =>
+  import('../features/ai-config/studio-ai-config-page.js').then((m) => ({ default: m.StudioAIConfigPage })),
 );
 
 function PageFallback() {
@@ -57,10 +55,10 @@ export function AppRoutes() {
         <Route path="/portfolio/:agentId/settings" element={<AgentSettingsPage />} />
         <Route path="/portfolio/:agentId/settings/review" element={<AgentSettingsReviewPage />} />
         <Route path="/portfolio/:agentId/assets" element={<AgentAssetsPage />} />
-        <Route path="/portfolio/:agentId/assets/voice" element={<AgentAssetsVoicePage />} />
         <Route path="/portfolio/:agentId/posts" element={<AgentPostsPage />} />
         <Route path="/portfolio/:agentId/posts/schedule" element={<AgentPostsSchedulePage />} />
         <Route path="/portfolio/:agentId/insights" element={<AgentInsightsPage />} />
+        <Route path="/ai-config" element={<StudioAIConfigPage />} />
         <Route path="*" element={<Navigate to="/portfolio" replace />} />
       </Routes>
     </Suspense>

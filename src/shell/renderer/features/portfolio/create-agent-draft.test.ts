@@ -53,7 +53,6 @@ const creatorWorld: RealmAgentCreationWorldDto = {
 const baseInput: CreateRealmAgentDraftInput = {
   handle: ' @Mira.Agent ',
   displayName: ' Mira Agent ',
-  publicBio: ' Public operator ',
   concept: ' Durable public Realm Agent ',
   description: ' Owner-created public identity ',
   ruleText: 'Stay visible and owner-reviewed.',
@@ -69,7 +68,6 @@ describe('create Realm Agent draft normalization', () => {
     expect(normalizeCreateRealmAgentDraft(baseInput)).toEqual({
       handle: 'mira.agent',
       displayName: 'Mira Agent',
-      publicBio: 'Public operator',
       concept: 'Durable public Realm Agent',
       description: 'Owner-created public identity',
       ruleText: 'Stay visible and owner-reviewed.',
@@ -148,7 +146,6 @@ describe('create Realm Agent readiness', () => {
       publicFields: {
         handle: 'mira.agent',
         displayName: 'Mira Agent',
-        publicBio: 'Public operator',
         concept: 'Durable public Realm Agent',
         description: 'Owner-created public identity',
         rulesText: 'Stay visible and owner-reviewed.',
@@ -169,6 +166,32 @@ describe('create Realm Agent readiness', () => {
         },
       },
     });
+  });
+
+  it('passes only normalized reviewed reference image URLs into CreateAgentDto', () => {
+    const result = validateCreateRealmAgentReadiness({
+      ...baseInput,
+      referenceImageUrl: ' https://cdn.example.test/reference.png ',
+    }, {
+      handleAvailability: normalizeRealmAgentHandleAvailability('mira.agent', {
+        available: true,
+        normalized: 'mira.agent',
+      }),
+    });
+
+    expect(result.ready).toBe(true);
+    expect(result.payload?.body.referenceImageUrl).toBe('https://cdn.example.test/reference.png');
+
+    const rejected = validateCreateRealmAgentReadiness({
+      ...baseInput,
+      referenceImageUrl: 'file:///tmp/reference.png',
+    }, {
+      handleAvailability: normalizeRealmAgentHandleAvailability('mira.agent', {
+        available: true,
+        normalized: 'mira.agent',
+      }),
+    });
+    expect(rejected.payload?.body.referenceImageUrl).toBeUndefined();
   });
 
   it('fails readiness when required local draft fields are missing', () => {

@@ -1,11 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { OwnerPortfolioAgentDetail, SettingField } from './portfolio-data.js';
+import { resetStudioAIConfigForTest } from './portfolio-client.test-helpers.js';
 import {
-  VOICE_DEMO_BLOCKED_REASON,
-  VISUAL_MEDIA_BLOCKED_REASON,
   assertNoForbiddenMediaCandidateFields,
-  buildBlockedVisualAssetCandidatePayload,
-  buildBlockedVoiceDemoRequestPayload,
   buildReviewedVisualImageCandidatePayload,
   buildReviewedVisualImageGenerationPayload,
   buildReviewedVoiceDemoCandidatePayload,
@@ -14,20 +11,19 @@ import {
   isAllowedMediaCandidateResourceType,
   normalizeVisualMediaCandidateInput,
   normalizeVoiceDemoCandidateInput,
-  type BlockedVisualAssetCandidatePayload,
-  type BlockedVoiceDemoRequestPayload,
-  type ReviewedVoiceDemoCandidatePayload,
 } from './media-voice-candidate.js';
 
 function settingField(key: SettingField['key'], label: string, value: string): SettingField {
+  const hasValue = value.length > 0;
+
   return {
     key,
     label,
     value,
-    status: value ? 'available' : 'source-unavailable',
+    status: hasValue ? 'available' : 'available-empty',
     source: 'Realm MeService.getMyRealmAgent',
     readOnly: true,
-    unavailableLabel: value ? undefined : 'setting read unavailable',
+    emptyLabel: hasValue ? undefined : 'not set',
   };
 }
 
@@ -35,7 +31,7 @@ const agent: OwnerPortfolioAgentDetail = {
   id: 'agent-1',
   displayName: settingField('displayName', 'Display name', 'Mira'),
   handle: settingField('handle', 'Handle', 'mira'),
-  bio: settingField('bio', 'Bio', 'Public strategist bio'),
+  bio: settingField('bio', 'Profile description', 'Public strategist bio'),
   greeting: settingField('greeting', 'Greeting', 'Welcome in.'),
   profileCoverUrl: settingField('profileCoverUrl', 'Profile cover URL', 'https://cdn.example.test/cover.png'),
   ownership: settingField('ownership', 'Ownership evidence', 'MASTER_OWNED'),
@@ -56,6 +52,10 @@ function collectKeys(value: unknown, keys = new Set<string>()) {
   }
   return keys;
 }
+
+beforeEach(() => {
+  resetStudioAIConfigForTest();
+});
 
 describe('media and voice candidate normalization', () => {
   it('validates admitted resource types and binding points', () => {
@@ -85,96 +85,21 @@ describe('media and voice candidate normalization', () => {
   it('normalizes voice input to Resource(AUDIO) and AGENT_VOICE_SAMPLE', () => {
     expect(normalizeVoiceDemoCandidateInput({
       scriptText: '  Hello\r\nfrom the public demo.  ',
-      model: '  configured-tts-model  ',
     })).toEqual({
       resourceType: 'AUDIO',
       bindingPoint: 'AGENT_VOICE_SAMPLE',
       scriptText: 'Hello\nfrom the public demo.',
-      model: 'configured-tts-model',
     });
   });
 });
 
-describe('blocked visual asset candidate payload', () => {
-  it('builds a blocked Resource and Binding evidence preview without success fields', () => {
-    const result = buildBlockedVisualAssetCandidatePayload({
-      resourceType: 'IMAGE',
-      bindingPoint: 'AGENT_PORTRAIT',
-      prompt: 'Reference turntable with calm expression.',
-      notes: 'Use only public profile context.',
-    }, agent);
-
-    expect(result.changed).toBe(true);
-    expect(result.payload).toMatchObject({
-      candidate: true,
-      blocked: true,
-      publicTruth: false,
-      blockedReason: VISUAL_MEDIA_BLOCKED_REASON,
-      source: 'realm-agent-studio.local-visual-media-candidate',
-      agentContext: {
-        source: 'Realm MeService.getMyRealmAgent',
-        agentKey: 'agent-1',
-        handle: 'mira',
-        displayName: 'Mira',
-        bio: 'Public strategist bio',
-        greeting: 'Welcome in.',
-        profileCoverUrl: 'https://cdn.example.test/cover.png',
-      },
-      localDraft: {
-        prompt: 'Reference turntable with calm expression.',
-        notes: 'Use only public profile context.',
-      },
-      futureEvidencePath: {
-        resource: {
-          carrier: 'Resource',
-          type: 'IMAGE',
-          status: 'candidate-only',
-        },
-        binding: {
-          family: 'Binding',
-          hostType: 'AGENT',
-          objectType: 'RESOURCE',
-          bindingPoint: 'AGENT_PORTRAIT',
-          status: 'candidate-blocked',
-        },
-      },
-    } satisfies BlockedVisualAssetCandidatePayload);
-
-    const keys = collectKeys(result.payload);
-    expect(keys.has('provider')).toBe(false);
-    expect(keys.has('model')).toBe(false);
-    expect(keys.has('localAgent')).toBe(false);
-    expect(keys.has('worldId')).toBe(false);
-    expect(keys.has('publicSuccess')).toBe(false);
-    expect(keys.has('bindingSuccess')).toBe(false);
-    expect(keys.has('resourceReady')).toBe(false);
-  });
-
-  it('fails closed when visual prompt is empty', () => {
-    const result = buildBlockedVisualAssetCandidatePayload({
-      resourceType: 'IMAGE',
-      bindingPoint: 'AGENT_AVATAR',
-      prompt: ' ',
-      notes: '',
-    }, agent);
-
-    expect(result).toEqual({
-      blocked: true,
-      changed: false,
-      errors: ['visual prompt missing'],
-      payload: null,
-    });
-  });
-});
-
-describe('blocked voice demo request payload', () => {
+describe('reviewed media and voice candidate payloads', () => {
   it('builds an allowlisted Runtime image generation candidate', () => {
     const result = buildReviewedVisualImageGenerationPayload({
       resourceType: 'IMAGE',
       bindingPoint: 'AGENT_CANDIDATE',
       prompt: '  warm public portrait  ',
       notes: 'blue accent',
-      model: ' configured-image-model ',
       aspectRatio: '4:5',
     }, agent);
 
@@ -184,19 +109,19 @@ describe('blocked voice demo request payload', () => {
       payload: {
         surfaceId: 'realm-agent-studio.visual-image-candidate',
         params: {
-          model: 'configured-image-model',
+          model: 'auto',
           aspectRatio: '4:5',
         },
         request: {
           head: {
-            appId: 'app.nimi.realm-agent-studio',
-            modelId: 'configured-image-model',
+            appId: 'nimi.realm-agent-studio',
+            modelId: 'auto',
           },
           spec: {
             spec: {
               oneofKind: 'imageGenerate',
               imageGenerate: {
-                prompt: 'warm public portrait\nOwner notes: blue accent\nRealm Agent display name: Mira\nPublic bio context: Public strategist bio',
+                prompt: 'warm public portrait\nOwner notes: blue accent\nRealm Agent display name: Mira\nProfile description context: Public strategist bio',
                 n: 1,
                 aspectRatio: '4:5',
                 responseFormat: 'url',
@@ -217,7 +142,6 @@ describe('blocked voice demo request payload', () => {
       bindingPoint: 'AGENT_PORTRAIT',
       prompt: 'Reference portrait.',
       notes: '',
-      model: 'configured-image-model',
       aspectRatio: '1:1',
     }, agent);
 
@@ -247,82 +171,18 @@ describe('blocked voice demo request payload', () => {
     });
   });
 
-  it('fails closed when Runtime image generation model config is missing', () => {
+  it('fails closed when Runtime image generation prompt is missing', () => {
     const result = buildReviewedVisualImageGenerationPayload({
       resourceType: 'IMAGE',
       bindingPoint: 'AGENT_CANDIDATE',
-      prompt: 'portrait',
+      prompt: ' ',
       notes: '',
-      model: ' ',
       aspectRatio: '1:1',
     }, agent);
 
     expect(result).toEqual({
       changed: false,
-      errors: ['Runtime ScenarioService.executeScenario image.generate model config missing'],
-      payload: null,
-    });
-  });
-
-  it('builds a blocked Runtime audio.synthesize preview and Resource(AUDIO) path', () => {
-    const result = buildBlockedVoiceDemoRequestPayload({
-      scriptText: '  Welcome in.\nThis is a local sample candidate.  ',
-      model: 'runtime-tts-model',
-    }, agent);
-
-    expect(result.changed).toBe(true);
-    expect(result.payload).toMatchObject({
-      candidate: true,
-      blocked: true,
-      publicTruth: false,
-      blockedReason: VOICE_DEMO_BLOCKED_REASON,
-      source: 'realm-agent-studio.local-voice-demo-candidate',
-      agentContext: {
-        source: 'Realm MeService.getMyRealmAgent',
-        agentKey: 'agent-1',
-        handle: 'mira',
-        displayName: 'Mira',
-        bio: 'Public strategist bio',
-        greeting: 'Welcome in.',
-        profileCoverUrl: 'https://cdn.example.test/cover.png',
-      },
-      runtimePreview: {
-        capabilityToken: 'audio.synthesize',
-        runtimeScenario: 'speechSynthesize',
-        requestCandidate: {
-          model: 'runtime-tts-model',
-          text: 'Welcome in.\nThis is a local sample candidate.',
-          metadata: {
-            source: 'realm-agent-studio.local-voice-demo-candidate',
-            agentKey: 'agent-1',
-          },
-        },
-        status: 'candidate-blocked',
-      },
-      futureEvidencePath: {
-        resource: {
-          carrier: 'Resource',
-          type: 'AUDIO',
-          status: 'candidate-only',
-        },
-        binding: {
-          family: 'Binding',
-          hostType: 'AGENT',
-          objectType: 'RESOURCE',
-          bindingPoint: 'AGENT_VOICE_SAMPLE',
-          status: 'candidate-blocked',
-        },
-      },
-    } satisfies BlockedVoiceDemoRequestPayload);
-  });
-
-  it('fails closed when voice script is empty', () => {
-    const result = buildBlockedVoiceDemoRequestPayload({ scriptText: ' ', model: 'runtime-tts-model' }, agent);
-
-    expect(result).toEqual({
-      blocked: true,
-      changed: false,
-      errors: ['voice demo script missing for Runtime ScenarioService.executeScenario audio.synthesize'],
+      errors: ['visual prompt missing for image candidate generation'],
       payload: null,
     });
   });
@@ -330,7 +190,6 @@ describe('blocked voice demo request payload', () => {
   it('builds an allowlisted speechSynthesize scenario request', () => {
     const result = buildReviewedVoiceSynthesisPayload({
       scriptText: '  Welcome in.  ',
-      model: ' runtime-tts-model ',
     });
 
     expect(result).toMatchObject({
@@ -339,12 +198,12 @@ describe('blocked voice demo request payload', () => {
       payload: {
         surfaceId: 'realm-agent-studio.voice-demo-candidate',
         params: {
-          model: 'runtime-tts-model',
+          model: 'auto',
         },
         request: {
           head: {
-            appId: 'app.nimi.realm-agent-studio',
-            modelId: 'runtime-tts-model',
+            appId: 'nimi.realm-agent-studio',
+            modelId: 'auto',
           },
           spec: {
             spec: {
@@ -361,28 +220,14 @@ describe('blocked voice demo request payload', () => {
     expect(collectKeys(result.payload).has('localAgent')).toBe(false);
   });
 
-  it('fails closed when Runtime speechSynthesize model config is missing', () => {
-    const result = buildReviewedVoiceSynthesisPayload({
-      scriptText: 'Welcome in.',
-      model: ' ',
-    });
-
-    expect(result).toEqual({
-      changed: false,
-      errors: ['Runtime ScenarioService.executeScenario audio.synthesize model config missing'],
-      payload: null,
-    });
-  });
-
   it('fails closed when Runtime speechSynthesize script text is missing', () => {
     const result = buildReviewedVoiceSynthesisPayload({
       scriptText: ' ',
-      model: 'runtime-tts-model',
     });
 
     expect(result).toEqual({
       changed: false,
-      errors: ['voice demo script missing for Runtime ScenarioService.executeScenario audio.synthesize'],
+      errors: ['voice demo script missing for voice candidate generation'],
       payload: null,
     });
   });
@@ -390,7 +235,6 @@ describe('blocked voice demo request payload', () => {
   it('builds a candidate-only Runtime voice payload without public Resource or Binding success', () => {
     const result = buildReviewedVoiceDemoCandidatePayload({
       scriptText: 'Welcome in.',
-      model: 'runtime-tts-model',
     }, agent);
 
     expect(result.changed).toBe(true);
@@ -414,12 +258,12 @@ describe('blocked voice demo request payload', () => {
         request: {
           surfaceId: 'realm-agent-studio.voice-demo-candidate',
           params: {
-            model: 'runtime-tts-model',
+            model: 'auto',
           },
           request: {
             head: {
-              appId: 'app.nimi.realm-agent-studio',
-              modelId: 'runtime-tts-model',
+              appId: 'nimi.realm-agent-studio',
+              modelId: 'auto',
             },
             spec: {
               spec: {

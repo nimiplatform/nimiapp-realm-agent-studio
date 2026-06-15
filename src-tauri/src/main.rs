@@ -1,31 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use serde::Serialize;
-use tauri::Manager;
-
-use nimi_shell_tauri::auth_session_commands;
-use nimi_shell_tauri::desktop_paths;
 use nimi_shell_tauri::oauth_commands;
 use nimi_shell_tauri::runtime_bridge;
-use nimi_shell_tauri::runtime_defaults as defaults;
 use nimi_shell_tauri::session_logging;
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct RealmAgentStudioStorageDirs {
-    nimi_dir: String,
-    nimi_data_dir: String,
-}
-
-#[tauri::command]
-fn realm_agent_studio_storage_dirs() -> Result<RealmAgentStudioStorageDirs, String> {
-    let nimi_dir = desktop_paths::resolve_nimi_dir()?;
-    let nimi_data_dir = desktop_paths::resolve_nimi_data_dir()?;
-    Ok(RealmAgentStudioStorageDirs {
-        nimi_dir: nimi_dir.display().to_string(),
-        nimi_data_dir: nimi_data_dir.display().to_string(),
-    })
-}
 
 #[tauri::command]
 fn realm_agent_studio_start_window_drag(window: tauri::WebviewWindow) -> Result<(), String> {
@@ -82,27 +59,9 @@ fn main() {
     session_logging::log_boot_marker("realm-agent-studio main() entered");
 
     tauri::Builder::default()
-        .setup(|app| {
-            let nimi_data_dir = desktop_paths::resolve_nimi_data_dir()?;
-            app.state::<tauri::Scopes>()
-                .allow_directory(&nimi_data_dir, true)
-                .map_err(|error| {
-                    format!(
-                        "failed to allow nimi_data_dir in asset scope ({}): {error}",
-                        nimi_data_dir.display()
-                    )
-                })?;
-            Ok(())
-        })
         .invoke_handler(tauri::generate_handler![
-            realm_agent_studio_storage_dirs,
             realm_agent_studio_start_window_drag,
-            defaults::runtime_defaults,
-            auth_session_commands::auth_session_load,
-            auth_session_commands::auth_session_save,
-            auth_session_commands::auth_session_clear,
             oauth_commands::open_external_url,
-            oauth_commands::oauth_token_exchange,
             oauth_commands::oauth_listen_for_code,
             runtime_bridge::runtime_bridge_unary,
             runtime_bridge::runtime_bridge_stream_open,

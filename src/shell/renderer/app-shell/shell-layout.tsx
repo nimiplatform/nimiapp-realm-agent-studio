@@ -1,20 +1,37 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type MouseEvent as ReactMouseEvent,
-  type ReactNode,
-} from 'react';
+import { useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutGrid, Plus, LogOut, User } from 'lucide-react';
-import { Avatar, Tooltip } from '@nimiplatform/kit/ui';
+import { ChevronDown, LayoutGrid, Plus, LogOut, User, SlidersHorizontal } from 'lucide-react';
+import {
+  AmbientBackground,
+  Avatar,
+  Button,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  Tooltip,
+} from '@nimiplatform/kit/ui';
 import { useAppStore } from './app-store.js';
 import { startStudioWindowDrag } from '../bridge/window-drag.js';
 import { logoutStudioRuntimeAccount } from '../features/auth/studio-auth-adapter.js';
+import { clearStudioNimiClient } from './studio-platform.js';
+import { studioQueryClient } from '../infra/query-client.js';
+
+const MACOS_TRAFFIC_LIGHT_SAFE_ZONE_PX = 84;
+const TITLEBAR_INTERACTIVE_SELECTOR = [
+  '[data-titlebar-interactive="true"]',
+  'a',
+  'button',
+  'input',
+  'select',
+  'textarea',
+  '[role="button"]',
+  '[tabindex]',
+].join(',');
 
 const navItems = [
   { to: '/portfolio', label: 'Portfolio', Icon: LayoutGrid, end: true },
   { to: '/portfolio/create', label: 'Create', Icon: Plus, end: true },
+  { to: '/ai-config', label: 'AI models', Icon: SlidersHorizontal, end: true },
 ] as const;
 
 function SidebarItem({
@@ -33,6 +50,7 @@ function SidebarItem({
       <NavLink
         to={to}
         end={end}
+        data-titlebar-interactive="true"
         aria-label={label}
         className={({ isActive }) =>
           isActive ? 'ras-sidebar__item ras-sidebar__item--active' : 'ras-sidebar__item'
@@ -49,40 +67,25 @@ function AccountMenu() {
   const clearAuth = useAppStore((s) => s.clearAuthSession);
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  const openMenu = () => {
-    setMounted(true);
-    requestAnimationFrame(() => setOpen(true));
-  };
-  const closeMenu = () => setOpen(false);
-
-  useEffect(() => {
-    if (!open) return;
-    const onMouseDown = (e: globalThis.MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) closeMenu();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeMenu();
-    };
-    document.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onMouseDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  const [logoutPending, setLogoutPending] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
   const handleLogout = async () => {
-    closeMenu();
+    setLogoutError(null);
+    setLogoutPending(true);
     try {
       await logoutStudioRuntimeAccount();
-    } catch {
-      // best-effort
+      studioQueryClient.clear();
+      clearStudioNimiClient();
+      clearAuth();
+      setOpen(false);
+      navigate('/portfolio');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setLogoutError(message || 'Runtime logout failed.');
+    } finally {
+      setLogoutPending(false);
     }
-    clearAuth();
-    navigate('/portfolio');
   };
 
   const displayName = authUser?.displayName || 'Owner';
@@ -90,29 +93,39 @@ function AccountMenu() {
   const initial = displayName.charAt(0).toUpperCase() || 'O';
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <button
-        type="button"
-        onClick={() => (open ? closeMenu() : openMenu())}
-        aria-expanded={open}
-        aria-label="Open account menu"
-        className="ras-avatar-trigger"
-      >
-        <Avatar
-          src={avatarUrl}
-          alt={displayName}
-          size="sm"
-          shape="circle"
-          fallback={<span style={{ fontSize: 14, fontWeight: 600 }}>{initial}</span>}
-        />
-      </button>
-      {mounted ? (
-        <div
-          className={open ? 'ras-avatar-menu' : 'ras-avatar-menu ras-avatar-menu--closed'}
-          onTransitionEnd={() => {
-            if (!open) setMounted(false);
-          }}
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) setLogoutError(null);
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          data-titlebar-interactive="true"
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          aria-label="Open account menu"
+          className="ras-avatar-trigger"
         >
+          <Avatar
+            src={avatarUrl}
+            alt={displayName}
+            size="sm"
+            shape="circle"
+            fallback={<span style={{ fontSize: 14, fontWeight: 600 }}>{initial}</span>}
+          />
+          <ChevronDown
+            className="ras-avatar-trigger__chevron"
+            size={14}
+            strokeWidth={1.9}
+            aria-hidden="true"
+          />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" sideOffset={10} className="ras-avatar-popover">
+        <div role="menu" aria-label="Account menu">
           <div className="ras-avatar-menu__header">
             <Avatar
               src={avatarUrl}
@@ -126,44 +139,59 @@ function AccountMenu() {
               <p className="ras-avatar-menu__email">{authUser?.email || 'Runtime account'}</p>
             </div>
           </div>
-          <hr className="ras-avatar-menu__divider" />
-          <button
-            type="button"
-            className="ras-avatar-menu__item"
-            onClick={() => {
-              closeMenu();
-              navigate('/portfolio');
-            }}
-          >
-            <User size={16} strokeWidth={1.8} />
-            Owner portfolio
-          </button>
-          <hr className="ras-avatar-menu__divider" />
-          <button
-            type="button"
-            className="ras-avatar-menu__item ras-avatar-menu__item--danger"
-            onClick={() => void handleLogout()}
-          >
-            <LogOut size={16} strokeWidth={1.8} />
-            Sign out
-          </button>
+          <div className="ras-avatar-menu__actions">
+            <Button
+              tone="ghost"
+              size="sm"
+              fullWidth
+              role="menuitem"
+              className="ras-avatar-menu__action"
+              leadingIcon={<User size={16} strokeWidth={1.8} />}
+              onClick={() => {
+                setOpen(false);
+                navigate('/portfolio');
+              }}
+            >
+              Owner portfolio
+            </Button>
+            <Button
+              tone="danger"
+              size="sm"
+              fullWidth
+              role="menuitem"
+              className="ras-avatar-menu__action"
+              loading={logoutPending}
+              leadingIcon={<LogOut size={16} strokeWidth={1.8} />}
+              onClick={() => void handleLogout()}
+            >
+              Sign out
+            </Button>
+          </div>
+          {logoutError ? (
+            <p className="ras-avatar-menu__error" role="alert">
+              {logoutError}
+            </p>
+          ) : null}
         </div>
-      ) : null}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
 export function ShellLayout({ children }: { children: ReactNode }) {
+  const isTitlebarInteractiveTarget = (target: EventTarget | null) =>
+    target instanceof Element && target.closest(TITLEBAR_INTERACTIVE_SELECTOR) !== null;
+
   const handleTitlebarMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
-    const target = event.target as HTMLElement;
-    const interactive = target.closest('a, button, input, select, textarea, [role="button"], [tabindex]');
-    if (interactive) return;
+    if (event.detail > 1) return;
+    if (event.clientX < MACOS_TRAFFIC_LIGHT_SAFE_ZONE_PX) return;
+    if (isTitlebarInteractiveTarget(event.target)) return;
     void startStudioWindowDrag();
   };
 
   return (
-    <div className="ras-shell">
+    <AmbientBackground variant="mesh" className="ras-shell">
       <div className="ras-topbar" onMouseDown={handleTitlebarMouseDown}>
         <div className="ras-topbar__inner">
           <h1 className="ras-topbar__title">Realm Agent Studio</h1>
@@ -194,11 +222,11 @@ export function ShellLayout({ children }: { children: ReactNode }) {
           className="ras-main"
           onMouseDown={(event) => {
             if (event.button !== 0) return;
+            if (event.detail > 1) return;
             const rect = event.currentTarget.getBoundingClientRect();
             if (event.clientY - rect.top > 40) return;
-            const target = event.target as HTMLElement;
-            const interactive = target.closest('a, button, input, select, textarea, [role="button"], [tabindex]');
-            if (interactive) return;
+            if (event.clientX < MACOS_TRAFFIC_LIGHT_SAFE_ZONE_PX) return;
+            if (isTitlebarInteractiveTarget(event.target)) return;
             void startStudioWindowDrag();
           }}
           data-testid="shell-main-drag-region"
@@ -206,6 +234,6 @@ export function ShellLayout({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
-    </div>
+    </AmbientBackground>
   );
 }

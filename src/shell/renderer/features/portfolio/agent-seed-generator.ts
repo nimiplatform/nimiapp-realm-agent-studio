@@ -7,6 +7,7 @@ import {
   type DnaSecondaryTrait,
 } from './create-agent-draft.js';
 import {
+  buildStudioTextRequestParameters,
   buildStudioRuntimeMetadata,
   resolveStudioTextCallParams,
   runStudioTextGenerate,
@@ -15,6 +16,7 @@ import {
   type StudioTextGenerationOutput,
   type StudioTextGeneratePayload,
 } from './studio-ai-runtime.js';
+import { parseStrictRuntimeJsonObject } from './strict-runtime-json.js';
 
 export const AGENT_SEED_SOURCE = 'Runtime runtime.ai.text.generate' as const;
 
@@ -26,7 +28,7 @@ export const AGENT_SEED_SOURCE = 'Runtime runtime.ai.text.generate' as const;
  */
 export type GeneratedAgentSeed = Pick<
   CreateRealmAgentDraftInput,
-  'handle' | 'displayName' | 'publicBio' | 'concept' | 'description' | 'ruleText' | 'dnaPrimary' | 'dnaSecondary'
+  'handle' | 'displayName' | 'concept' | 'description' | 'ruleText' | 'dnaPrimary' | 'dnaSecondary'
 >;
 
 export type AgentSeedGenerationResult =
@@ -51,8 +53,19 @@ export type AgentSeedGenerationResult =
       | 'agent-seed-generate-failed'
       | 'agent-seed-invalid-output';
     message: string;
-    submitted: StudioTextGeneratePayload | null;
+      submitted: StudioTextGeneratePayload | null;
   };
+
+const AGENT_SEED_OUTPUT_KEYS = [
+  'handle',
+  'displayName',
+  'concept',
+  'description',
+  'ruleText',
+  'dnaPrimary',
+  'dnaSecondary',
+  'rationale',
+] as const;
 
 function buildAgentSeedPayload(description: string): {
   ok: boolean;
@@ -81,14 +94,13 @@ function buildAgentSeedPayload(description: string): {
           studioTextMessage('system', [
             'You generate an owner-reviewed Realm Agent draft from a one-line user description.',
             'Return ONE JSON object. No prose before or after. No code fences.',
-            'Required keys: handle, displayName, publicBio, concept, description, ruleText, dnaPrimary, dnaSecondary, rationale.',
+            'Required keys: handle, displayName, concept, description, ruleText, dnaPrimary, dnaSecondary, rationale.',
             '',
             '— Field rules —',
             'handle: short kebab-case latin suggestion (3-20 chars), no leading @, lowercase letters/digits/hyphens only.',
             'displayName: 2-32 chars; match the user\'s described language (Chinese, English, etc).',
-            'publicBio: 1-2 sentence public bio (≤160 chars).',
             'concept: 1-2 sentences naming the core creative concept.',
-            'description: 1 short paragraph public-facing description (≤500 chars).',
+            'description: 1 short public profile description (≤500 chars).',
             'ruleText: optional behavior/boundary lines, one per line; empty string if nothing meaningful.',
             `dnaPrimary: EXACTLY ONE of ${DNA_PRIMARY_ARCHETYPES.join(' | ')}`,
             `dnaSecondary: array of 1-3 traits from ${DNA_SECONDARY_TRAITS.join(' | ')}`,
@@ -104,40 +116,13 @@ function buildAgentSeedPayload(description: string): {
             dnaSecondaryAllowed: DNA_SECONDARY_TRAITS,
           })),
         ],
-        parameters: {
-          temperature: callParams.temperature,
-          maxTokens: callParams.maxTokens,
-          metadata: buildStudioRuntimeMetadata('realm-agent-studio.agent-seed'),
-        },
+        parameters: buildStudioTextRequestParameters(
+          callParams,
+          buildStudioRuntimeMetadata('realm-agent-studio.agent-seed'),
+        ),
       },
     },
   };
-}
-
-function pickJsonObject(raw: string): Record<string, unknown> {
-  // Strip optional ``` / ```json fences, leading/trailing prose.
-  const stripped = raw.trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/i, '');
-  const start = stripped.indexOf('{');
-  const end = stripped.lastIndexOf('}');
-  if (start < 0 || end < 0 || end <= start) {
-    throw new Error('LLM output did not contain a JSON object.');
-  }
-  const candidate = stripped.slice(start, end + 1);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(candidate);
-  } catch (error) {
-    throw new Error(
-      `LLM output JSON parse failed: ${error instanceof Error ? error.message : 'unknown'}`,
-      { cause: error },
-    );
-  }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('LLM output JSON is not a plain object.');
-  }
-  return parsed as Record<string, unknown>;
 }
 
 function readString(value: unknown, fallback = ''): string {
@@ -177,11 +162,14 @@ function normalizeHandleSuggestion(raw: unknown): string {
 }
 
 export function parseAgentSeedOutput(raw: string): { seed: GeneratedAgentSeed; rationale: string } {
-  const obj = pickJsonObject(raw);
+  const obj = parseStrictRuntimeJsonObject({
+    rawText: raw,
+    label: 'Runtime agent seed output',
+    allowedKeys: AGENT_SEED_OUTPUT_KEYS,
+  });
   const seed: GeneratedAgentSeed = {
     handle: normalizeHandleSuggestion(obj.handle),
     displayName: readString(obj.displayName),
-    publicBio: readString(obj.publicBio),
     concept: readString(obj.concept),
     description: readString(obj.description),
     ruleText: readString(obj.ruleText),

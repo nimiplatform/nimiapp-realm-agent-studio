@@ -1,4 +1,7 @@
-import type { AuthPlatformAdapter } from '@nimiplatform/kit/auth';
+import {
+  createRuntimeAccountBrowserBroker,
+  type AuthPlatformAdapter,
+} from '@nimiplatform/kit/auth';
 import { studioTauriOAuthBridge } from '../../bridge/index.js';
 import {
   ensureStudioRuntimeClientReady,
@@ -16,6 +19,9 @@ const STUDIO_EMBEDDED_AUTH_UNSUPPORTED =
 const STUDIO_TOKEN_PROXY_FORBIDDEN =
   'Realm Agent Studio does not own access/refresh token custody. Runtime is the sole owner; '
   + 'login through the desktop browser broker.';
+const STUDIO_ACCOUNT_CONTROL_FORBIDDEN =
+  'Realm Agent Studio is a developer-registered local app and cannot own Runtime account logout. '
+  + 'Use the first-party Desktop account surface.';
 
 function unsupported<T>(): Promise<T> {
   return Promise.reject(new Error(STUDIO_EMBEDDED_AUTH_UNSUPPORTED));
@@ -28,10 +34,7 @@ export async function loadCurrentUser(): Promise<StudioAuthUser | null> {
 
 export async function logoutStudioRuntimeAccount(): Promise<void> {
   await ensureStudioRuntimeClientReady();
-  await getStudioNimiClient().runtime.account.logout({
-    caller: studioRuntimeAccountCaller,
-    reason: 'realm_agent_studio_logout',
-  });
+  throw new Error(STUDIO_ACCOUNT_CONTROL_FORBIDDEN);
 }
 
 /**
@@ -80,68 +83,34 @@ export function createStudioDesktopBrowserAuthAdapter(): AuthPlatformAdapter {
  * of this flow.
  */
 export function createStudioRuntimeAccountBrowserBroker() {
-  return {
-    begin: async (input: { callbackUrl: string; baseUrl?: string; timeoutMs: number }) => {
-      await ensureStudioRuntimeClientReady();
-      const response = await getStudioNimiClient().runtime.account.beginLogin({
-        caller: studioRuntimeAccountCaller,
-        redirectUri: input.callbackUrl,
-        callbackOrigin: new URL(input.callbackUrl).origin,
-        requestedScopes: [],
-        ttlSeconds: Math.max(10, Math.ceil(input.timeoutMs / 1000)),
-      });
-      if (
-        !response.accepted
-        || !response.loginAttemptId
-        || !response.oauthAuthorizationUrl
-        || !response.state
-        || !response.nonce
-      ) {
-        throw new Error(
-          `Runtime account login could not start: ${String(response.accountReasonCode || response.reasonCode || 'unknown')}`,
-        );
-      }
-      return {
-        loginAttemptId: response.loginAttemptId,
-        authorizationUrl: response.oauthAuthorizationUrl,
-        state: response.state,
-        nonce: response.nonce,
-      };
+  const broker = createRuntimeAccountBrowserBroker({
+    caller: studioRuntimeAccountCaller,
+    beforeRequest: ensureStudioRuntimeClientReady,
+    getClient: () => ({
+      runtime: {
+        account: getStudioNimiClient().runtime.account,
+      },
+    }),
+    projectUser: (projection) => {
+      const accountId = String(projection.accountId || '').trim();
+      return accountId
+        ? {
+            id: accountId,
+            displayName: String(projection.displayName || '').trim(),
+          }
+        : null;
     },
-    complete: async (input: {
-      loginAttemptId: string;
-      code: string;
-      state: string;
-      nonce: string;
-      callbackUrl: string;
-    }) => {
-      await ensureStudioRuntimeClientReady();
-      const response = await getStudioNimiClient().runtime.account.completeLogin({
-        caller: studioRuntimeAccountCaller,
-        loginAttemptId: input.loginAttemptId,
-        code: input.code,
-        refreshToken: '',
-        state: input.state,
-        nonce: input.nonce,
-        redirectUri: input.callbackUrl,
-        callbackOrigin: new URL(input.callbackUrl).origin,
-        uxTraceId: '',
-        sealedCompletionTicket: '',
-      });
-      if (!response.accepted) {
-        throw new Error(
-          `Runtime account login could not complete: ${String(response.accountReasonCode || response.reasonCode || 'unknown')}`,
-        );
+  });
+
+  return {
+    begin: broker.begin,
+    complete: async (request: Parameters<typeof broker.complete>[0]) => {
+      await broker.complete(request);
+      const user = await loadCurrentUser();
+      if (!user) {
+        throw new Error('Runtime account login completed without a usable Runtime account session.');
       }
-      const accountId = String(response.accountProjection?.accountId || '').trim();
-      return {
-        user: accountId
-          ? {
-              id: accountId,
-              displayName: String(response.accountProjection?.displayName || '').trim(),
-            }
-          : null,
-      };
+      return { user };
     },
   };
 }

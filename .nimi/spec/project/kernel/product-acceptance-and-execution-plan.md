@@ -55,7 +55,7 @@ acceptance. Acceptance requires the whole owner workflow to be coherent:
 | A7 Agent-authored posts | **[R-RAS-ACCEPT-022]** Owner can draft from agent voice, use AI assistance, attach canonical media, human-review, publish through Realm, and create a single local schedule that is actually persisted/executable or explicitly not admitted. | W6 closed for admitted surfaces. Post copy assistance is candidate-only, attachment and publish paths use Realm canonical services, and one app-local schedule is persisted per agent with foreground due execution. Realm publish success is claimed only after `PostsService.createPost` returns canonical post identity. |
 | A8 Runtime AI consumption | **[R-RAS-ACCEPT-023]** Runtime AI support covers setting rewrite/proposal, visual/image generation candidates when available, post copy, voice demo, and source-backed suggestions through SDK surfaces. Runtime output remains candidate material until owner review. | W7 accepted for admitted surfaces. Settings proposals, visual candidates, voice-demo candidates, and post copy use Runtime SDK surfaces and remain owner-reviewed candidate material. Source-backed portfolio suggestions are explicitly deferred until an admitted owner-scoped suggestion surface exists. |
 | A9 Failure and recovery | **[R-RAS-ACCEPT-024]** Every failure state preserves valid local work, names the unavailable source/capability in product terms, avoids pseudo-success, and gives a valid next action. | W7 accepted for admitted surfaces. Client and UI tests cover fail-closed Realm/Runtime/source failures, invalid output, unavailable transport, local schedule invalidity, and no pseudo-success. |
-| A10 Verification evidence | **[R-RAS-ACCEPT-025]** Final closeout includes desktop-shell smoke, renderer screenshot only as secondary evidence, unit/integration tests, boundary checks, spec governance, no app REST bypass, no first-party SDK misuse, and acceptance matrix results per gate. | W7R accepted for the desktop/session regression. Evidence now includes external Runtime + Studio desktop smoke proving `app.nimi.realm-agent-studio` caller registration succeeds. Repo-wide AI governance and platform catalog drift still have unrelated pre-existing non-Studio/AI-profile changes and are not closed by this wave. |
+| A10 Verification evidence | **[R-RAS-ACCEPT-025]** Final closeout includes desktop-shell smoke, renderer screenshot only as secondary evidence, unit/integration tests, boundary checks, spec governance, no app REST bypass, no first-party SDK misuse, and acceptance matrix results per gate. | Current hard cut supersedes W7R first-party smoke evidence. Studio is a developer-registered local app (`nimi.realm-agent-studio`) and must not use raw Realm tokens or local-first-party caller mode. |
 
 ## Current Implementation Gap Audit
 
@@ -238,18 +238,20 @@ live owner portfolio/create/detail completion inside the desktop owner session.
 W3 closed on 2026-05-22 with:
 
 - `CreateRealmAgentWorkspace` emits a post-create context only after a real
-  `Realm AgentsService.agentControllerCreate` result with canonical id.
+  `Realm AgentsService.agentControllerCreate` result with canonical id and, when
+  a reviewed profile description exists, source-backed owner settings completion.
 - Successful create opens the created agent's owner detail lane and keeps
   selected-agent context even before the refreshed portfolio list contains the
   new id.
-- Public bio remains visible as a post-create owner-settings continuation. It
-  is explicitly not submitted in `CreateAgentDto`, and the UI preserves it with
-  the created agent id instead of silently dropping it.
+- Profile description is the single public description field. It is submitted as
+  `CreateAgentDto.description` and verified or completed through
+  `MeService.updateMyRealmAgentSettings`; Studio no longer preserves a local
+  post-create public-bio handoff.
 - Owner detail can fetch the selected created id directly through
   `MeService.getMyRealmAgent`; portfolio list order/filter/sort remains
   app-local view state and does not create queue or lifecycle truth.
 - The W3 UI test covers create submit, canonical create confirmation,
-  post-create detail opening, public-bio preservation, and create body
+  post-create detail opening, profile-description completion, and create body
   allowlist behavior.
 - `pnpm --filter @nimiplatform/realm-agent-studio typecheck` passed.
 - `pnpm --filter @nimiplatform/realm-agent-studio test` passed with 8 files and
@@ -268,9 +270,9 @@ W4 closed on 2026-05-22 with:
 
 - Owner settings remain natural-language-first plus structured visible fields.
 - Runtime settings assistance uses `runtime.ai.text.generate` through the SDK
-  runtime client. The model is configuration-provided by
-  `VITE_RUNTIME_SETTINGS_MODEL` or `VITE_RUNTIME_TEXT_MODEL`; no provider/model
-  literal is hardcoded in the product path.
+  runtime client. The concrete route is bound through the Studio NimiAIConfig
+  `text.generate` targetRef; no env model fallback or provider/model literal is
+  admitted in the product path.
 - Runtime output is parsed as candidate JSON, rejected on forbidden fields
   (`provider`, `model`, `LocalAgent`, lifecycle/state/world/profile asset
   fields, raw `agentRules`, and related keys), and applied only into admitted
@@ -339,10 +341,10 @@ local schedule workflow.
 
 W6 closed on 2026-05-22 with:
 
-- Runtime post-copy assistance uses SDK `runtime.ai.text.generate` with configured
-  `VITE_RUNTIME_POST_COPY_MODEL` or `VITE_RUNTIME_TEXT_MODEL`. Runtime output is
-  candidate material only, applies into editable caption/tag fields, and clears
-  human review before publish.
+- Runtime post-copy assistance uses SDK `runtime.ai.text.generate` with the
+  Studio NimiAIConfig `text.generate` targetRef. Runtime output is candidate
+  material only, applies into editable caption/tag fields, and clears human
+  review before publish.
 - Post publishing still uses only `PostsService.createPost` with `CreatePostDto`
   fields `attachments`, `caption`, and `tags`. Studio does not submit
   caller-owned `worldId`, `authorId`, post id, schedule id, queue, campaign, or
@@ -433,9 +435,9 @@ Closure:
   `nimi.realm-agent-studio`, with bundled first-party release descriptor
   `nimi.realm-agent-studio.bundled-with-nimi`.
 - Studio caller authority is documented in `.nimi/spec/project/kernel/index.md`:
-  `app.nimi.realm-agent-studio` /
-  `app.nimi.realm-agent-studio.local-first-party` /
-  `ACCOUNT_CALLER_MODE_LOCAL_FIRST_PARTY_APP`.
+  `nimi.realm-agent-studio` /
+  `nimi.realm-agent-studio.local-developer` /
+  `ACCOUNT_CALLER_MODE_LOCAL_DEVELOPER_APP`.
 - Studio Tauri shell no longer exposes Runtime start/stop/restart/config
   commands. Realm Agent Studio assumes Runtime is already running, matching its
   product boundary as a satellite desktop app rather than the core Desktop app.
@@ -464,9 +466,8 @@ W7R verification:
   `node scripts/run-runtime-dist.mjs serve` on isolated
   `NIMI_RUNTIME_GRPC_ADDR=127.0.0.1:46381` and
   `NIMI_RUNTIME_HTTP_ADDR=127.0.0.1:46382`; Runtime loaded the Platform Nimi App
-  registry and logged successful registration for
-  `app.nimi.realm-agent-studio` /
-  `app.nimi.realm-agent-studio.local-first-party`.
+  registry and logged successful registration for the prior first-party-like
+  Studio caller. That evidence is no longer accepted as current authority.
 - Studio desktop smoke: launched
   `NIMI_RUNTIME_GRPC_ADDR=127.0.0.1:46381
   NIMI_RUNTIME_HTTP_ADDR=127.0.0.1:46382

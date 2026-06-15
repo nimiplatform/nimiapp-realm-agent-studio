@@ -5,6 +5,25 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
 const require = createRequire(import.meta.url);
+const nimiRepoRoot = path.resolve(__dirname, '../../nimi-realm/nimi');
+const nimiSdkSourceRoot = path.resolve(nimiRepoRoot, 'sdks/typescript');
+const nimiKitSourceRoot = path.resolve(nimiRepoRoot, 'kit');
+
+function isNimiSdkModule(normalizedId: string): boolean {
+  return (
+    normalizedId.includes('/node_modules/@nimiplatform/sdk/')
+    || normalizedId.includes('/node_modules/.pnpm/@nimiplatform+sdk@')
+    || normalizedId.includes('/nimi-realm/nimi/sdks/typescript/')
+  );
+}
+
+function isNimiKitModule(normalizedId: string): boolean {
+  return (
+    normalizedId.includes('/node_modules/@nimiplatform/kit/')
+    || normalizedId.includes('/node_modules/.pnpm/@nimiplatform+kit@')
+    || normalizedId.includes('/nimi-realm/nimi/kit/')
+  );
+}
 
 function isNodePackage(normalizedId: string, packageName: string): boolean {
   return (
@@ -41,28 +60,65 @@ export default defineConfig(() => {
         { find: 'react', replacement: path.resolve(__dirname, 'node_modules/react/index.js') },
         { find: 'scheduler', replacement: require.resolve('scheduler') },
         { find: '@tauri-apps/api/core', replacement: path.resolve(__dirname, 'node_modules/@tauri-apps/api/core.js') },
+        { find: /^@nimiplatform\/sdk$/, replacement: path.resolve(nimiSdkSourceRoot, 'index.ts') },
+        { find: /^@nimiplatform\/sdk\/ai$/, replacement: path.resolve(nimiSdkSourceRoot, 'core/ai/index.ts') },
+        { find: /^@nimiplatform\/sdk\/contracts$/, replacement: path.resolve(nimiSdkSourceRoot, 'core/contracts/index.ts') },
+        { find: /^@nimiplatform\/sdk\/realm$/, replacement: path.resolve(nimiSdkSourceRoot, 'realm/index.ts') },
+        { find: /^@nimiplatform\/sdk\/realm\/generated$/, replacement: path.resolve(nimiSdkSourceRoot, 'realm/generated.ts') },
+        { find: /^@nimiplatform\/sdk\/runtime$/, replacement: path.resolve(nimiSdkSourceRoot, 'runtime/index.ts') },
+        { find: /^@nimiplatform\/sdk\/runtime\/generated$/, replacement: path.resolve(nimiSdkSourceRoot, 'runtime/generated.ts') },
+        { find: /^@nimiplatform\/sdk\/types$/, replacement: path.resolve(nimiSdkSourceRoot, 'types/index.ts') },
+        { find: /^@nimiplatform\/kit\/auth$/, replacement: path.resolve(nimiKitSourceRoot, 'auth/src/index.ts') },
+        { find: /^@nimiplatform\/kit\/auth\/styles\.css$/, replacement: path.resolve(nimiKitSourceRoot, 'auth/src/styles.css') },
+        { find: /^@nimiplatform\/kit\/core\/model-config$/, replacement: path.resolve(nimiKitSourceRoot, 'core/src/model-config/index.ts') },
+        { find: /^@nimiplatform\/kit\/core\/oauth$/, replacement: path.resolve(nimiKitSourceRoot, 'core/src/oauth/index.ts') },
+        { find: /^@nimiplatform\/kit\/core\/sdk-contract$/, replacement: path.resolve(nimiKitSourceRoot, 'core/src/sdk-contract.ts') },
+        { find: /^@nimiplatform\/kit\/core\/storage-json$/, replacement: path.resolve(nimiKitSourceRoot, 'core/src/storage-json.ts') },
+        { find: /^@nimiplatform\/kit\/features\/model-config$/, replacement: path.resolve(nimiKitSourceRoot, 'features/model-config/src/index.ts') },
+        { find: /^@nimiplatform\/kit\/features\/model-config\/headless$/, replacement: path.resolve(nimiKitSourceRoot, 'features/model-config/src/headless.ts') },
+        { find: /^@nimiplatform\/kit\/features\/model-picker\/runtime$/, replacement: path.resolve(nimiKitSourceRoot, 'features/model-picker/src/runtime.ts') },
+        { find: /^@nimiplatform\/kit\/features\/model-picker\/ui$/, replacement: path.resolve(nimiKitSourceRoot, 'features/model-picker/src/ui.ts') },
+        { find: /^@nimiplatform\/kit\/shell\/renderer\/bootstrap$/, replacement: path.resolve(nimiKitSourceRoot, 'shell/renderer/src/bootstrap/index.ts') },
+        { find: /^@nimiplatform\/kit\/shell\/renderer\/bridge$/, replacement: path.resolve(nimiKitSourceRoot, 'shell/renderer/src/bridge/index.ts') },
+        { find: /^@nimiplatform\/kit\/telemetry\/error-boundary$/, replacement: path.resolve(nimiKitSourceRoot, 'telemetry/src/error-boundary/index.ts') },
+        { find: /^@nimiplatform\/kit\/ui$/, replacement: path.resolve(nimiKitSourceRoot, 'ui/src/index.ts') },
+        { find: /^@nimiplatform\/kit\/ui\/styles\.css$/, replacement: path.resolve(nimiKitSourceRoot, 'ui/src/styles.css') },
+        { find: /^@nimiplatform\/kit\/ui\/themes\/(.+\.css)$/, replacement: path.resolve(nimiKitSourceRoot, 'ui/src/themes/$1') },
+        { find: /^@nimiplatform\/kit\/ui\/(.+)$/, replacement: path.resolve(nimiKitSourceRoot, 'ui/src/$1') },
         { find: '@renderer', replacement: path.resolve(__dirname, 'src/shell/renderer') },
       ],
     },
     plugins: [react(), tailwindcss()],
     optimizeDeps: {
-      // Force pre-bundling of the heavy kit + sdk surfaces on first cold
-      // start. Without this, vite waits until a runtime import touches one
-      // of these packages, then re-bundles and triggers a full page reload
-      // — which the Tauri webview experiences as a multi-second white
-      // screen. Listing the entry points here lets vite warm the dep cache
-      // (`node_modules/.vite/deps`) up-front in a single pass.
+      // Nimi workspace packages are local authority surfaces during app
+      // development. Pre-bundling them creates a stale third truth after
+      // Runtime/SDK/kit hard cuts, so only stable external packages are
+      // warmed in Vite's optimized dependency cache.
       include: [
-        '@nimiplatform/kit/ui',
-        '@nimiplatform/kit/auth',
-        '@nimiplatform/kit/shell/renderer/bridge',
-        '@nimiplatform/sdk',
-        '@nimiplatform/sdk/realm',
-        '@nimiplatform/sdk/runtime',
         '@tanstack/react-query',
         'react-router-dom',
         'zustand',
         'lucide-react',
+      ],
+      exclude: [
+        '@nimiplatform/kit',
+        '@nimiplatform/kit/ui',
+        '@nimiplatform/kit/auth',
+        '@nimiplatform/kit/features/model-config',
+        '@nimiplatform/kit/features/model-config/headless',
+        '@nimiplatform/kit/features/model-picker/runtime',
+        '@nimiplatform/kit/features/model-picker/ui',
+        '@nimiplatform/kit/shell/renderer/bootstrap',
+        '@nimiplatform/kit/shell/renderer/bridge',
+        '@nimiplatform/kit/telemetry/error-boundary',
+        '@nimiplatform/sdk',
+        '@nimiplatform/sdk/ai',
+        '@nimiplatform/sdk/contracts',
+        '@nimiplatform/sdk/realm',
+        '@nimiplatform/sdk/realm/generated',
+        '@nimiplatform/sdk/runtime',
+        '@nimiplatform/sdk/runtime/generated',
+        '@nimiplatform/sdk/types',
       ],
     },
     server: {
@@ -70,7 +126,10 @@ export default defineConfig(() => {
       port: 1450,
       strictPort: true,
       fs: {
-        allow: [path.resolve(__dirname)],
+        allow: [
+          path.resolve(__dirname),
+          nimiRepoRoot,
+        ],
       },
     },
     build: {
@@ -85,12 +144,18 @@ export default defineConfig(() => {
           manualChunks(id) {
             const normalizedId = id.split(path.sep).join('/');
 
-            if (normalizedId.includes('/@nimiplatform/sdk/')) {
-              if (normalizedId.includes('/runtime/generated/')) return 'sdk-runtime-generated';
-              if (normalizedId.includes('/realm/generated/')) return 'sdk-realm-generated';
+            if (isNimiSdkModule(normalizedId)) {
+              if (
+                normalizedId.includes('/runtime/generated/')
+                || normalizedId.includes('/core-generated/runtime-protobuf/')
+              ) return 'sdk-runtime-generated';
+              if (
+                normalizedId.includes('/realm/generated/')
+                || normalizedId.includes('/core-generated/realm-protobuf/')
+              ) return 'sdk-realm-generated';
               return 'sdk-client';
             }
-            if (normalizedId.includes('/@nimiplatform/kit/')) {
+            if (isNimiKitModule(normalizedId)) {
               return 'vendor-platform';
             }
             if (!normalizedId.includes('node_modules')) {

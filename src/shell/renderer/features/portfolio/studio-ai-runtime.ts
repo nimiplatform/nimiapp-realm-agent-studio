@@ -6,11 +6,18 @@ import {
 import type { NimiJsonObject, NimiMessage } from '@nimiplatform/sdk/contracts';
 import {
   createNimiRuntimeRouteOptionsHostDeps,
+  listNimiRuntimeLocalAssetEntries,
   listNimiRuntimeRouteOptionsWithHost,
+  toNimiRuntimeProtoStruct,
+  toNimiRuntimeVoiceReference,
+  type NimiRuntimeLocalAssetEntry,
   type NimiRuntimeRouteBinding,
   type NimiRuntimeRouteOptionsSnapshot,
+  type NimiRuntimeSpeechVoiceReference,
   type Runtime,
 } from '@nimiplatform/sdk/runtime';
+import type { NimiAIConfigTargetRef } from '@nimiplatform/sdk/ai';
+import { COMPANION_SLOTS } from '@nimiplatform/kit/features/model-config/headless';
 import {
   ExecutionMode,
   FallbackPolicy,
@@ -23,6 +30,10 @@ import {
   type SpeechSynthesizeScenarioSpec,
 } from '@nimiplatform/sdk/runtime/generated';
 import type { CoreMetadata } from '@nimiplatform/sdk/types';
+import {
+  readStudioAIConfigSelectedParams,
+  readStudioAIConfigTargetRef,
+} from '@renderer/features/ai-config/studio-ai-config-store.js';
 
 /**
  * Studio AI runtime route resolver. No env model ids, no Runtime implicit
@@ -30,7 +41,7 @@ import type { CoreMetadata } from '@nimiplatform/sdk/types';
  * reaches ScenarioService.
  */
 
-export const STUDIO_APP_ID = 'app.nimi.realm-agent-studio' as const;
+export const STUDIO_APP_ID = 'nimi.realm-agent-studio' as const;
 
 export type StudioAISurfaceId =
   | 'realm-agent-studio.agent-seed'
@@ -95,7 +106,11 @@ export type StudioTextCallParams = {
   connectorId?: string;
   temperature?: number;
   topP?: number;
+  topK?: number;
   maxTokens?: number;
+  presencePenalty?: number;
+  frequencyPenalty?: number;
+  stop?: readonly string[];
   timeoutMs?: number;
 };
 
@@ -104,6 +119,22 @@ export type StudioTextGeneratePayload = {
   readonly params: StudioTextCallParams;
   readonly request: NimiGenerateTextRequest;
 };
+
+export function buildStudioTextRequestParameters(
+  params: StudioTextCallParams,
+  metadata: NimiJsonObject,
+): NonNullable<NimiGenerateTextRequest['parameters']> {
+  return {
+    ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
+    ...(params.topP !== undefined ? { topP: params.topP } : {}),
+    ...(params.topK !== undefined ? { topK: params.topK } : {}),
+    ...(params.maxTokens !== undefined ? { maxTokens: params.maxTokens } : {}),
+    ...(params.presencePenalty !== undefined ? { presencePenalty: params.presencePenalty } : {}),
+    ...(params.frequencyPenalty !== undefined ? { frequencyPenalty: params.frequencyPenalty } : {}),
+    ...(params.stop && params.stop.length > 0 ? { stop: params.stop } : {}),
+    metadata,
+  };
+}
 
 export type StudioRuntimeAIClient = Runtime;
 
@@ -121,12 +152,18 @@ export function resolveStudioTextCallParams(
   _surfaceId: StudioAISurfaceId,
   defaults: StudioTextCallDefaults = {},
 ): StudioTextCallParams {
+  const selected = readStudioAIConfigSelectedParams('text.generate');
+  const stop = readStringArrayParam(selected, 'stopSequences');
   return {
     model: 'auto',
-    ...(defaults.temperature !== undefined ? { temperature: defaults.temperature } : {}),
-    ...(defaults.topP !== undefined ? { topP: defaults.topP } : {}),
-    ...(defaults.maxTokens !== undefined ? { maxTokens: defaults.maxTokens } : {}),
-    ...(defaults.timeoutMs !== undefined ? { timeoutMs: defaults.timeoutMs } : {}),
+    ...numberField('temperature', selected, defaults.temperature),
+    ...numberField('topP', selected, defaults.topP),
+    ...numberField('topK', selected, undefined),
+    ...numberField('maxTokens', selected, defaults.maxTokens),
+    ...numberField('presencePenalty', selected, undefined),
+    ...numberField('frequencyPenalty', selected, undefined),
+    ...(stop.length > 0 ? { stop } : {}),
+    ...numberField('timeoutMs', selected, defaults.timeoutMs),
   };
 }
 
@@ -136,13 +173,114 @@ type StudioResolvedRuntimeRouteBinding = {
   readonly connectorId?: string;
   readonly localModelId?: string;
   readonly provider?: string;
+  readonly targetRef: NimiAIConfigTargetRef;
+  readonly selectedParams: Readonly<Record<string, unknown>>;
   readonly snapshot: NimiRuntimeRouteOptionsSnapshot;
 };
 
 type StudioRuntimeRouteCapability = 'text.generate' | 'image.generate' | 'audio.synthesize';
+type StudioScenarioExtension = ExecuteScenarioRequest['extensions'][number];
+
+const STUDIO_BOUND_ROUTE_SYMBOL: unique symbol = Symbol('realm-agent-studio.bound-route');
+
+type StudioBoundRouteEvidence = {
+  readonly capability: StudioRuntimeRouteCapability;
+  readonly targetRef: NimiAIConfigTargetRef;
+  readonly model: string;
+  readonly route: 'local' | 'cloud';
+  readonly connectorId?: string;
+};
+
+type StudioBoundPayload<TPayload> = TPayload & {
+  readonly [STUDIO_BOUND_ROUTE_SYMBOL]: StudioBoundRouteEvidence;
+};
+
+export type StudioBoundTextGeneratePayload = StudioBoundPayload<StudioTextGeneratePayload>;
+export type StudioBoundImageGeneratePayload = StudioBoundPayload<StudioImageGeneratePayload>;
+export type StudioBoundSpeechSynthesizePayload = StudioBoundPayload<StudioSpeechSynthesizePayload>;
 
 function normalizeStudioRouteText(value: unknown): string {
   return String(value || '').trim();
+}
+
+function readNumberParam(
+  params: Readonly<Record<string, unknown>>,
+  key: string,
+): number | undefined {
+  const raw = params[key];
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return raw;
+  }
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function readStringParam(
+  params: Readonly<Record<string, unknown>>,
+  key: string,
+): string | undefined {
+  const raw = params[key];
+  if (typeof raw !== 'string') {
+    return undefined;
+  }
+  const normalized = raw.trim();
+  return normalized || undefined;
+}
+
+function readStringArrayParam(
+  params: Readonly<Record<string, unknown>>,
+  key: string,
+): string[] {
+  const raw = params[key];
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw
+    .map((entry) => typeof entry === 'string' ? entry.trim() : '')
+    .filter(Boolean);
+}
+
+function readFirstNumberParam(
+  params: Readonly<Record<string, unknown>>,
+  keys: readonly string[],
+): number | undefined {
+  for (const key of keys) {
+    const value = readNumberParam(params, key);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function readFirstStringParam(
+  params: Readonly<Record<string, unknown>>,
+  keys: readonly string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = readStringParam(params, key);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function numberField<K extends string>(
+  key: K,
+  params: Readonly<Record<string, unknown>>,
+  fallback: number | undefined,
+): Partial<Record<K, number>> {
+  const configured = readNumberParam(params, key);
+  const value = configured ?? fallback;
+  return value === undefined ? {} : { [key]: value } as Partial<Record<K, number>>;
 }
 
 function isAutoStudioRouteModel(value: unknown): boolean {
@@ -157,6 +295,8 @@ function bindingModel(binding: NimiRuntimeRouteBinding): string {
 function bindingToResolved(
   binding: NimiRuntimeRouteBinding,
   snapshot: NimiRuntimeRouteOptionsSnapshot,
+  targetRef: NimiAIConfigTargetRef,
+  selectedParams: Readonly<Record<string, unknown>>,
 ): StudioResolvedRuntimeRouteBinding | null {
   const model = bindingModel(binding);
   if (!model) return null;
@@ -168,6 +308,8 @@ function bindingToResolved(
       route: 'cloud',
       connectorId,
       provider: normalizeStudioRouteText(binding.provider) || undefined,
+      targetRef,
+      selectedParams,
       snapshot,
     };
   }
@@ -177,6 +319,8 @@ function bindingToResolved(
     route: 'local',
     ...(localModelId ? { localModelId } : {}),
     provider: normalizeStudioRouteText(binding.provider || binding.engine) || undefined,
+    targetRef,
+    selectedParams,
     snapshot,
   };
 }
@@ -206,71 +350,149 @@ function routeCandidates(snapshot: NimiRuntimeRouteOptionsSnapshot): NimiRuntime
   ].filter((binding) => bindingModel(binding));
 }
 
-function findPreferredRouteCandidate(
+function localTargetRefReadinessParts(
+  targetRef: Extract<NimiAIConfigTargetRef, { readonly kind: 'local-runtime' }>,
+): string[] {
+  const readinessParts = normalizeStudioRouteText(targetRef.readinessRef).split(':').map(normalizeStudioRouteText);
+  return readinessParts.length >= 4
+    && readinessParts[0] === 'runtime-route'
+    && readinessParts[1] === 'local'
+    ? readinessParts
+    : [];
+}
+
+function localTargetRefModelCandidates(targetRef: Extract<NimiAIConfigTargetRef, { readonly kind: 'local-runtime' }>): string[] {
+  const readinessParts = localTargetRefReadinessParts(targetRef);
+  return [
+    normalizeStudioRouteText(targetRef.profileId),
+    normalizeStudioRouteText(readinessParts[3]),
+  ].filter(Boolean);
+}
+
+function localTargetRefEngineCandidates(targetRef: Extract<NimiAIConfigTargetRef, { readonly kind: 'local-runtime' }>): string[] {
+  const readinessParts = localTargetRefReadinessParts(targetRef);
+  return [
+    normalizeStudioRouteText(targetRef.targetId),
+    normalizeStudioRouteText(readinessParts[2]),
+  ].filter((value) => value && value !== 'local-runtime');
+}
+
+function findTargetRefRouteCandidate(
   candidates: readonly NimiRuntimeRouteBinding[],
-  preferredModel: string,
+  targetRef: NimiAIConfigTargetRef,
 ): NimiRuntimeRouteBinding | null {
-  const normalized = preferredModel.toLowerCase();
-  const matches = candidates.filter((candidate) => {
-    const tokens = [
+  if (targetRef.kind === 'profile-slice') {
+    return null;
+  }
+
+  if (targetRef.kind === 'cloud-connector') {
+    const connectorId = normalizeStudioRouteText(targetRef.connectorId).toLowerCase();
+    const providerModelId = normalizeStudioRouteText(targetRef.providerModelId).toLowerCase();
+    const matches = candidates.filter((candidate) => {
+      if (candidate.source !== 'cloud') {
+        return false;
+      }
+      const candidateConnectorId = normalizeStudioRouteText(candidate.connectorId).toLowerCase();
+      const modelTokens = [
+        candidate.model,
+        candidate.modelId,
+      ].map((value) => normalizeStudioRouteText(value).toLowerCase()).filter(Boolean);
+      return candidateConnectorId === connectorId && modelTokens.includes(providerModelId);
+    });
+    return matches.length === 1 ? matches[0]! : null;
+  }
+
+  const targetModelTokens = new Set(localTargetRefModelCandidates(targetRef).map((value) => value.toLowerCase()));
+  if (targetModelTokens.size === 0) {
+    return null;
+  }
+  const targetEngineTokens = new Set(localTargetRefEngineCandidates(targetRef).map((value) => value.toLowerCase()));
+  const modelMatches = candidates.filter((candidate) => {
+    if (candidate.source !== 'local') {
+      return false;
+    }
+    const candidateModelTokens = [
       candidate.model,
       candidate.modelId,
       candidate.localModelId,
       candidate.goRuntimeLocalModelId,
     ].map((value) => normalizeStudioRouteText(value).toLowerCase()).filter(Boolean);
-    return tokens.includes(normalized);
+    return candidateModelTokens.some((token) => targetModelTokens.has(token));
   });
+  const engineMatches = targetEngineTokens.size === 0
+    ? modelMatches
+    : modelMatches.filter((candidate) => [
+      candidate.engine,
+      candidate.provider,
+    ].map((value) => normalizeStudioRouteText(value).toLowerCase()).some((token) => targetEngineTokens.has(token)));
+  const matches = targetEngineTokens.size === 0 ? modelMatches : engineMatches;
   return matches.length === 1 ? matches[0]! : null;
 }
 
-function routeFailureMessage(
+function targetRefFailureMessage(
   capability: StudioRuntimeRouteCapability,
+  targetRef: NimiAIConfigTargetRef | null,
   snapshot: NimiRuntimeRouteOptionsSnapshot,
-  preferredModel: string,
 ): string {
+  if (!targetRef) {
+    return `NimiAIConfig targetRef missing for ${capability}. Configure AI models before running Studio AI.`;
+  }
+  if (targetRef.kind === 'profile-slice') {
+    return `NimiAIConfig targetRef for ${capability} is a profile-slice and cannot be executed until applied to a concrete Runtime target.`;
+  }
   const candidates = routeCandidates(snapshot);
-  if (!isAutoStudioRouteModel(preferredModel)) {
-    return `Runtime ${capability} route binding is missing or ambiguous for model ${preferredModel}.`;
-  }
-  if (snapshot.selected) {
-    return `Runtime ${capability} selected route binding is invalid.`;
-  }
   if (candidates.length === 0) {
-    return `Runtime ${capability} route binding unavailable.`;
+    return `Runtime ${capability} route binding unavailable for configured NimiAIConfig target.`;
   }
-  return `Runtime ${capability} route binding is ambiguous; ${candidates.length} candidates are available and no selected binding was provided.`;
+  return `Runtime ${capability} route binding is missing or ambiguous for configured NimiAIConfig target.`;
 }
 
 export async function resolveStudioRuntimeRouteBinding(input: {
   readonly runtime: Runtime;
   readonly capability: StudioRuntimeRouteCapability;
-  readonly preferredModel?: string;
+  readonly targetRef?: NimiAIConfigTargetRef | null;
 }): Promise<StudioResolvedRuntimeRouteBinding> {
-  const preferredModel = normalizeStudioRouteText(input.preferredModel);
+  const targetRef = input.targetRef === undefined
+    ? readStudioAIConfigTargetRef(input.capability)
+    : input.targetRef;
+  const selectedParams = readStudioAIConfigSelectedParams(input.capability);
   const snapshot = await listNimiRuntimeRouteOptionsWithHost(
     { capability: input.capability },
     createNimiRuntimeRouteOptionsHostDeps(input.runtime),
   );
-  const selected = snapshot.selected ? bindingToResolved(snapshot.selected, snapshot) : null;
-  if (selected && isAutoStudioRouteModel(preferredModel)) {
-    return selected;
+  if (targetRef) {
+    const configured = findTargetRefRouteCandidate(routeCandidates(snapshot), targetRef);
+    const resolved = configured ? bindingToResolved(configured, snapshot, targetRef, selectedParams) : null;
+    if (!resolved) {
+      throw new Error(targetRefFailureMessage(input.capability, targetRef, snapshot));
+    }
+    return resolved;
   }
-  const candidates = routeCandidates(snapshot);
-  const preferred = isAutoStudioRouteModel(preferredModel)
-    ? (candidates.length === 1 ? candidates[0]! : null)
-    : findPreferredRouteCandidate(candidates, preferredModel);
-  const resolved = preferred ? bindingToResolved(preferred, snapshot) : null;
-  if (!resolved) {
-    throw new Error(routeFailureMessage(input.capability, snapshot, preferredModel));
-  }
-  return resolved;
+  throw new Error(targetRefFailureMessage(input.capability, null, snapshot));
+}
+
+function attachBoundRouteEvidence<TPayload>(
+  payload: TPayload,
+  capability: StudioRuntimeRouteCapability,
+  binding: StudioResolvedRuntimeRouteBinding,
+): StudioBoundPayload<TPayload> {
+  return Object.defineProperty(payload, STUDIO_BOUND_ROUTE_SYMBOL, {
+    value: {
+      capability,
+      targetRef: binding.targetRef,
+      model: binding.model,
+      route: binding.route,
+      ...(binding.connectorId ? { connectorId: binding.connectorId } : {}),
+    } satisfies StudioBoundRouteEvidence,
+    enumerable: false,
+  }) as StudioBoundPayload<TPayload>;
 }
 
 function bindTextPayloadToRoute(
   payload: StudioTextGeneratePayload,
   binding: StudioResolvedRuntimeRouteBinding,
-): StudioTextGeneratePayload {
-  return {
+): StudioBoundTextGeneratePayload {
+  return attachBoundRouteEvidence({
     ...payload,
     params: {
       ...payload.params,
@@ -285,17 +507,16 @@ function bindTextPayloadToRoute(
         ...(binding.connectorId ? { providerId: binding.connectorId } : {}),
       },
     },
-  };
+  }, 'text.generate', binding);
 }
 
 export async function bindStudioTextGeneratePayload(
   payload: StudioTextGeneratePayload,
   runtime: Runtime,
-): Promise<StudioTextGeneratePayload> {
+): Promise<StudioBoundTextGeneratePayload> {
   const binding = await resolveStudioRuntimeRouteBinding({
     runtime,
     capability: 'text.generate',
-    preferredModel: payload.params.model,
   });
   return bindTextPayloadToRoute(payload, binding);
 }
@@ -305,6 +526,7 @@ export async function runStudioTextGenerate(
   runtime: StudioRuntimeAIClient,
 ): Promise<StudioTextGenerationOutput> {
   const boundPayload = await bindStudioTextGeneratePayload(payload, runtime);
+  assertBoundStudioTextPayload(boundPayload);
   const model = createNimiRuntimeAIModel({
     runtime,
     appId: STUDIO_APP_ID,
@@ -337,6 +559,279 @@ export async function runStudioTextGenerate(
   };
 }
 
+type StudioImageProfileEntry = NimiJsonObject;
+type StudioImageEntryOverride = NimiJsonObject & {
+  readonly entry_id: string;
+  readonly local_asset_id: string;
+};
+
+type StudioImageRuntimeBinding = {
+  readonly binding: StudioResolvedRuntimeRouteBinding;
+  readonly profileEntries: readonly StudioImageProfileEntry[];
+  readonly entryOverrides?: readonly StudioImageEntryOverride[];
+};
+
+function optionalStudioParamText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function selectedCompanionSlots(params: Readonly<Record<string, unknown>>): Record<string, string> {
+  const raw = params.companionSlots;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {};
+  }
+  const out: Record<string, string> = {};
+  for (const [slot, value] of Object.entries(raw as Record<string, unknown>)) {
+    const normalized = optionalStudioParamText(value);
+    if (slot.trim() && normalized) {
+      out[slot.trim()] = normalized;
+    }
+  }
+  return out;
+}
+
+function isJsonRecord(value: unknown): value is NimiJsonObject {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function configuredImageProfileEntries(params: Readonly<Record<string, unknown>>): StudioImageProfileEntry[] | null {
+  const configuredEntries = Array.isArray(params.profile_entries)
+    ? params.profile_entries
+    : Array.isArray(params.profileEntries) ? params.profileEntries : null;
+  if (!configuredEntries || configuredEntries.length === 0) return null;
+  const entries = configuredEntries.filter(isJsonRecord);
+  if (entries.length !== configuredEntries.length) {
+    throw new Error('image.generate profile_entries must contain only JSON object entries.');
+  }
+  return entries;
+}
+
+function imageEntryAssetId(entry: unknown): string {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return '';
+  const record = entry as Record<string, unknown>;
+  const slot = optionalStudioParamText(record.engine_slot ?? record.engineSlot);
+  if (slot) return '';
+  const kind = optionalStudioParamText(record.asset_kind ?? record.assetKind).toLowerCase();
+  if (kind && kind !== 'image' && kind !== 'local_asset_kind_image') return '';
+  return optionalStudioParamText(record.asset_id ?? record.assetId);
+}
+
+function imageModelAssetIdFromConfiguredEntries(entries: readonly unknown[]): string {
+  for (const entry of entries) {
+    const assetId = imageEntryAssetId(entry);
+    if (assetId) return assetId;
+  }
+  return '';
+}
+
+function assetMatchesId(asset: NimiRuntimeLocalAssetEntry, id: string): boolean {
+  const normalized = optionalStudioParamText(id);
+  return Boolean(normalized) && (
+    optionalStudioParamText(asset.localAssetId) === normalized
+    || optionalStudioParamText(asset.assetId) === normalized
+  );
+}
+
+function findLocalAssetById(
+  assets: readonly NimiRuntimeLocalAssetEntry[],
+  id: string,
+): NimiRuntimeLocalAssetEntry | null {
+  return assets.find((asset) => assetMatchesId(asset, id)) ?? null;
+}
+
+function imageProfileEntryForAsset(input: {
+  readonly entryId: string;
+  readonly title: string;
+  readonly capability: string;
+  readonly asset: NimiRuntimeLocalAssetEntry;
+  readonly engineSlot?: string;
+  readonly required?: boolean;
+}): StudioImageProfileEntry {
+  return {
+    entry_id: input.entryId,
+    kind: 'asset',
+    title: input.title,
+    capability: input.capability,
+    asset_id: input.asset.assetId || input.asset.localAssetId,
+    asset_kind: input.asset.kind,
+    engine: input.asset.engine,
+    ...(input.engineSlot ? { engine_slot: input.engineSlot } : {}),
+    ...(typeof input.required === 'boolean' ? { required: input.required } : {}),
+  };
+}
+
+async function resolveStudioImageRuntimeBinding(
+  runtime: Runtime,
+  binding: StudioResolvedRuntimeRouteBinding,
+): Promise<StudioImageRuntimeBinding> {
+  const configuredEntries = configuredImageProfileEntries(binding.selectedParams);
+  if (configuredEntries) {
+    const configuredModel = imageModelAssetIdFromConfiguredEntries(configuredEntries);
+    if (configuredModel && !(
+      optionalStudioParamText(configuredModel) === optionalStudioParamText(binding.model)
+      || optionalStudioParamText(configuredModel) === optionalStudioParamText(binding.localModelId)
+    )) {
+      throw new Error(`image.generate profile_entries main model ${configuredModel} does not match the NimiAIConfig targetRef resolved model ${binding.model}.`);
+    }
+    if (binding.route === 'local') {
+      const assets = await listNimiRuntimeLocalAssetEntries(runtime);
+      const mainAsset = findLocalAssetById(assets, binding.model);
+      if (!mainAsset) {
+        throw new Error(`image.generate active model ${binding.model} is not present in Runtime local assets; reselect the Image active model.`);
+      }
+      if (configuredModel && !assetMatchesId(mainAsset, configuredModel)) {
+        throw new Error(`image.generate profile_entries main model ${configuredModel} is not the Runtime local asset selected by NimiAIConfig targetRef.`);
+      }
+      return {
+        binding: {
+          ...binding,
+          model: mainAsset.assetId || binding.model,
+          localModelId: mainAsset.localAssetId || binding.localModelId,
+          provider: mainAsset.engine || binding.provider,
+        },
+        profileEntries: configuredEntries,
+      };
+    }
+    return {
+      binding,
+      profileEntries: configuredEntries,
+    };
+  }
+
+  if (binding.route !== 'local') {
+    return {
+      binding,
+      profileEntries: [{
+        entry_id: 'main-image',
+        kind: 'asset',
+        title: 'Main image model',
+        capability: 'image.generate',
+        asset_id: binding.model,
+        asset_kind: 'image',
+        engine: binding.provider || 'media',
+        required: true,
+      }],
+    };
+  }
+
+  const assets = await listNimiRuntimeLocalAssetEntries(runtime);
+  const mainAsset = findLocalAssetById(assets, binding.model);
+  if (!mainAsset) {
+    throw new Error(`image.generate active model ${binding.model} is not present in Runtime local assets; reselect the Image active model.`);
+  }
+
+  const companionSlots = selectedCompanionSlots(binding.selectedParams);
+  const profileEntries: StudioImageProfileEntry[] = [
+    imageProfileEntryForAsset({
+      entryId: 'main-image',
+      title: 'Main image model',
+      capability: 'image.generate',
+      asset: mainAsset,
+      required: true,
+    }),
+  ];
+  const entryOverrides: StudioImageEntryOverride[] = [{
+    entry_id: 'main-image',
+    local_asset_id: mainAsset.localAssetId,
+  }];
+
+  for (const slot of COMPANION_SLOTS) {
+    const selected = companionSlots[slot.slot];
+    if (!selected) continue;
+    const asset = findLocalAssetById(assets, selected);
+    if (!asset) {
+      throw new Error(`image.generate companion slot ${slot.slot} references missing Runtime local asset ${selected}; reselect the companion model.`);
+    }
+    const entryId = `companion-${slot.slot.replace(/_path$/u, '').replace(/[^a-zA-Z0-9._:-]+/gu, '-')}`;
+    profileEntries.push(imageProfileEntryForAsset({
+      entryId,
+      title: `${slot.label} companion`,
+      capability: 'image.generate',
+      asset,
+      engineSlot: slot.slot,
+    }));
+    entryOverrides.push({
+      entry_id: entryId,
+      local_asset_id: asset.localAssetId,
+    });
+  }
+
+  return {
+    binding: {
+      ...binding,
+      model: mainAsset.assetId || binding.model,
+      localModelId: mainAsset.localAssetId || binding.localModelId,
+      provider: mainAsset.engine || binding.provider,
+    },
+    profileEntries,
+    entryOverrides,
+  };
+}
+
+function imageProfileExtensions(binding: StudioImageRuntimeBinding): StudioScenarioExtension[] {
+  const {
+    companionSlots: _companionSlots,
+    profileEntries: _profileEntries,
+    profile_entries: _profileEntriesSnake,
+    entry_overrides: _entryOverridesSnake,
+    entryOverrides: _entryOverrides,
+    ...forwardedParams
+  } = binding.binding.selectedParams;
+  return [{
+    namespace: 'nimi.scenario.image.request',
+    payload: toNimiRuntimeProtoStruct({
+      ...forwardedParams,
+      profile_entries: binding.profileEntries,
+      ...(binding.entryOverrides && binding.entryOverrides.length > 0 ? { entry_overrides: binding.entryOverrides } : {}),
+    }),
+  }];
+}
+
+function parseVoiceReference(value: unknown): NimiRuntimeSpeechVoiceReference | undefined {
+  if (!value) return undefined;
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    const kind = optionalStudioParamText(record.kind);
+    if (kind === 'preset_voice_id') {
+      return { kind, presetVoiceId: optionalStudioParamText(record.presetVoiceId ?? record.preset_voice_id) };
+    }
+    if (kind === 'voice_asset_id') {
+      return { kind, voiceAssetId: optionalStudioParamText(record.voiceAssetId ?? record.voice_asset_id) };
+    }
+    if (kind === 'provider_voice_ref') {
+      return { kind, providerVoiceRef: optionalStudioParamText(record.providerVoiceRef ?? record.provider_voice_ref) };
+    }
+    const providerVoiceRef = optionalStudioParamText(record.providerVoiceRef ?? record.provider_voice_ref);
+    if (providerVoiceRef) return { kind: 'provider_voice_ref', providerVoiceRef };
+    const presetVoiceId = optionalStudioParamText(record.presetVoiceId ?? record.preset_voice_id);
+    if (presetVoiceId) return { kind: 'preset_voice_id', presetVoiceId };
+    const voiceAssetId = optionalStudioParamText(record.voiceAssetId ?? record.voice_asset_id);
+    if (voiceAssetId) return { kind: 'voice_asset_id', voiceAssetId };
+    return undefined;
+  }
+  const text = optionalStudioParamText(value);
+  if (!text) return undefined;
+  const [prefix, ...rest] = text.split(':');
+  const payload = rest.join(':').trim();
+  if (prefix === 'preset_voice_id' && payload) return { kind: 'preset_voice_id', presetVoiceId: payload };
+  if (prefix === 'voice_asset_id' && payload) return { kind: 'voice_asset_id', voiceAssetId: payload };
+  if (prefix === 'provider_voice_ref' && payload) return { kind: 'provider_voice_ref', providerVoiceRef: payload };
+  return { kind: 'provider_voice_ref', providerVoiceRef: text };
+}
+
+function voiceReferenceFromParams(params: Readonly<Record<string, unknown>>) {
+  return toNimiRuntimeVoiceReference(parseVoiceReference(
+    params.voiceRef
+    ?? params.voice_ref
+    ?? params.providerVoiceRef
+    ?? params.provider_voice_ref
+    ?? params.presetVoiceId
+    ?? params.preset_voice_id
+    ?? params.voiceAssetId
+    ?? params.voice_asset_id,
+  ));
+}
+
 export type StudioImageCallDefaults = {
   aspectRatio?: string;
   timeoutMs?: number;
@@ -346,7 +841,10 @@ export type StudioImageCallParams = {
   model: string;
   route?: 'local' | 'cloud';
   connectorId?: string;
+  size?: string;
   aspectRatio?: string;
+  seed?: string;
+  responseFormat?: string;
   timeoutMs?: number;
 };
 
@@ -360,10 +858,15 @@ export function resolveStudioImageCallParams(
   _surfaceId: StudioAISurfaceId,
   defaults: StudioImageCallDefaults = {},
 ): StudioImageCallParams {
+  const selected = readStudioAIConfigSelectedParams('image.generate');
+  const responseFormat = readStringParam(selected, 'responseFormat');
   return {
     model: 'auto',
+    ...(readStringParam(selected, 'size') ? { size: readStringParam(selected, 'size') } : {}),
     ...(defaults.aspectRatio !== undefined ? { aspectRatio: defaults.aspectRatio } : {}),
-    ...(defaults.timeoutMs !== undefined ? { timeoutMs: defaults.timeoutMs } : {}),
+    ...(readStringParam(selected, 'seed') ? { seed: readStringParam(selected, 'seed') } : {}),
+    ...(responseFormat && responseFormat !== 'auto' ? { responseFormat } : {}),
+    ...numberField('timeoutMs', selected, defaults.timeoutMs),
   };
 }
 
@@ -410,8 +913,13 @@ export function createStudioImageGeneratePayload(input: {
 function bindScenarioPayloadToRoute<TPayload extends StudioImageGeneratePayload | StudioSpeechSynthesizePayload>(
   payload: TPayload,
   binding: StudioResolvedRuntimeRouteBinding,
-): TPayload {
-  return {
+  capability: 'image.generate' | 'audio.synthesize',
+  options: {
+    readonly extensions?: readonly StudioScenarioExtension[];
+    readonly spec?: ExecuteScenarioRequest['spec'];
+  } = {},
+): StudioBoundPayload<TPayload> {
+  return attachBoundRouteEvidence({
     ...payload,
     params: {
       ...payload.params,
@@ -427,30 +935,34 @@ function bindScenarioPayloadToRoute<TPayload extends StudioImageGeneratePayload 
         route: binding.route,
         connectorId: binding.connectorId,
       }),
+      ...(options.spec ? { spec: options.spec } : {}),
+      extensions: options.extensions ? [...options.extensions] : payload.request.extensions,
     },
-  };
+  }, capability, binding);
 }
 
 export async function bindStudioImageGeneratePayload(
   payload: StudioImageGeneratePayload,
   runtime: Runtime,
-): Promise<StudioImageGeneratePayload> {
+): Promise<StudioBoundImageGeneratePayload> {
   const binding = await resolveStudioRuntimeRouteBinding({
     runtime,
     capability: 'image.generate',
-    preferredModel: payload.params.model,
   });
-  return bindScenarioPayloadToRoute(payload, binding);
+  const imageBinding = await resolveStudioImageRuntimeBinding(runtime, binding);
+  return bindScenarioPayloadToRoute(payload, imageBinding.binding, 'image.generate', {
+    extensions: imageProfileExtensions(imageBinding),
+  });
 }
 
 export async function executeStudioImageGenerate(
-  payload: StudioImageGeneratePayload,
+  payload: StudioBoundImageGeneratePayload,
   runtime: Runtime,
 ): Promise<ExecuteScenarioResponse> {
-  const boundPayload = await bindStudioImageGeneratePayload(payload, runtime);
-  return runtime.ai.executeScenario(boundPayload.request, {
-    timeoutMs: boundPayload.params.timeoutMs,
-    metadata: toStudioCoreMetadata(boundPayload.surfaceId, undefined),
+  assertBoundStudioScenarioPayload('image.generate', payload);
+  return runtime.ai.executeScenario(payload.request, {
+    timeoutMs: payload.params.timeoutMs,
+    metadata: toStudioCoreMetadata(payload.surfaceId, undefined),
   });
 }
 
@@ -466,6 +978,10 @@ export type StudioSpeechCallParams = {
   connectorId?: string;
   voice?: string;
   speed?: number;
+  language?: string;
+  audioFormat?: string;
+  volume?: number;
+  pitch?: number;
   timeoutMs?: number;
 };
 
@@ -479,11 +995,22 @@ export function resolveStudioSpeechCallParams(
   _surfaceId: StudioAISurfaceId,
   defaults: StudioSpeechCallDefaults = {},
 ): StudioSpeechCallParams {
+  const selected = readStudioAIConfigSelectedParams('audio.synthesize');
+  const audioFormat = readFirstStringParam(selected, ['responseFormat', 'response_format', 'audioFormat', 'audio_format']);
+  const speed = readFirstNumberParam(selected, ['speakingRate', 'speaking_rate', 'speed']) ?? defaults.speed;
+  const language = readFirstStringParam(selected, ['languageHint', 'language_hint', 'language']);
+  const volume = readFirstNumberParam(selected, ['volume']);
+  const pitch = readFirstNumberParam(selected, ['pitchSemitones', 'pitch_semitones', 'pitch']);
+  const timeoutMs = readFirstNumberParam(selected, ['timeoutMs', 'timeout_ms']) ?? defaults.timeoutMs;
   return {
     model: 'auto',
     ...(defaults.voice !== undefined ? { voice: defaults.voice } : {}),
-    ...(defaults.speed !== undefined ? { speed: defaults.speed } : {}),
-    ...(defaults.timeoutMs !== undefined ? { timeoutMs: defaults.timeoutMs } : {}),
+    ...(speed !== undefined ? { speed } : {}),
+    ...(language ? { language } : {}),
+    ...(audioFormat ? { audioFormat } : {}),
+    ...(volume !== undefined ? { volume } : {}),
+    ...(pitch !== undefined ? { pitch } : {}),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
   };
 }
 
@@ -513,24 +1040,146 @@ export function createStudioSpeechSynthesizePayload(input: {
 export async function bindStudioSpeechSynthesizePayload(
   payload: StudioSpeechSynthesizePayload,
   runtime: Runtime,
-): Promise<StudioSpeechSynthesizePayload> {
+): Promise<StudioBoundSpeechSynthesizePayload> {
   const binding = await resolveStudioRuntimeRouteBinding({
     runtime,
     capability: 'audio.synthesize',
-    preferredModel: payload.params.model,
   });
-  return bindScenarioPayloadToRoute(payload, binding);
+  const scenarioSpec = payload.request.spec?.spec;
+  const voiceRef = voiceReferenceFromParams(binding.selectedParams);
+  const nextSpec = scenarioSpec?.oneofKind === 'speechSynthesize'
+    ? {
+      spec: {
+        oneofKind: 'speechSynthesize' as const,
+        speechSynthesize: {
+          ...scenarioSpec.speechSynthesize,
+          ...(voiceRef ? { voiceRef } : {}),
+        },
+      },
+    }
+    : payload.request.spec;
+  return bindScenarioPayloadToRoute(payload, binding, 'audio.synthesize', {
+    spec: nextSpec,
+  });
 }
 
 export async function executeStudioSpeechSynthesize(
-  payload: StudioSpeechSynthesizePayload,
+  payload: StudioBoundSpeechSynthesizePayload,
   runtime: Runtime,
 ): Promise<ExecuteScenarioResponse> {
-  const boundPayload = await bindStudioSpeechSynthesizePayload(payload, runtime);
-  return runtime.ai.executeScenario(boundPayload.request, {
-    timeoutMs: boundPayload.params.timeoutMs,
-    metadata: toStudioCoreMetadata(boundPayload.surfaceId, undefined),
+  assertBoundStudioScenarioPayload('audio.synthesize', payload);
+  return runtime.ai.executeScenario(payload.request, {
+    timeoutMs: payload.params.timeoutMs,
+    metadata: toStudioCoreMetadata(payload.surfaceId, undefined),
   });
 }
 
 export const STUDIO_DEFAULT_SPEECH_TIMING_MODE = SpeechTimingMode.UNSPECIFIED;
+
+export function isStudioAIRouteBindingFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || '');
+  return message.startsWith('NimiAIConfig targetRef ')
+    || message.includes(' configured NimiAIConfig target')
+    || message.includes(' route binding is missing or ambiguous')
+    || message.includes(' route binding unavailable')
+    || message.includes(' payload must be bound through NimiAIConfig targetRef');
+}
+
+function readBoundRouteEvidence(payload: unknown): StudioBoundRouteEvidence | null {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+  const evidence = (payload as Partial<StudioBoundPayload<unknown>>)[STUDIO_BOUND_ROUTE_SYMBOL];
+  return evidence || null;
+}
+
+function assertBoundRouteEvidence(
+  capability: StudioRuntimeRouteCapability,
+  payload: unknown,
+): StudioBoundRouteEvidence {
+  const evidence = readBoundRouteEvidence(payload);
+  if (!evidence || evidence.capability !== capability) {
+    throw new Error(`Runtime ${capability} payload must be bound through NimiAIConfig targetRef before execution.`);
+  }
+  return evidence;
+}
+
+function assertRouteHeadConsistency(input: {
+  readonly capability: StudioRuntimeRouteCapability;
+  readonly evidence: StudioBoundRouteEvidence;
+  readonly params: {
+    readonly model: string;
+    readonly route?: 'local' | 'cloud';
+    readonly connectorId?: string;
+  };
+  readonly head: ExecuteScenarioRequest['head'];
+}): void {
+  const { capability, evidence, params, head } = input;
+  if (!head) {
+    throw new Error(`Runtime ${capability} request head missing from the bound NimiAIConfig route.`);
+  }
+  if (isAutoStudioRouteModel(params.model)) {
+    throw new Error(`Runtime ${capability} payload must be bound through NimiAIConfig targetRef before execution.`);
+  }
+  if (params.model !== evidence.model) {
+    throw new Error(`Runtime ${capability} payload model does not match its NimiAIConfig targetRef binding.`);
+  }
+  if (params.route !== evidence.route) {
+    throw new Error(`Runtime ${capability} payload route does not match its NimiAIConfig targetRef binding.`);
+  }
+  if (String(params.connectorId || '') !== String(evidence.connectorId || '')) {
+    throw new Error(`Runtime ${capability} payload connectorId does not match its NimiAIConfig targetRef binding.`);
+  }
+  if (String(head.modelId || '') !== params.model) {
+    throw new Error(`Runtime ${capability} request head.modelId does not match the bound NimiAIConfig route.`);
+  }
+  if (head.routePolicy !== toRuntimeRoutePolicy(params.route)) {
+    throw new Error(`Runtime ${capability} request head.routePolicy does not match the bound NimiAIConfig route.`);
+  }
+  if (String(head.connectorId || '') !== String(params.connectorId || '')) {
+    throw new Error(`Runtime ${capability} request head.connectorId does not match the bound NimiAIConfig route.`);
+  }
+}
+
+function assertBoundStudioTextPayload(payload: StudioBoundTextGeneratePayload): void {
+  const evidence = assertBoundRouteEvidence('text.generate', payload);
+  if (isAutoStudioRouteModel(payload.params.model)) {
+    throw new Error('Runtime text.generate payload must be bound through NimiAIConfig targetRef before execution.');
+  }
+  if (payload.params.model !== evidence.model) {
+    throw new Error('Runtime text.generate payload model does not match its NimiAIConfig targetRef binding.');
+  }
+  if (payload.params.route !== evidence.route) {
+    throw new Error('Runtime text.generate payload route does not match its NimiAIConfig targetRef binding.');
+  }
+  if (String(payload.params.connectorId || '') !== String(evidence.connectorId || '')) {
+    throw new Error('Runtime text.generate payload connectorId does not match its NimiAIConfig targetRef binding.');
+  }
+  if (payload.request.model.modelId !== payload.params.model) {
+    throw new Error('Runtime text.generate request modelId does not match the bound NimiAIConfig route.');
+  }
+  if (String(payload.request.model.providerId || '') !== String(payload.params.connectorId || '')) {
+    throw new Error('Runtime text.generate request providerId does not match the bound NimiAIConfig route.');
+  }
+}
+
+function assertBoundStudioScenarioPayload(
+  capability: 'image.generate',
+  payload: StudioBoundImageGeneratePayload,
+): void;
+function assertBoundStudioScenarioPayload(
+  capability: 'audio.synthesize',
+  payload: StudioBoundSpeechSynthesizePayload,
+): void;
+function assertBoundStudioScenarioPayload(
+  capability: 'image.generate' | 'audio.synthesize',
+  payload: StudioBoundImageGeneratePayload | StudioBoundSpeechSynthesizePayload,
+): void {
+  const evidence = assertBoundRouteEvidence(capability, payload);
+  assertRouteHeadConsistency({
+    capability,
+    evidence,
+    params: payload.params,
+    head: payload.request.head,
+  });
+}

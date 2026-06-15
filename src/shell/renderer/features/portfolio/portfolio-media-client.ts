@@ -1,17 +1,17 @@
-import type { Realm } from '@nimiplatform/sdk/realm';
 import type {
   RealmAgentControllerSelectAvatarOperationRequest,
   RealmAgentControllerSelectAvatarOperationResponse,
 } from '@nimiplatform/sdk/realm/generated';
 import type { Runtime } from '@nimiplatform/sdk/runtime';
 import type { ExecuteScenarioResponse, ScenarioArtifact } from '@nimiplatform/sdk/runtime/generated';
-import { createStudioRealmClient } from '@renderer/data/realm-client.js';
+import { createStudioRealmClient, type StudioRealmSurface } from '@renderer/data/realm-client.js';
 import { createStudioRuntimeClient } from '@renderer/data/runtime-client.js';
 import {
   bindStudioImageGeneratePayload,
   bindStudioSpeechSynthesizePayload,
   executeStudioImageGenerate,
   executeStudioSpeechSynthesize,
+  isStudioAIRouteBindingFailure,
 } from './studio-ai-runtime.js';
 import type { OwnerPortfolioAgentDetail } from './portfolio-data.js';
 import {
@@ -26,8 +26,12 @@ import {
   type VisualImageGenerationInput,
   type VoiceDemoCandidateInput,
 } from './media-voice-candidate.js';
+import {
+  projectStudioRuntimeArtifacts,
+  type StudioRuntimeArtifactProjection,
+} from './runtime-artifact-projection.js';
 
-type StudioRealmClient = Pick<Realm, 'generated'>;
+type StudioRealmClient = StudioRealmSurface;
 
 type RealmSelectAvatarInput = RealmAgentControllerSelectAvatarOperationRequest['body'];
 type RealmSelectAvatarResponse = RealmAgentControllerSelectAvatarOperationResponse;
@@ -66,6 +70,8 @@ export type RuntimeVisualImageGenerationResult =
       jobId?: string;
       artifactIds: string[];
       artifactUris: string[];
+      previewUrls: string[];
+      artifacts: StudioRuntimeArtifactProjection[];
       traceId?: string;
       modelResolved?: string;
     };
@@ -76,6 +82,7 @@ export type RuntimeVisualImageGenerationResult =
     failure:
       | 'runtime-payload-invalid'
       | 'runtime-transport-unavailable'
+      | 'runtime-route-unbound'
       | 'runtime-generate-failed'
       | 'runtime-output-missing';
     message: string;
@@ -92,6 +99,8 @@ export type RuntimeVoiceDemoSynthesisResult =
     runtime: {
       jobId?: string;
       artifactIds: string[];
+      previewUrls: string[];
+      artifacts: StudioRuntimeArtifactProjection[];
       traceId?: string;
       modelResolved?: string;
     };
@@ -102,16 +111,12 @@ export type RuntimeVoiceDemoSynthesisResult =
     failure:
       | 'runtime-payload-invalid'
       | 'runtime-transport-unavailable'
+      | 'runtime-route-unbound'
       | 'runtime-synthesize-failed'
       | 'runtime-output-missing';
     message: string;
     draft: ReviewedVoiceDemoCandidatePayload | null;
   };
-
-function readOptionalString(record: Record<string, unknown>, key: string): string | undefined {
-  const value = record[key];
-  return typeof value === 'string' && value.trim() ? value : undefined;
-}
 
 function normalizeAvatarUrl(value: string): string | null {
   const trimmed = value.trim();
@@ -130,19 +135,22 @@ function normalizeAvatarUrl(value: string): string | null {
   }
 }
 
-function normalizeRuntimeVoiceDemoSynthesisOutput(
+async function normalizeRuntimeVoiceDemoSynthesisOutput(
+  runtime: Runtime,
   output: ExecuteScenarioResponse,
   draft: ReviewedVoiceDemoCandidatePayload,
-): RuntimeVoiceDemoSynthesisResult {
+): Promise<RuntimeVoiceDemoSynthesisResult> {
   const scenarioOutput = output.output?.output;
   const artifacts: readonly ScenarioArtifact[] = scenarioOutput?.oneofKind === 'speechSynthesize'
     ? scenarioOutput.speechSynthesize.artifacts
     : [];
-  const artifactIds = artifacts
-    .map((artifact) => artifact && typeof artifact === 'object'
-      ? readOptionalString(artifact as unknown as Record<string, unknown>, 'artifactId')
-      : undefined)
+  const projectedArtifacts = await projectStudioRuntimeArtifacts(runtime, artifacts);
+  const artifactIds = projectedArtifacts
+    .map((artifact) => artifact.artifactId)
     .filter((artifactId): artifactId is string => Boolean(artifactId));
+  const previewUrls = projectedArtifacts
+    .map((artifact) => artifact.previewUrl)
+    .filter((previewUrl): previewUrl is string => Boolean(previewUrl));
 
   if (artifactIds.length === 0) {
     return {
@@ -162,37 +170,40 @@ function normalizeRuntimeVoiceDemoSynthesisOutput(
     draft,
     runtime: {
       artifactIds,
+      previewUrls,
+      artifacts: projectedArtifacts,
       ...(output.traceId ? { traceId: output.traceId } : {}),
       ...(output.modelResolved ? { modelResolved: output.modelResolved } : {}),
     },
   };
 }
 
-function normalizeRuntimeVisualImageGenerationOutput(
+async function normalizeRuntimeVisualImageGenerationOutput(
+  runtime: Runtime,
   output: ExecuteScenarioResponse,
   draft: ReviewedVisualImageCandidatePayload,
-): RuntimeVisualImageGenerationResult {
+): Promise<RuntimeVisualImageGenerationResult> {
   const scenarioOutput = output.output?.output;
   const artifacts: readonly ScenarioArtifact[] = scenarioOutput?.oneofKind === 'imageGenerate'
     ? scenarioOutput.imageGenerate.artifacts
     : [];
-  const artifactIds = artifacts
-    .map((artifact) => artifact && typeof artifact === 'object'
-      ? readOptionalString(artifact as unknown as Record<string, unknown>, 'artifactId')
-      : undefined)
+  const projectedArtifacts = await projectStudioRuntimeArtifacts(runtime, artifacts);
+  const artifactIds = projectedArtifacts
+    .map((artifact) => artifact.artifactId)
     .filter((artifactId): artifactId is string => Boolean(artifactId));
-  const artifactUris = artifacts
-    .map((artifact) => artifact && typeof artifact === 'object'
-      ? readOptionalString(artifact as unknown as Record<string, unknown>, 'uri')
-      : undefined)
+  const artifactUris = projectedArtifacts
+    .map((artifact) => artifact.publicUri)
     .filter((uri): uri is string => Boolean(uri));
+  const previewUrls = projectedArtifacts
+    .map((artifact) => artifact.previewUrl)
+    .filter((previewUrl): previewUrl is string => Boolean(previewUrl));
 
-  if (artifactIds.length === 0 && artifactUris.length === 0) {
+  if (projectedArtifacts.length === 0) {
     return {
       ok: false,
       source: VISUAL_IMAGE_GENERATION_SOURCE,
       failure: 'runtime-output-missing',
-      message: 'Runtime imageGenerate scenario output missing artifact id or artifact URI.',
+      message: 'Runtime imageGenerate scenario output missing readable artifact.',
       draft,
     };
   }
@@ -206,6 +217,8 @@ function normalizeRuntimeVisualImageGenerationOutput(
     runtime: {
       artifactIds,
       artifactUris,
+      previewUrls,
+      artifacts: projectedArtifacts,
       ...(output.traceId ? { traceId: output.traceId } : {}),
       ...(output.modelResolved ? { modelResolved: output.modelResolved } : {}),
     },
@@ -264,7 +277,7 @@ export async function selectReviewedAgentAvatarUrl(
   }
 
   try {
-    const response = await realm.generated.agentControllerSelectAvatar({
+    const response = await realm.agentControllerSelectAvatar({
       path: { id: agentId },
       body: submitted,
     });
@@ -320,13 +333,15 @@ export async function synthesizeReviewedVoiceDemo(
       },
     };
     const output = await executeStudioSpeechSynthesize(boundPayload, runtimeClient);
-    return normalizeRuntimeVoiceDemoSynthesisOutput(output, boundDraft);
+    return await normalizeRuntimeVoiceDemoSynthesisOutput(runtimeClient, output, boundDraft);
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'runtime transport call failed.';
+    const routeUnbound = isStudioAIRouteBindingFailure(error);
     return {
       ok: false,
       source: VOICE_DEMO_SYNTHESIS_SOURCE,
-      failure: 'runtime-synthesize-failed',
-      message: `Runtime speechSynthesize scenario failed: ${error instanceof Error ? error.message : 'runtime transport call failed.'}`,
+      failure: routeUnbound ? 'runtime-route-unbound' : 'runtime-synthesize-failed',
+      message: routeUnbound ? message : `Runtime speechSynthesize scenario failed: ${message}`,
       draft: draft.payload,
     };
   }
@@ -371,13 +386,15 @@ export async function generateReviewedVisualImageCandidate(
       },
     };
     const output = await executeStudioImageGenerate(boundPayload, runtimeClient);
-    return normalizeRuntimeVisualImageGenerationOutput(output, boundDraft);
+    return await normalizeRuntimeVisualImageGenerationOutput(runtimeClient, output, boundDraft);
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'runtime transport call failed.';
+    const routeUnbound = isStudioAIRouteBindingFailure(error);
     return {
       ok: false,
       source: VISUAL_IMAGE_GENERATION_SOURCE,
-      failure: 'runtime-generate-failed',
-      message: `Runtime imageGenerate scenario failed: ${error instanceof Error ? error.message : 'runtime transport call failed.'}`,
+      failure: routeUnbound ? 'runtime-route-unbound' : 'runtime-generate-failed',
+      message: routeUnbound ? message : `Runtime imageGenerate scenario failed: ${message}`,
       draft: draft.payload,
     };
   }

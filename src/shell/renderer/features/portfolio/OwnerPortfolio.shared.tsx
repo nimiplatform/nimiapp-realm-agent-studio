@@ -13,6 +13,23 @@ export function TechnicalReviewDetails({ title, children }: { title: string; chi
   );
 }
 
+export function CandidateFactGrid({
+  facts,
+}: {
+  facts: ReadonlyArray<{ label: string; value: ReactNode }>;
+}) {
+  return (
+    <div className="ras-fact-grid">
+      {facts.map((fact) => (
+        <div key={fact.label} className="ras-fact">
+          <div className="ras-fact__label">{fact.label}</div>
+          <div className="ras-fact__value ras-break-anywhere">{fact.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function friendCountLabel(agent: OwnerPortfolioAgent) {
   if (agent.friendCount.status === 'available') {
     return `${agent.friendCount.value} friends`;
@@ -25,6 +42,24 @@ export function detailFriendCountLabel(agent: OwnerPortfolioAgentDetail) {
     return `${agent.friendCount.value} friends`;
   }
   return agent.friendCount.label;
+}
+
+export function settingFieldStatusLabel(field: SettingField): string {
+  if (field.status === 'available') return 'available';
+  if (field.status === 'available-empty') return field.emptyLabel || 'not set';
+  return field.unavailableLabel || 'source unavailable';
+}
+
+export function settingFieldDisplayValue(field: SettingField, emptyLabel = 'not set'): string {
+  if (field.value) return field.value;
+  if (field.status === 'available-empty') return field.emptyLabel || emptyLabel;
+  return field.unavailableLabel || 'source unavailable';
+}
+
+function settingFieldStatusTone(field: SettingField): 'success' | 'neutral' | 'warning' {
+  if (field.status === 'available') return 'success';
+  if (field.status === 'available-empty') return 'neutral';
+  return 'warning';
 }
 
 export function AgentCard({ agent, active, onSelect }: { agent: OwnerPortfolioAgent; active: boolean; onSelect: () => void }) {
@@ -66,8 +101,8 @@ export function AgentCard({ agent, active, onSelect }: { agent: OwnerPortfolioAg
 export function FieldStatus({ field }: { field: SettingField }) {
   return (
     <div className="mt-1 flex flex-wrap gap-2">
-      <StatusBadge tone={field.status === 'available' ? 'success' : 'warning'} shape="dot">
-        {field.status === 'available' ? 'available' : field.unavailableLabel}
+      <StatusBadge tone={settingFieldStatusTone(field)} shape="dot">
+        {settingFieldStatusLabel(field)}
       </StatusBadge>
       <StatusBadge tone="neutral">read-only</StatusBadge>
     </div>
@@ -75,16 +110,23 @@ export function FieldStatus({ field }: { field: SettingField }) {
 }
 
 export function ReadOnlySettingField({ field, multiline = false }: { field: SettingField; multiline?: boolean }) {
+  const sourceUnavailable = field.status === 'source-unavailable';
   const message = field.status === 'available'
     ? 'Current public profile value.'
-    : 'This value is not available from Realm yet.';
+    : field.status === 'available-empty'
+      ? 'Realm returned this field with no value set.'
+      : 'Realm did not return this field source.';
+
+  const placeholder = field.status === 'available-empty'
+    ? field.emptyLabel || 'not set'
+    : field.unavailableLabel || 'source unavailable';
 
   return (
-    <FieldShell label={field.label} message={message} messageTone={field.status === 'available' ? 'neutral' : 'danger'}>
+    <FieldShell label={field.label} message={message} messageTone={sourceUnavailable ? 'danger' : 'neutral'}>
       {multiline ? (
-        <TextareaField readOnly value={field.value} placeholder={field.unavailableLabel || 'setting read unavailable'} />
+        <TextareaField readOnly value={field.value} placeholder={placeholder} />
       ) : (
-        <TextField readOnly value={field.value} placeholder={field.unavailableLabel || 'setting read unavailable'} />
+        <TextField readOnly value={field.value} placeholder={placeholder} />
       )}
     </FieldShell>
   );
@@ -94,7 +136,7 @@ export function EvidenceCard({ field }: { field: SettingField }) {
   return (
     <Surface tone="card" padding="md">
       <div className="text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">{field.label}</div>
-      <div className="ras-break-anywhere mt-1 font-medium">{field.value || field.unavailableLabel}</div>
+      <div className="ras-break-anywhere mt-1 font-medium">{settingFieldDisplayValue(field)}</div>
       <FieldStatus field={field} />
     </Surface>
   );

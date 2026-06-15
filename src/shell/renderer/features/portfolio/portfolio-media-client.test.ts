@@ -1,6 +1,6 @@
-import type { Realm } from '@nimiplatform/sdk/realm';
+import type { StudioRealmSurface } from '@renderer/data/realm-client.js';
 import { FinishReason, RoutePolicy } from '@nimiplatform/sdk/runtime/generated';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildFinalizeDirectMediaResourceInput,
   buildRealmCreateAgentInput,
@@ -46,19 +46,25 @@ import { createOwnerAgentSettingsDraft } from './setting-proposal.js';
 import {
   candidatePayload,
   collectKeys,
+  configureStudioAIConfigTargetRefsForTest,
   createPayload,
   detailField,
   mockRealm,
   mockRuntimeWithRoutes,
   ownerAgentDetail,
   ownerAgentDetailWithWorldId,
+  resetStudioAIConfigForTest,
 } from './portfolio-client.test-helpers.js';
+
+beforeEach(() => {
+  resetStudioAIConfigForTest();
+});
 
 describe('owner portfolio media client', () => {
      it('selects a reviewed avatar URL through AgentsService.agentControllerSelectAvatar only', async () => {
       const realm = mockRealm();
       const result = await selectReviewedAgentAvatarUrl('agent-1', ' https://cdn.example.test/avatar.png ', realm);
-      const selectAvatar = realm.generated.agentControllerSelectAvatar;
+      const selectAvatar = realm.agentControllerSelectAvatar;
       const submittedPayload = vi.mocked(selectAvatar).mock.calls[0]?.[0]?.body;
 
       expect(selectAvatar).toHaveBeenCalledWith({
@@ -90,7 +96,7 @@ describe('owner portfolio media client', () => {
       const realm = mockRealm();
       const result = await selectReviewedAgentAvatarUrl('agent-1', 'data:text/plain,avatar', realm);
 
-      expect(realm.generated.agentControllerSelectAvatar).not.toHaveBeenCalled();
+      expect(realm.agentControllerSelectAvatar).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: false,
         source: 'Realm AgentsService.agentControllerSelectAvatar',
@@ -147,13 +153,17 @@ describe('owner portfolio media client', () => {
         executeScenario,
         routes: [{ capability: 'image.generate', model: 'runtime-image-model' }],
       });
+      configureStudioAIConfigTargetRefsForTest({
+        targetRefs: {
+          'image.generate': 'runtime-image-model',
+        },
+      });
 
       const result = await generateReviewedVisualImageCandidate({
         resourceType: 'IMAGE',
         bindingPoint: 'AGENT_CANDIDATE',
         prompt: 'Warm profile portrait.',
         notes: 'Use public bio only.',
-        model: 'runtime-image-model',
         aspectRatio: '1:1',
       }, ownerAgentDetail(), runtime as unknown as Parameters<typeof generateReviewedVisualImageCandidate>[2]);
 
@@ -184,7 +194,8 @@ describe('owner portfolio media client', () => {
         publicTruth: false,
         runtime: {
           artifactIds: ['artifact-image-1'],
-          artifactUris: ['runtime://artifact-image-1'],
+          artifactUris: [],
+          previewUrls: [],
           traceId: 'trace-image-output',
           modelResolved: 'runtime-image-model',
         },
@@ -211,13 +222,17 @@ describe('owner portfolio media client', () => {
         executeScenario,
         routes: [{ capability: 'image.generate', model: 'runtime-image-model' }],
       });
+      configureStudioAIConfigTargetRefsForTest({
+        targetRefs: {
+          'image.generate': 'runtime-image-model',
+        },
+      });
 
       const result = await generateReviewedVisualImageCandidate({
         resourceType: 'IMAGE',
         bindingPoint: 'AGENT_CANDIDATE',
         prompt: 'Warm profile portrait.',
         notes: '',
-        model: 'runtime-image-model',
         aspectRatio: '1:1',
       }, ownerAgentDetail(), runtime as unknown as Parameters<typeof generateReviewedVisualImageCandidate>[2]);
 
@@ -225,7 +240,7 @@ describe('owner portfolio media client', () => {
         ok: false,
         source: 'Runtime ScenarioService.executeScenario image.generate',
         failure: 'runtime-output-missing',
-        message: 'Runtime imageGenerate scenario output missing artifact id or artifact URI.',
+        message: 'Runtime imageGenerate scenario output missing readable artifact.',
       });
     });
 
@@ -252,10 +267,14 @@ describe('owner portfolio media client', () => {
         executeScenario,
         routes: [{ capability: 'audio.synthesize', model: 'runtime-tts-model' }],
       });
+      configureStudioAIConfigTargetRefsForTest({
+        targetRefs: {
+          'audio.synthesize': 'runtime-tts-model',
+        },
+      });
 
       const result = await synthesizeReviewedVoiceDemo({
         scriptText: '  Welcome in.  ',
-        model: 'runtime-tts-model',
       }, ownerAgentDetail(), runtime as unknown as Parameters<typeof synthesizeReviewedVoiceDemo>[2]);
 
       const submittedPayload = executeScenario.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
@@ -288,24 +307,21 @@ describe('owner portfolio media client', () => {
       });
     });
 
-     it('fails closed when Runtime speechSynthesize model config is missing', async () => {
-      const runtime = {
-        ai: {
-          executeScenario: vi.fn(),
-          streamScenario: async function* () {},
-        },
-      };
+     it('fails closed when Runtime speechSynthesize AIConfig targetRef is missing', async () => {
+      const runtime = mockRuntimeWithRoutes({
+        executeScenario: vi.fn(),
+        routes: [{ capability: 'audio.synthesize', model: 'runtime-tts-model' }],
+      });
       const result = await synthesizeReviewedVoiceDemo({
         scriptText: 'Welcome in.',
-        model: '',
       }, ownerAgentDetail(), runtime as unknown as Parameters<typeof synthesizeReviewedVoiceDemo>[2]);
 
       expect(runtime.ai.executeScenario).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: false,
         source: 'Runtime ScenarioService.executeScenario audio.synthesize',
-        failure: 'runtime-payload-invalid',
-        message: 'Runtime ScenarioService.executeScenario audio.synthesize model config missing',
+        failure: 'runtime-route-unbound',
+        message: 'NimiAIConfig targetRef missing for audio.synthesize. Configure AI models before running Studio AI.',
       });
     });
 
@@ -329,9 +345,13 @@ describe('owner portfolio media client', () => {
         executeScenario,
         routes: [{ capability: 'audio.synthesize', model: 'runtime-tts-model' }],
       });
+      configureStudioAIConfigTargetRefsForTest({
+        targetRefs: {
+          'audio.synthesize': 'runtime-tts-model',
+        },
+      });
       const result = await synthesizeReviewedVoiceDemo({
         scriptText: 'Welcome in.',
-        model: 'runtime-tts-model',
       }, ownerAgentDetail(), runtime as unknown as Parameters<typeof synthesizeReviewedVoiceDemo>[2]);
 
       expect(result).toMatchObject({
@@ -350,9 +370,13 @@ describe('owner portfolio media client', () => {
         executeScenario,
         routes: [{ capability: 'audio.synthesize', model: 'runtime-tts-model' }],
       });
+      configureStudioAIConfigTargetRefsForTest({
+        targetRefs: {
+          'audio.synthesize': 'runtime-tts-model',
+        },
+      });
       const result = await synthesizeReviewedVoiceDemo({
         scriptText: 'Welcome in.',
-        model: 'runtime-tts-model',
       }, ownerAgentDetail(), runtime as unknown as Parameters<typeof synthesizeReviewedVoiceDemo>[2]);
 
       expect(executeScenario).toHaveBeenCalledTimes(1);

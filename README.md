@@ -76,7 +76,7 @@ Realm Agent Studio inherits the Runtime account session from the Nimi
 desktop shell. On first launch:
 
 1. `runStudioBootstrap` loads `RuntimeDefaults` and constructs a
-   `local-first-party` PlatformClient (`@nimiplatform/sdk`).
+   developer-registered Runtime client (`@nimiplatform/sdk`).
 2. If no Runtime account session exists, the kit's `DesktopShellAuthPage`
    renders the login UI; on success, Runtime owns refresh-token custody and
    projects an account identity into the app store.

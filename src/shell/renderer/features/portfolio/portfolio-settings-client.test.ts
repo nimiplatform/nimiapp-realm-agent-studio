@@ -1,6 +1,6 @@
-import type { Realm } from '@nimiplatform/sdk/realm';
+import type { StudioRealmSurface } from '@renderer/data/realm-client.js';
 import { FinishReason, RoutePolicy } from '@nimiplatform/sdk/runtime/generated';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildFinalizeDirectMediaResourceInput,
   buildRealmCreateAgentInput,
@@ -46,20 +46,26 @@ import { createOwnerAgentSettingsDraft } from './setting-proposal.js';
 import {
   candidatePayload,
   collectKeys,
+  configureStudioAIConfigTargetRefsForTest,
   createPayload,
   detailField,
   mockRealm,
   mockRuntimeWithRoutes,
   ownerAgentDetail,
   ownerAgentDetailWithWorldId,
+  resetStudioAIConfigForTest,
 } from './portfolio-client.test-helpers.js';
+
+beforeEach(() => {
+  resetStudioAIConfigForTest();
+});
 
 describe('owner portfolio settings client', () => {
      it('reads owner settings through MeService.getMyRealmAgentSettings', async () => {
       const realm = mockRealm();
       const settings = await getOwnerAgentSettings('agent-1', realm);
 
-      expect(realm.generated.getMyRealmAgentSettings).toHaveBeenCalledWith({
+      expect(realm.getMyRealmAgentSettings).toHaveBeenCalledWith({
         path: { agentId: 'agent-1' },
       });
       expect(settings).toMatchObject({
@@ -83,7 +89,7 @@ describe('owner portfolio settings client', () => {
         rawRuleTextCandidate: 'Visible raw rule candidate must stay deferred.',
       };
       const result = await updateReviewedOwnerAgentSettings('agent-1', draft, current, realm);
-      const updateSettings = realm.generated.updateMyRealmAgentSettings;
+      const updateSettings = realm.updateMyRealmAgentSettings;
       const submittedRequest = vi.mocked(updateSettings).mock.calls[0]?.[0];
       const submittedPayload = submittedRequest?.body;
 
@@ -150,6 +156,11 @@ describe('owner portfolio settings client', () => {
         executeScenario,
         routes: [{ capability: 'text.generate', model: 'runtime-default-text' }],
       });
+      configureStudioAIConfigTargetRefsForTest({
+        targetRefs: {
+          'text.generate': 'runtime-default-text',
+        },
+      });
 
       const result = await proposeReviewedOwnerAgentSettings('agent-1', draft, current, runtime);
       const submittedPayload = executeScenario.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
@@ -185,7 +196,7 @@ describe('owner portfolio settings client', () => {
           traceId: 'trace-settings',
         },
       });
-      expect(realm.generated.updateMyRealmAgentSettings).not.toHaveBeenCalled();
+      expect(realm.updateMyRealmAgentSettings).not.toHaveBeenCalled();
     });
 
      it('fails closed for Runtime settings proposal when intent is missing', async () => {
@@ -224,7 +235,7 @@ describe('owner portfolio settings client', () => {
         rawRuleTextCandidate: 'Only raw rule review.',
       }, current, realm);
 
-      expect(realm.generated.updateMyRealmAgentSettings).not.toHaveBeenCalled();
+      expect(realm.updateMyRealmAgentSettings).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: false,
         source: 'Realm MeService.updateMyRealmAgentSettings',
@@ -238,7 +249,7 @@ describe('owner portfolio settings client', () => {
       const realm = mockRealm();
       const settings = await getAgentVisibilitySettings('agent-1', realm);
 
-      expect(realm.generated.agentControllerGetVisibility).toHaveBeenCalledWith({
+      expect(realm.agentControllerGetVisibility).toHaveBeenCalledWith({
         path: { id: 'agent-1' },
       });
       expect(settings).toEqual({
@@ -264,7 +275,7 @@ describe('owner portfolio settings client', () => {
         profileVisibility: 'PUBLIC',
       };
       const result = await updateReviewedAgentVisibility('agent-1', draft, current, realm);
-      const updateVisibility = realm.generated.agentControllerUpdateVisibility;
+      const updateVisibility = realm.agentControllerUpdateVisibility;
       const submittedRequest = vi.mocked(updateVisibility).mock.calls[0]?.[0];
       const submittedPayload = submittedRequest?.body;
 
@@ -309,7 +320,7 @@ describe('owner portfolio settings client', () => {
       } as AgentVisibilityDraft;
       const invalid = await updateReviewedAgentVisibility('agent-1', invalidDraft, current, realm);
 
-      expect(realm.generated.agentControllerUpdateVisibility).not.toHaveBeenCalled();
+      expect(realm.agentControllerUpdateVisibility).not.toHaveBeenCalled();
       expect(noChange).toMatchObject({
         ok: false,
         source: 'Realm AgentsService.agentControllerUpdateVisibility',
@@ -349,7 +360,7 @@ describe('owner portfolio settings client', () => {
      it('projects Runtime context through world-only RuntimeProjectionsService and returns summary counts only', async () => {
       const realm = mockRealm();
       const result = await projectAgentRuntimeContextSummary(ownerAgentDetail(), realm);
-      const projectRuntimePayload = realm.generated.projectRuntimePayload;
+      const projectRuntimePayload = realm.projectRuntimePayload;
       const submittedRequest = vi.mocked(projectRuntimePayload).mock.calls[0]?.[0];
       const submittedPayload = submittedRequest?.body;
 
@@ -400,7 +411,7 @@ describe('owner portfolio settings client', () => {
         payload: {
           worldRules: [{ statement: 'world raw' }],
         },
-      } as unknown as Awaited<ReturnType<Realm['generated']['projectRuntimePayload']>>);
+      } as unknown as Awaited<ReturnType<StudioRealmSurface['projectRuntimePayload']>>);
 
       expect(summary).toEqual({
         source: 'Realm RuntimeProjectionsService.projectRuntimePayload',
@@ -423,7 +434,7 @@ describe('owner portfolio settings client', () => {
         world: detailField('world', 'World evidence', ''),
       }, realm);
 
-      expect(realm.generated.projectRuntimePayload).not.toHaveBeenCalled();
+      expect(realm.projectRuntimePayload).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: false,
         truthWrite: false,

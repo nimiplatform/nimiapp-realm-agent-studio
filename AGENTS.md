@@ -5,7 +5,8 @@
 ## Identity
 
 - **App name (English)**: Realm Agent Studio
-- **App ID**: `app.nimi.realm-agent-studio`
+- **Canonical Nimi app_id**: `nimi.realm-agent-studio`
+- **Tauri identifier**: `nimi.realm-agent-studio`
 - **One-line**: Owner-facing creation and operation desktop app for user-owned public Realm Agents.
 - **Status**: Pre-Alpha, not yet launched.
 
@@ -16,7 +17,7 @@
 | Desktop shell | Tauri 2 | `src-tauri/` |
 | Renderer | React 19 + Vite 7 + Tailwind 4 | `src/shell/renderer/` |
 | Routing | react-router-dom 7 | `src/shell/renderer/app-shell/routes.tsx` |
-| Auth & runtime bridge | `nimi-shell-tauri` (crates.io) | `src-tauri/src/main.rs` |
+| Auth & runtime bridge | local `nimi-shell-tauri` crate | `src-tauri/src/main.rs` |
 | UI components | `@nimiplatform/kit` (npm) | renderer-wide |
 | Platform client | `@nimiplatform/sdk` (npm) | `app-shell/studio-platform.ts` |
 | State | Zustand | `app-shell/app-store.ts` |
@@ -95,8 +96,9 @@ field into a release/permission claim.
 
 When editing admission inputs:
 
-- Keep `app_id: app.nimi.realm-agent-studio` identical across the manifest,
-  `submission.yaml`, `tauri.conf.json` (`identifier`), and `scripts/pack.mjs`.
+- Keep `app_id: nimi.realm-agent-studio` identical across the manifest,
+  `submission.yaml`, `scripts/pack.mjs`, Runtime/SDK callers, and the Tauri
+  identifier. Do not introduce a second OS-bundle-only app identity.
 - New scope declarations in `nimi.app.yaml` must carry an explicit
   `purpose:` and a real product justification — they are review transparency,
   not grants.

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { resetStudioAIConfigForTest } from './portfolio-client.test-helpers.js';
 import type { OwnerPortfolioAgentDetail } from './portfolio-data.js';
 import {
   applyRuntimePostCopyProposal,
@@ -32,30 +33,30 @@ const agent: OwnerPortfolioAgentDetail = {
   },
   bio: {
     key: 'bio',
-    label: 'Bio',
+    label: 'Profile description',
     value: '',
-    status: 'source-unavailable',
+    status: 'available-empty',
     source: 'Realm MeService.getMyRealmAgent',
     readOnly: true,
-    unavailableLabel: 'setting read unavailable',
+    emptyLabel: 'not set',
   },
   greeting: {
     key: 'greeting',
     label: 'Greeting',
     value: '',
-    status: 'source-unavailable',
+    status: 'available-empty',
     source: 'Realm MeService.getMyRealmAgent',
     readOnly: true,
-    unavailableLabel: 'setting read unavailable',
+    emptyLabel: 'not set',
   },
   profileCoverUrl: {
     key: 'profileCoverUrl',
     label: 'Profile cover URL',
     value: '',
-    status: 'source-unavailable',
+    status: 'available-empty',
     source: 'Realm MeService.getMyRealmAgent',
     readOnly: true,
-    unavailableLabel: 'setting read unavailable',
+    emptyLabel: 'not set',
   },
   ownership: {
     key: 'ownership',
@@ -105,6 +106,10 @@ function collectKeys(value: unknown, keys = new Set<string>()) {
   }
   return keys;
 }
+
+beforeEach(() => {
+  resetStudioAIConfigForTest();
+});
 
 describe('local post draft normalization', () => {
   it('trims caption and normalizes distinct tags', () => {
@@ -190,13 +195,12 @@ describe('app-local post schedule candidate', () => {
       agent,
       draft: baseInput,
       intent: 'Announce the new artifact pass.',
-      model: 'configured-text-model',
     });
 
     expect(result.ok).toBe(true);
     expect(result.payload).toMatchObject({
       request: {
-        model: { modelId: 'configured-text-model' },
+        model: { modelId: 'auto' },
         parameters: {
           metadata: {
             domain: 'realm-agent-studio.post-copy',
@@ -239,7 +243,18 @@ describe('app-local post schedule candidate', () => {
     expect(() => normalizeRuntimePostCopyProposal(JSON.stringify({
       caption: 'publish me',
       worldId: 'world-forbidden',
-    }), baseInput)).toThrow('forbidden worldId');
+    }), baseInput)).toThrow('unknown field worldId');
+  });
+
+  it('rejects Runtime post copy proposals wrapped in prose or carrying unknown fields', () => {
+    expect(() => normalizeRuntimePostCopyProposal(`Here is the JSON:\n${JSON.stringify({
+      caption: 'publish me',
+    })}`, baseInput)).toThrow('single JSON object');
+    expect(() => normalizeRuntimePostCopyProposal(JSON.stringify({
+      caption: 'publish me',
+      tagsText: 'studio',
+      extra: 'not admitted',
+    }), baseInput)).toThrow('unknown field extra');
   });
 
   it('normalizes local date and time input', () => {

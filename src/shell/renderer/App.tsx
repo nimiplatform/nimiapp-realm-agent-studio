@@ -1,28 +1,30 @@
-import { BrowserRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { HashRouter } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { TooltipProvider } from '@nimiplatform/kit/ui';
+import { ShellErrorBoundary } from '@nimiplatform/kit/telemetry/error-boundary';
 import { AppRoutes } from './app-shell/routes.js';
 import { ShellLayout } from './app-shell/shell-layout.js';
 import { AuthProvider } from './app-shell/auth-provider.js';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { retry: 1, staleTime: 5 * 60 * 1000, refetchOnWindowFocus: false },
-  },
-});
+import { studioQueryClient } from './infra/query-client.js';
 
 export function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <BrowserRouter>
-          <AuthProvider>
-            <ShellLayout>
-              <AppRoutes />
-            </ShellLayout>
-          </AuthProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ShellErrorBoundary
+      appName="Realm Agent Studio"
+      fallbackTitle="Realm Agent Studio renderer failed"
+      fallbackHint="Restart Realm Agent Studio after checking the renderer diagnostics."
+    >
+      <QueryClientProvider client={studioQueryClient}>
+        <TooltipProvider>
+          <HashRouter>
+            <AuthProvider>
+              <ShellLayout>
+                <AppRoutes />
+              </ShellLayout>
+            </AuthProvider>
+          </HashRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ShellErrorBoundary>
   );
 }

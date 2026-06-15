@@ -1,9 +1,8 @@
-import type { Realm } from '@nimiplatform/sdk/realm';
 import type {
   RealmAgentControllerCheckHandleOperationResponse,
   RealmAgentControllerCreateOperationResponse,
 } from '@nimiplatform/sdk/realm/generated';
-import { createStudioRealmClient } from '@renderer/data/realm-client.js';
+import { createStudioRealmClient, type StudioRealmSurface } from '@renderer/data/realm-client.js';
 import {
   normalizeOwnerPortfolio,
   normalizeOwnerPortfolioAgentDetail,
@@ -23,8 +22,18 @@ import {
   type SelectableRealmWorld,
   type SelectedWorldPreview,
 } from './create-agent-draft.js';
+import {
+  getOwnerAgentSettings,
+  updateReviewedOwnerAgentSettings,
+  type RealmOwnerAgentSettings,
+  type RealmOwnerAgentSettingsUpdateResult,
+} from './portfolio-settings-client.js';
+import {
+  OWNER_SETTINGS_SAVE_SOURCE,
+  createOwnerAgentSettingsDraft,
+} from './setting-proposal.js';
 
-type StudioRealmClient = Pick<Realm, 'generated'>;
+type StudioRealmClient = StudioRealmSurface;
 
 type RealmCreateAgentResponse = RealmAgentControllerCreateOperationResponse;
 type RealmAgentHandleAvailabilityResponse = RealmAgentControllerCheckHandleOperationResponse;
@@ -41,11 +50,54 @@ export type RealmAgentCreateResult =
     agent: RealmCreateAgentResponse;
     canonical: RealmAgentCreateCanonicalFields;
   }
+	  | {
+	    ok: false;
+	    source: typeof REALM_AGENT_CREATE_SOURCE;
+	    failure: 'realm-create-agent-failed' | 'realm-create-agent-missing-canonical-id';
+	    message: string;
+	  };
+
+export type RealmAgentCreateProfileSettingsCompletion =
+  | {
+    status: 'not-requested';
+    truthWrite: false;
+    description: '';
+  }
+  | {
+    status: 'already-current';
+    source: 'Realm MeService.getMyRealmAgentSettings';
+    truthWrite: false;
+    description: string;
+    settings: RealmOwnerAgentSettings;
+  }
+  | {
+    status: 'updated';
+    source: typeof OWNER_SETTINGS_SAVE_SOURCE;
+    truthWrite: true;
+    description: string;
+    submitted: Extract<RealmOwnerAgentSettingsUpdateResult, { ok: true }>['submitted'];
+    settings: RealmOwnerAgentSettings;
+  };
+
+export type RealmAgentCreateWithProfileSettingsResult =
+  | {
+    ok: true;
+    source: typeof REALM_AGENT_CREATE_SOURCE;
+    agent: RealmCreateAgentResponse;
+    canonical: RealmAgentCreateCanonicalFields;
+    profileSettings: RealmAgentCreateProfileSettingsCompletion;
+  }
   | {
     ok: false;
     source: typeof REALM_AGENT_CREATE_SOURCE;
-    failure: 'realm-create-agent-failed' | 'realm-create-agent-missing-canonical-id';
+    failure:
+      | 'realm-create-agent-failed'
+      | 'realm-create-agent-missing-canonical-id'
+      | 'realm-create-agent-profile-settings-read-failed'
+      | 'realm-create-agent-profile-settings-failed';
     message: string;
+    createdCanonical?: RealmAgentCreateCanonicalFields;
+    settingsResult?: RealmOwnerAgentSettingsUpdateResult;
   };
 
 export type RealmAgentHandleAvailabilityResult =
@@ -130,7 +182,7 @@ export function normalizeRealmAgentCreateResult(agent: RealmCreateAgentResponse)
   };
 }
 export async function listOwnerPortfolioAgents(realm: StudioRealmClient = createStudioRealmClient()): Promise<OwnerPortfolioAgent[]> {
-  const agents = await realm.generated.listMyRealmAgents({ path: {} });
+  const agents = await realm.listMyRealmAgents({ path: {} });
   return normalizeOwnerPortfolio(agents);
 }
 
@@ -138,14 +190,14 @@ export async function getOwnerPortfolioAgentDetail(
   agentId: string,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<OwnerPortfolioAgentDetail> {
-  const agent = await realm.generated.getMyRealmAgent({ path: { agentId } });
+  const agent = await realm.getMyRealmAgent({ path: { agentId } });
   return normalizeOwnerPortfolioAgentDetail(agent);
 }
 
 export async function listCreateRealmAgentSelectableWorlds(
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<SelectableRealmWorld[]> {
-  const worlds = await realm.generated.worldControllerListWorlds({ path: {} });
+  const worlds = await realm.worldControllerListWorlds({ path: {} });
   return normalizeSelectableWorlds(worlds as RealmAgentCreationWorldDto[]);
 }
 
@@ -153,7 +205,7 @@ export async function getCreateRealmAgentWorldPreview(
   worldId: string,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<SelectedWorldPreview> {
-  const world = await realm.generated.worldControllerGetWorldDetailWithAgents({
+  const world = await realm.worldControllerGetWorldDetailWithAgents({
     path: { id: worldId },
     query: { recommendedAgentLimit: 4 },
   });
@@ -167,7 +219,6 @@ export async function checkCreateRealmAgentHandleAvailability(
   const normalizedHandle = normalizeCreateRealmAgentDraft({
     handle,
     displayName: '',
-    publicBio: '',
     concept: '',
     description: '',
     ruleText: '',
@@ -188,7 +239,7 @@ export async function checkCreateRealmAgentHandleAvailability(
   }
 
   try {
-    const response = await realm.generated.agentControllerCheckHandle({
+    const response = await realm.agentControllerCheckHandle({
       path: {},
       query: { handle: normalizedHandle },
     });
@@ -223,7 +274,7 @@ export async function createReviewedRealmAgent(
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<RealmAgentCreateResult> {
   try {
-    const agent = await realm.generated.agentControllerCreate({
+    const agent = await realm.agentControllerCreate({
       path: {},
       body: buildRealmCreateAgentInput(payload),
     });
@@ -236,6 +287,87 @@ export async function createReviewedRealmAgent(
       message: error instanceof Error ? error.message : 'Realm Create Agent failed.',
     };
   }
+}
+
+export async function createReviewedRealmAgentWithProfileSettings(
+  payload: ReviewedCreateRealmAgentPayload,
+  realm: StudioRealmClient = createStudioRealmClient(),
+): Promise<RealmAgentCreateWithProfileSettingsResult> {
+  const createResult = await createReviewedRealmAgent(payload, realm);
+  if (!createResult.ok) {
+    return createResult;
+  }
+
+  const profileDescription = (payload.publicFields.description || payload.body.description || '').trim();
+  if (!profileDescription) {
+    return {
+      ...createResult,
+      profileSettings: {
+        status: 'not-requested',
+        truthWrite: false,
+        description: '',
+      },
+    };
+  }
+
+  let currentSettings: RealmOwnerAgentSettings;
+  try {
+    currentSettings = await getOwnerAgentSettings(createResult.canonical.id, realm);
+  } catch (error) {
+    return {
+      ok: false,
+      source: REALM_AGENT_CREATE_SOURCE,
+      failure: 'realm-create-agent-profile-settings-read-failed',
+      message: error instanceof Error ? error.message : 'Realm owner settings read failed after create.',
+      createdCanonical: createResult.canonical,
+    };
+  }
+
+  if ((currentSettings.description || '').trim() === profileDescription) {
+    return {
+      ...createResult,
+      profileSettings: {
+        status: 'already-current',
+        source: 'Realm MeService.getMyRealmAgentSettings',
+        truthWrite: false,
+        description: profileDescription,
+        settings: currentSettings,
+      },
+    };
+  }
+
+  const settingsDraft = {
+    ...createOwnerAgentSettingsDraft(currentSettings),
+    description: profileDescription,
+  };
+  const settingsResult = await updateReviewedOwnerAgentSettings(
+    createResult.canonical.id,
+    settingsDraft,
+    currentSettings,
+    realm,
+  );
+  if (!settingsResult.ok) {
+    return {
+      ok: false,
+      source: REALM_AGENT_CREATE_SOURCE,
+      failure: 'realm-create-agent-profile-settings-failed',
+      message: settingsResult.message,
+      createdCanonical: createResult.canonical,
+      settingsResult,
+    };
+  }
+
+  return {
+    ...createResult,
+    profileSettings: {
+      status: 'updated',
+      source: OWNER_SETTINGS_SAVE_SOURCE,
+      truthWrite: true,
+      description: profileDescription,
+      submitted: settingsResult.submitted,
+      settings: settingsResult.settings,
+    },
+  };
 }
 
 export * from './portfolio-media-client.js';

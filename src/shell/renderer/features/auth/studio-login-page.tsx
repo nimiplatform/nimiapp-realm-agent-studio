@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { DesktopShellAuthPage } from '@nimiplatform/kit/auth';
 import '@nimiplatform/kit/auth/styles.css';
 import { useAppStore } from '../../app-shell/app-store.js';
@@ -9,6 +9,7 @@ import {
 import { studioTauriOAuthBridge } from '../../bridge/index.js';
 
 export function StudioLoginPage() {
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const adapter = useMemo(() => createStudioDesktopBrowserAuthAdapter(), []);
   const runtimeAccountBroker = useMemo(() => createStudioRuntimeAccountBrowserBroker(), []);
   // Runtime owns the OAuth `authorize` URL end-to-end; the kit's optional
@@ -21,6 +22,7 @@ export function StudioLoginPage() {
       session={{
         mode: 'desktop-browser',
         authStatus: 'unauthenticated',
+        authError: statusMessage,
         setAuthSession: (user) => {
           const store = useAppStore.getState();
           if (!user || !user.id) {
@@ -34,11 +36,15 @@ export function StudioLoginPage() {
             avatarUrl: user.avatarUrl ? String(user.avatarUrl) : undefined,
           });
         },
+        setStatusBanner: (banner) => {
+          setStatusMessage(banner?.message || null);
+        },
       }}
       desktopBrowserAuth={{
         baseUrl: webBaseUrl || undefined,
         bridge: studioTauriOAuthBridge,
         runtimeAccountBroker,
+        hintVisibility: 'always',
       }}
       testIds={{
         screen: 'realm-agent-studio-login-page',

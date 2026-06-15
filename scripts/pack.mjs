@@ -20,8 +20,11 @@ if (!submission.includes('submission_role: developer-submitted-input')) {
 if (!buildProfile.includes('profile_role: developer-workflow-input')) {
   throw new Error('developer build profile marker missing in build-profile.yaml');
 }
-if (tauriConfig.identifier !== 'app.nimi.realm-agent-studio') {
-  throw new Error(`tauri identifier mismatch: expected app.nimi.realm-agent-studio, got ${tauriConfig.identifier}`);
+if (!manifest.includes('app_id: nimi.realm-agent-studio')) {
+  throw new Error('manifest app_id must be nimi.realm-agent-studio');
+}
+if (tauriConfig.identifier !== 'nimi.realm-agent-studio') {
+  throw new Error(`tauri identifier mismatch: expected nimi.realm-agent-studio, got ${tauriConfig.identifier}`);
 }
 
 mkdirSync('dist', { recursive: true });
@@ -30,7 +33,7 @@ const packet = {
   packetRole: 'developer-submitted-input',
   packageName: packageJson.name,
   appVersion: tauriConfig.version,
-  appId: 'app.nimi.realm-agent-studio',
+  appId: 'nimi.realm-agent-studio',
   displayName: tauriConfig.productName,
   tauriIdentifier: tauriConfig.identifier,
   rendererEntry: 'dist/index.html',

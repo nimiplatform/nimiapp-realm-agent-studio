@@ -14,7 +14,10 @@ import {
 } from '@nimiplatform/kit/ui';
 import type { OwnerPortfolioAgentDetail } from '@renderer/features/portfolio/portfolio-data.js';
 import { classifyAgentDetailFailure } from '@renderer/features/portfolio/portfolio-data.js';
-import { detailFriendCountLabel } from '@renderer/features/portfolio/OwnerPortfolio.shared.js';
+import {
+  detailFriendCountLabel,
+  settingFieldDisplayValue,
+} from '@renderer/features/portfolio/OwnerPortfolio.shared.js';
 import { useOwnerAgentDetailQuery } from './use-agent-detail-query.js';
 
 export type AgentShellTabKey = 'detail' | 'settings' | 'assets' | 'posts' | 'insights';
@@ -85,10 +88,10 @@ export function AgentHeader({
           />
           <div style={{ minWidth: 0, flex: 1 }}>
             <h2 className="ras-agent-header__name">
-              {agent.displayName.value || 'Display name unavailable'}
+              {settingFieldDisplayValue(agent.displayName, 'Display name not set')}
             </h2>
             <span className="ras-agent-header__handle">
-              {agent.handle.value ? `@${agent.handle.value}` : 'handle setting read unavailable'}
+              {agent.handle.value ? `@${agent.handle.value}` : settingFieldDisplayValue(agent.handle, 'handle not set')}
             </span>
           </div>
         </div>
@@ -96,7 +99,7 @@ export function AgentHeader({
           <StatusBadge tone={agent.friendCount.status === 'available' ? 'success' : 'warning'}>
             {detailFriendCountLabel(agent)}
           </StatusBadge>
-          <StatusBadge tone="neutral">{agent.world.value || 'world unavailable'}</StatusBadge>
+          <StatusBadge tone="neutral">{settingFieldDisplayValue(agent.world, 'world not set')}</StatusBadge>
         </div>
       </div>
     </section>

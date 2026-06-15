@@ -1,4 +1,3 @@
-import type { Realm } from '@nimiplatform/sdk/realm';
 import type {
   RealmAgentControllerGetVisibilityOperationResponse,
   RealmGetMyRealmAgentSettingsOperationResponse,
@@ -6,10 +5,10 @@ import type {
   RealmProjectRuntimePayloadOperationResponse,
   RealmUpdateMyRealmAgentSettingsOperationRequest,
 } from '@nimiplatform/sdk/realm/generated';
-import { createStudioRealmClient } from '@renderer/data/realm-client.js';
+import { createStudioRealmClient, type StudioRealmSurface } from '@renderer/data/realm-client.js';
 import { createStudioRuntimeClient } from '@renderer/data/runtime-client.js';
 import {
-  resolveStudioTextCallParams,
+  isStudioAIRouteBindingFailure,
   runStudioTextGenerate,
   type StudioRuntimeAIClient,
   type StudioTextGeneratePayload,
@@ -25,7 +24,7 @@ import {
   type RuntimeOwnerSettingsProposal,
 } from './setting-proposal.js';
 
-type StudioRealmClient = Pick<Realm, 'generated'>;
+type StudioRealmClient = StudioRealmSurface;
 
 type RuntimeTextClient = StudioRuntimeAIClient;
 
@@ -138,6 +137,7 @@ export type RuntimeOwnerSettingsProposalResult =
     failure:
       | 'runtime-settings-proposal-payload-invalid'
       | 'runtime-settings-proposal-transport-unavailable'
+      | 'runtime-settings-proposal-route-unbound'
       | 'runtime-settings-proposal-failed'
       | 'runtime-settings-proposal-invalid-output';
     message: string;
@@ -239,14 +239,14 @@ export async function getAgentVisibilitySettings(
   agentId: string,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<RealmAgentVisibilitySettings> {
-  return realm.generated.agentControllerGetVisibility({ path: { id: agentId } });
+  return realm.agentControllerGetVisibility({ path: { id: agentId } });
 }
 
 export async function getOwnerAgentSettings(
   agentId: string,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<RealmOwnerAgentSettings> {
-  return realm.generated.getMyRealmAgentSettings({ path: { agentId } });
+  return realm.getMyRealmAgentSettings({ path: { agentId } });
 }
 
 export async function updateReviewedAgentVisibility(
@@ -271,7 +271,7 @@ export async function updateReviewedAgentVisibility(
   }
 
   try {
-    const settings = await realm.generated.agentControllerUpdateVisibility({
+    const settings = await realm.agentControllerUpdateVisibility({
       path: { id: agentId },
       body: input,
     });
@@ -307,7 +307,6 @@ export async function proposeReviewedOwnerAgentSettings(
     agentId,
     draft,
     current,
-    model: resolveStudioTextCallParams('realm-agent-studio.settings-proposal').model,
   });
   if (!built.ok) {
     return {
@@ -363,13 +362,15 @@ export async function proposeReviewedOwnerAgentSettings(
       };
     }
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'runtime transport call failed.';
+    const routeUnbound = isStudioAIRouteBindingFailure(error);
     return {
       ok: false,
       source: SETTINGS_AI_PROPOSAL_SOURCE,
       candidate: false,
       truthWrite: false,
-      failure: 'runtime-settings-proposal-failed',
-      message: `Runtime runtime.ai.text.generate failed: ${error instanceof Error ? error.message : 'runtime transport call failed.'}`,
+      failure: routeUnbound ? 'runtime-settings-proposal-route-unbound' : 'runtime-settings-proposal-failed',
+      message: routeUnbound ? message : `Runtime runtime.ai.text.generate failed: ${message}`,
       submitted: null,
     };
   }
@@ -395,7 +396,7 @@ export async function updateReviewedOwnerAgentSettings(
 
   const submitted = built.input as RealmOwnerAgentSettingsUpdateInput;
   try {
-    const settings = await realm.generated.updateMyRealmAgentSettings({
+    const settings = await realm.updateMyRealmAgentSettings({
       path: { agentId },
       body: submitted,
     });
@@ -435,7 +436,7 @@ export async function projectAgentRuntimeContextSummary(
   }
 
   try {
-    const response = await realm.generated.projectRuntimePayload({
+    const response = await realm.projectRuntimePayload({
       path: {},
       body: submitted,
     });

@@ -1,5 +1,5 @@
-import type { Realm } from '@nimiplatform/sdk/realm';
-import { describe, expect, it, vi } from 'vitest';
+import type { StudioRealmSurface } from '@renderer/data/realm-client.js';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildFinalizeDirectMediaResourceInput,
   buildRealmCreateAgentInput,
@@ -12,6 +12,7 @@ import {
   createAgentVisibilityDraft,
   createReviewedPostTextResource,
   createReviewedRealmAgent,
+  createReviewedRealmAgentWithProfileSettings,
   generateReviewedVisualImageCandidate,
   getAgentVisibilitySettings,
   getCreateRealmAgentWorldPreview,
@@ -50,63 +51,68 @@ import {
   mockRealm,
   ownerAgentDetail,
   ownerAgentDetailWithWorldId,
+  resetStudioAIConfigForTest,
 } from './portfolio-client.test-helpers.js';
+
+beforeEach(() => {
+  resetStudioAIConfigForTest();
+});
 
 describe('owner portfolio core client', () => {
     it('uses listMyRealmAgents only for portfolio list data', async () => {
       const realm = mockRealm();
       const agents = await listOwnerPortfolioAgents(realm);
 
-      expect(realm.generated.listMyRealmAgents).toHaveBeenCalledTimes(1);
-      expect(realm.generated.getMyRealmAgent).not.toHaveBeenCalled();
+      expect(realm.listMyRealmAgents).toHaveBeenCalledTimes(1);
+      expect(realm.getMyRealmAgent).not.toHaveBeenCalled();
       expect(agents[0]?.source).toBe('Realm MeService.listMyRealmAgents');
     });
 
-     it('fetches selected detail through getMyRealmAgent', async () => {
+    it('fetches selected detail through getMyRealmAgent', async () => {
       const realm = mockRealm();
       const detail = await getOwnerPortfolioAgentDetail('agent-detail-1', realm);
 
-      expect(realm.generated.getMyRealmAgent).toHaveBeenCalledWith({ path: { agentId: 'agent-detail-1' } });
-      expect(realm.generated.listMyRealmAgents).not.toHaveBeenCalled();
+      expect(realm.getMyRealmAgent).toHaveBeenCalledWith({ path: { agentId: 'agent-detail-1' } });
+      expect(realm.listMyRealmAgents).not.toHaveBeenCalled();
       expect(detail.id).toBe('agent-detail-1');
       expect(detail.bio.value).toBe('Detail bio');
       expect(detail.source).toBe('Realm MeService.getMyRealmAgent');
     });
 
-     it('uses WorldsService only for create readiness world list reads', async () => {
+    it('uses WorldsService only for create readiness world list reads', async () => {
       const realm = mockRealm();
       const worlds = await listCreateRealmAgentSelectableWorlds(realm);
 
-      expect(realm.generated.worldControllerListWorlds).toHaveBeenCalledTimes(1);
-      expect(realm.generated.agentControllerCreate).not.toHaveBeenCalled();
+      expect(realm.worldControllerListWorlds).toHaveBeenCalledTimes(1);
+      expect(realm.agentControllerCreate).not.toHaveBeenCalled();
       expect(worlds[0]).toMatchObject({
         id: 'world-oasis',
         source: 'Realm WorldsService.worldControllerListWorlds',
       });
     });
 
-     it('uses WorldsService detail-with-agents for selected world preview', async () => {
+    it('uses WorldsService detail-with-agents for selected world preview', async () => {
       const realm = mockRealm();
       const preview = await getCreateRealmAgentWorldPreview('world-oasis', realm);
 
-      expect(realm.generated.worldControllerGetWorldDetailWithAgents).toHaveBeenCalledWith({
+      expect(realm.worldControllerGetWorldDetailWithAgents).toHaveBeenCalledWith({
         path: { id: 'world-oasis' },
         query: { recommendedAgentLimit: 4 },
       });
-      expect(realm.generated.agentControllerCreate).not.toHaveBeenCalled();
+      expect(realm.agentControllerCreate).not.toHaveBeenCalled();
       expect(preview.source).toBe('Realm WorldsService.worldControllerGetWorldDetailWithAgents');
     });
 
-     it('checks create handle availability through AgentsService before create', async () => {
+    it('checks create handle availability through AgentsService before create', async () => {
       const realm = mockRealm();
       const available = await checkCreateRealmAgentHandleAvailability(' @Mira.Agent ', realm);
       const unavailable = await checkCreateRealmAgentHandleAvailability('taken.agent', realm);
 
-      expect(realm.generated.agentControllerCheckHandle).toHaveBeenCalledWith({
+      expect(realm.agentControllerCheckHandle).toHaveBeenCalledWith({
         path: {},
         query: { handle: 'mira.agent' },
       });
-      expect(realm.generated.agentControllerCheckHandle).toHaveBeenCalledWith({
+      expect(realm.agentControllerCheckHandle).toHaveBeenCalledWith({
         path: {},
         query: { handle: 'taken.agent' },
       });
@@ -129,13 +135,13 @@ describe('owner portfolio core client', () => {
           message: 'Handle already taken.',
         },
       });
-      expect(realm.generated.agentControllerCreate).not.toHaveBeenCalled();
+      expect(realm.agentControllerCreate).not.toHaveBeenCalled();
     });
 
-     it('creates a Realm Agent through AgentsService.agentControllerCreate with CreateAgentDto allowlist only', async () => {
+    it('creates a Realm Agent through AgentsService.agentControllerCreate with CreateAgentDto allowlist only', async () => {
       const realm = mockRealm();
       const result = await createReviewedRealmAgent(createPayload, realm);
-      const createAgent = realm.generated.agentControllerCreate;
+      const createAgent = realm.agentControllerCreate;
       const submittedPayload = vi.mocked(createAgent).mock.calls[0]?.[0]?.body;
 
       expect(createAgent).toHaveBeenCalledTimes(1);
@@ -182,17 +188,39 @@ describe('owner portfolio core client', () => {
       });
     });
 
-     it('does not require or call a Creator service for create reads or writes', async () => {
+    it('completes reviewed profile description through owner settings after create', async () => {
+      const realm = mockRealm();
+      const result = await createReviewedRealmAgentWithProfileSettings(createPayload, realm);
+      const settingsUpdate = realm.updateMyRealmAgentSettings;
+
+      expect(result).toMatchObject({
+        ok: true,
+        canonical: { id: 'agent-created-1' },
+        profileSettings: {
+          status: 'updated',
+          source: 'Realm MeService.updateMyRealmAgentSettings',
+          truthWrite: true,
+          description: 'Owner-created public identity',
+        },
+      });
+      expect(realm.getMyRealmAgentSettings).toHaveBeenCalledWith({ path: { agentId: 'agent-created-1' } });
+      expect(settingsUpdate).toHaveBeenCalledWith({
+        path: { agentId: 'agent-created-1' },
+        body: { description: 'Owner-created public identity' },
+      });
+    });
+
+    it('does not require or call a Creator service for create reads or writes', async () => {
       const realm = mockRealm();
 
       await listCreateRealmAgentSelectableWorlds(realm);
       await getCreateRealmAgentWorldPreview('world-oasis', realm);
       await createReviewedRealmAgent(createPayload, realm);
 
-      expect(realm.generated.agentControllerCreate).toHaveBeenCalledTimes(1);
+      expect(realm.agentControllerCreate).toHaveBeenCalledTimes(1);
     });
 
-     it('creates audio upload session with metadata and finalizes after storage upload', async () => {
+    it('creates audio upload session with metadata and finalizes after storage upload', async () => {
       const realm = mockRealm();
       const storageUpload = vi.fn(async () => undefined);
       const result = await uploadReviewedPostMediaResource({
@@ -200,7 +228,7 @@ describe('owner portfolio core client', () => {
         file: { name: 'voice.mp3', type: 'audio/mpeg', size: 4096 },
         agent: ownerAgentDetailWithWorldId(),
       }, realm, storageUpload);
-      const audioPayload = vi.mocked(realm.generated.createAudioDirectUpload).mock.calls[0]?.[0]?.body;
+      const audioPayload = vi.mocked(realm.createAudioDirectUpload).mock.calls[0]?.[0]?.body;
 
       expect(audioPayload).toMatchObject({
         agentId: 'agent-1',
@@ -226,8 +254,8 @@ describe('owner portfolio core client', () => {
       });
     });
 
-     it('normalizes Create Agent responses without canonical id as create failure', () => {
-      const result = normalizeRealmAgentCreateResult({} as Awaited<ReturnType<Realm['generated']['agentControllerCreate']>>);
+    it('normalizes Create Agent responses without canonical id as create failure', () => {
+      const result = normalizeRealmAgentCreateResult({} as Awaited<ReturnType<StudioRealmSurface['agentControllerCreate']>>);
 
       expect(result).toMatchObject({
         ok: false,
@@ -236,7 +264,7 @@ describe('owner portfolio core client', () => {
       });
     });
 
-     it('builds CreateAgentDto shape from reviewed payload body only', () => {
+    it('builds CreateAgentDto shape from reviewed payload body only', () => {
       const input = buildRealmCreateAgentInput(createPayload);
 
       expect(input).toEqual(createPayload.body);
@@ -245,7 +273,7 @@ describe('owner portfolio core client', () => {
       expect(collectKeys(input).has('source')).toBe(false);
     });
 
-     it('rebuilds CreateAgentDto from a narrow allowlist and forces MASTER_OWNED at submit boundary', () => {
+    it('rebuilds CreateAgentDto from a narrow allowlist and forces MASTER_OWNED at submit boundary', () => {
       // The dirty payload spreads forbidden control-plane fields into body to
       // prove buildRealmCreateAgentInput strips them. `dnaPrimary` /
       // `dnaSecondary` / `referenceImageUrl` are no longer forbidden — Realm
@@ -277,10 +305,25 @@ describe('owner portfolio core client', () => {
       expect(input.dnaSecondary).toEqual(['GENTLE', 'WISE']);
     });
 
-     it('fails closed when Runtime Tauri IPC transport is unavailable', async () => {
+    it('admits reviewed referenceImageUrl without treating it as asset binding truth', () => {
+      const payloadWithReference: ReviewedCreateRealmAgentPayload = {
+        ...createPayload,
+        body: {
+          ...createPayload.body,
+          referenceImageUrl: 'https://cdn.example.test/reviewed-reference.png',
+        },
+      };
+      const input = buildRealmCreateAgentInput(payloadWithReference);
+
+      expect(input.referenceImageUrl).toBe('https://cdn.example.test/reviewed-reference.png');
+      expect(collectKeys(input).has('bindingPoint')).toBe(false);
+      expect(collectKeys(input).has('assetId')).toBe(false);
+      expect(collectKeys(input).has('resourceId')).toBe(false);
+    });
+
+    it('fails closed when Runtime Tauri IPC transport is unavailable', async () => {
       const result = await synthesizeReviewedVoiceDemo({
         scriptText: 'Welcome in.',
-        model: 'runtime-tts-model',
       }, ownerAgentDetail(), null);
 
       expect(result).toMatchObject({

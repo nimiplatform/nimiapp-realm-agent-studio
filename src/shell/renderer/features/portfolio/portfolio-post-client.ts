@@ -1,4 +1,3 @@
-import type { Realm } from '@nimiplatform/sdk/realm';
 import type {
   RealmCreateAudioDirectUploadOperationRequest,
   RealmCreateAudioDirectUploadOperationResponse,
@@ -12,10 +11,10 @@ import type {
   RealmFinalizeResourceOperationResponse,
   RealmListResourcesOperationResponse,
 } from '@nimiplatform/sdk/realm/generated';
-import { createStudioRealmClient } from '@renderer/data/realm-client.js';
+import { createStudioRealmClient, type StudioRealmSurface } from '@renderer/data/realm-client.js';
 import { createStudioRuntimeClient } from '@renderer/data/runtime-client.js';
 import {
-  resolveStudioTextCallParams,
+  isStudioAIRouteBindingFailure,
   runStudioTextGenerate,
   type StudioRuntimeAIClient,
   type StudioTextGeneratePayload,
@@ -30,7 +29,7 @@ import {
   type RuntimePostCopyProposal,
 } from './post-draft.js';
 
-type StudioRealmClient = Pick<Realm, 'generated'>;
+type StudioRealmClient = StudioRealmSurface;
 
 type RealmCreatePostInput = RealmCreatePostOperationRequest['body'];
 type RealmCreatePostResponse = RealmCreatePostOperationResponse;
@@ -197,6 +196,7 @@ export type RuntimePostCopyProposalResult =
     failure:
       | 'runtime-post-copy-payload-invalid'
       | 'runtime-post-copy-transport-unavailable'
+      | 'runtime-post-copy-route-unbound'
       | 'runtime-post-copy-failed'
       | 'runtime-post-copy-invalid-output';
     message: string;
@@ -493,7 +493,6 @@ export async function proposeReviewedPostCopy(
     agent,
     draft,
     intent,
-    model: resolveStudioTextCallParams('realm-agent-studio.post-copy').model,
   });
   if (!built.ok) {
     return {
@@ -549,13 +548,15 @@ export async function proposeReviewedPostCopy(
       };
     }
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'runtime transport call failed.';
+    const routeUnbound = isStudioAIRouteBindingFailure(error);
     return {
       ok: false,
       source: POST_COPY_ASSISTANCE_SOURCE,
       candidate: false,
       truthWrite: false,
-      failure: 'runtime-post-copy-failed',
-      message: `Runtime runtime.ai.text.generate failed: ${error instanceof Error ? error.message : 'runtime transport call failed.'}`,
+      failure: routeUnbound ? 'runtime-post-copy-route-unbound' : 'runtime-post-copy-failed',
+      message: routeUnbound ? message : `Runtime runtime.ai.text.generate failed: ${message}`,
       submitted: null,
     };
   }
@@ -565,7 +566,7 @@ export async function publishReviewedPostDraft(
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<RealmPostPublishResult> {
   try {
-    const post = await realm.generated.createPost({
+    const post = await realm.createPost({
       path: {},
       body: buildRealmCreatePostInput(payload),
     });
@@ -583,7 +584,7 @@ export async function publishReviewedPostDraft(
 export async function listReadyPostAttachmentResources(
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<PostAttachmentResourceOption[]> {
-  const response = await realm.generated.listResources({ path: {} });
+  const response = await realm.listResources({ path: {} });
   return normalizePostAttachmentResourceOptions(response);
 }
 
@@ -629,17 +630,17 @@ export async function uploadReviewedPostMediaResource(
   let rawSession: DirectMediaResourceUploadSession;
   try {
     if (input.resourceType === 'IMAGE') {
-      rawSession = await realm.generated.createImageDirectUpload({
+      rawSession = await realm.createImageDirectUpload({
         path: {},
         query: { requireSignedUrls: 'true' },
       });
     } else if (input.resourceType === 'VIDEO') {
-      rawSession = await realm.generated.createVideoDirectUpload({
+      rawSession = await realm.createVideoDirectUpload({
         path: {},
         query: { requireSignedUrls: 'true' },
       });
     } else {
-      rawSession = await realm.generated.createAudioDirectUpload({
+      rawSession = await realm.createAudioDirectUpload({
         path: {},
         body: {
           ...finalizeInput,
@@ -691,7 +692,7 @@ export async function uploadReviewedPostMediaResource(
   }
 
   try {
-    const resource = await realm.generated.finalizeResource({
+    const resource = await realm.finalizeResource({
       path: { resourceId: session.resourceId },
       body: finalizeInput,
     });
@@ -758,7 +759,7 @@ export async function createReviewedPostTextResource(
   }
 
   try {
-    const resource = await realm.generated.createTextResource({
+    const resource = await realm.createTextResource({
       path: {},
       body: submitted,
     });

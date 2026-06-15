@@ -134,11 +134,15 @@ Studio owner create admission:
 - **[R-RAS-AGENT-027]** The submitted body is a `CreateAgentDto` owner allowlist: `handle`,
   `displayName`, `concept`, optional `description`, `worldId`, optional visible
   `rules` as `CreateAgentRulesDto` only when derived from accepted owner
-  settings input, and `ownershipType: MASTER_OWNED`.
+  settings input, required archetype DNA via `dnaPrimary`, optional
+  owner-reviewed `dnaSecondary`, optional reviewed `referenceImageUrl`, and
+  `ownershipType: MASTER_OWNED`.
 - **[R-RAS-AGENT-028]** Studio must not submit `WORLD_OWNED`, creator/maintainer fields, lifecycle,
   provider/model, LocalAgent, fake state, id, author/owner ids, hidden
-  personality/worldview fields, `dna`, `dnaPrimary`, `dnaSecondary`, or
-  `referenceImageUrl` in this create path.
+  personality/worldview fields, or full raw `dna` JSON in this create path.
+  `dnaPrimary` / `dnaSecondary` are admitted only as the SDK/Realm archetype
+  create form, and `referenceImageUrl` is admitted only as reviewed visual
+  reference input; it is not public asset or binding truth.
 - **[R-RAS-AGENT-029]** Studio create UX is owner setting input first. **[R-RAS-AGENT-030]** Raw `CreateAgentRulesDto`
   editing/review may exist as expert semantics, but it is not the default
   owner-facing model.

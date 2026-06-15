@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { resetStudioAIConfigForTest } from './portfolio-client.test-helpers.js';
 import {
   RAW_RULE_REVIEW_DEFERRED_REASON,
   assertNoForbiddenOwnerSettingsFields,
@@ -41,6 +42,10 @@ const settings: OwnerAgentSettingsSnapshot = {
     positioning: 'operational guide',
   },
 };
+
+beforeEach(() => {
+  resetStudioAIConfigForTest();
+});
 
 describe('owner settings proposal normalization', () => {
   it('creates an editable draft from owner settings DTO shape', () => {
@@ -153,13 +158,12 @@ describe('owner settings proposal normalization', () => {
       agentId: 'agent-1',
       current: settings,
       draft,
-      model: 'configured-text-model',
     });
 
     expect(result.ok).toBe(true);
     expect(result.payload).toMatchObject({
       request: {
-        model: { modelId: 'configured-text-model' },
+        model: { modelId: 'auto' },
         parameters: {
           metadata: {
             domain: 'realm-agent-studio.settings-proposal',
@@ -207,9 +211,20 @@ describe('owner settings proposal normalization', () => {
     expect(() => normalizeRuntimeOwnerSettingsProposal(JSON.stringify({
       model: 'forbidden',
       description: 'Allowed text.',
-    }), baseDraft)).toThrow('forbidden model');
+    }), baseDraft)).toThrow('unknown field model');
     expect(() => normalizeRuntimeOwnerSettingsProposal(JSON.stringify({
       responseLength: 'endless',
     }), baseDraft)).toThrow('invalid responseLength');
+  });
+
+  it('rejects Runtime proposals wrapped in prose or carrying unknown fields', () => {
+    const baseDraft = createOwnerAgentSettingsDraft(settings);
+    expect(() => normalizeRuntimeOwnerSettingsProposal(`\`\`\`json\n${JSON.stringify({
+      description: 'Allowed text.',
+    })}\n\`\`\``, baseDraft)).toThrow('single JSON object');
+    expect(() => normalizeRuntimeOwnerSettingsProposal(JSON.stringify({
+      description: 'Allowed text.',
+      agentRule: 'not admitted',
+    }), baseDraft)).toThrow('unknown field agentRule');
   });
 });

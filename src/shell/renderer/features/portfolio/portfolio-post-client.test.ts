@@ -1,6 +1,6 @@
-import type { Realm } from '@nimiplatform/sdk/realm';
+import type { StudioRealmSurface } from '@renderer/data/realm-client.js';
 import { FinishReason, RoutePolicy } from '@nimiplatform/sdk/runtime/generated';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildFinalizeDirectMediaResourceInput,
   buildRealmCreateAgentInput,
@@ -46,19 +46,25 @@ import { createOwnerAgentSettingsDraft } from './setting-proposal.js';
 import {
   candidatePayload,
   collectKeys,
+  configureStudioAIConfigTargetRefsForTest,
   createPayload,
   detailField,
   mockRealm,
   mockRuntimeWithRoutes,
   ownerAgentDetail,
   ownerAgentDetailWithWorldId,
+  resetStudioAIConfigForTest,
 } from './portfolio-client.test-helpers.js';
+
+beforeEach(() => {
+  resetStudioAIConfigForTest();
+});
 
 describe('owner portfolio posts client', () => {
      it('publishes a reviewed post draft through PostsService.createPost without forbidden caller-owned keys', async () => {
       const realm = mockRealm();
       const result = await publishReviewedPostDraft(candidatePayload, realm);
-      const createPost = realm.generated.createPost;
+      const createPost = realm.createPost;
       const submittedRequest = vi.mocked(createPost).mock.calls[0]?.[0];
       const submittedPayload = submittedRequest?.body;
 
@@ -90,7 +96,7 @@ describe('owner portfolio posts client', () => {
      it('creates a reviewed post text Resource through ResourcesService.createTextResource only', async () => {
       const realm = mockRealm();
       const result = await createReviewedPostTextResource(candidatePayload, realm);
-      const createTextResource = realm.generated.createTextResource;
+      const createTextResource = realm.createTextResource;
       const submittedRequest = vi.mocked(createTextResource).mock.calls[0]?.[0];
       const submittedPayload = submittedRequest?.body;
 
@@ -146,7 +152,7 @@ describe('owner portfolio posts client', () => {
       const realm = mockRealm();
       const resources = await listReadyPostAttachmentResources(realm);
 
-      expect(realm.generated.listResources).toHaveBeenCalledTimes(1);
+      expect(realm.listResources).toHaveBeenCalledTimes(1);
       expect(resources).toEqual([{
         id: 'resource-text-1',
         resourceType: 'TEXT',
@@ -167,7 +173,7 @@ describe('owner portfolio posts client', () => {
           { id: 'resource-deleted-audio', resourceType: 'AUDIO', status: 'DELETED', title: 'Deleted audio' },
           { id: 'resource-unknown', resourceType: 'VOICE', status: 'READY', title: 'Unknown type' },
         ],
-      } as unknown as Awaited<ReturnType<Realm['generated']['listResources']>>)).toEqual([{
+      } as unknown as Awaited<ReturnType<StudioRealmSurface['listResources']>>)).toEqual([{
         id: 'resource-ready-image',
         resourceType: 'IMAGE',
         status: 'READY',
@@ -196,11 +202,11 @@ describe('owner portfolio posts client', () => {
         file: { name: 'portrait.png', type: 'image/png', size: 2048 },
         agent: ownerAgentDetailWithWorldId(),
       }, realm, storageUpload);
-      const finalizeResource = realm.generated.finalizeResource;
+      const finalizeResource = realm.finalizeResource;
       const finalizeRequest = vi.mocked(finalizeResource).mock.calls[0]?.[0];
       const finalizePayload = finalizeRequest?.body;
 
-      expect(realm.generated.createImageDirectUpload).toHaveBeenCalledWith({
+      expect(realm.createImageDirectUpload).toHaveBeenCalledWith({
         path: {},
         query: { requireSignedUrls: 'true' },
       });
@@ -255,7 +261,7 @@ describe('owner portfolio posts client', () => {
         agent: ownerAgentDetailWithWorldId(),
         tags: ['realm-agent-studio', 'identity-candidate'],
       }, realm, storageUpload);
-      const finalizeResource = realm.generated.finalizeResource;
+      const finalizeResource = realm.finalizeResource;
       const finalizeRequest = vi.mocked(finalizeResource).mock.calls[0]?.[0];
       const finalizePayload = finalizeRequest?.body;
 
@@ -296,7 +302,7 @@ describe('owner portfolio posts client', () => {
         agent: ownerAgentDetail(),
       }, realm, vi.fn(async () => undefined));
 
-      expect(realm.generated.createVideoDirectUpload).not.toHaveBeenCalled();
+      expect(realm.createVideoDirectUpload).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: false,
         failure: 'media-upload-file-invalid',
@@ -306,7 +312,7 @@ describe('owner portfolio posts client', () => {
 
      it('fails closed when Realm direct upload session creation throws', async () => {
       const realm = mockRealm();
-      vi.mocked(realm.generated.createImageDirectUpload).mockRejectedValueOnce(new Error('Cloudflare unavailable'));
+      vi.mocked(realm.createImageDirectUpload).mockRejectedValueOnce(new Error('Cloudflare unavailable'));
 
       const result = await uploadReviewedPostMediaResource({
         resourceType: 'IMAGE',
@@ -314,7 +320,7 @@ describe('owner portfolio posts client', () => {
         agent: ownerAgentDetail(),
       }, realm, vi.fn(async () => undefined));
 
-      expect(realm.generated.finalizeResource).not.toHaveBeenCalled();
+      expect(realm.finalizeResource).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: false,
         failure: 'realm-direct-upload-session-failed',
@@ -324,7 +330,7 @@ describe('owner portfolio posts client', () => {
 
      it('fails closed when Realm direct upload session is not a PENDING matching Resource', async () => {
       const realm = mockRealm();
-      vi.mocked(realm.generated.createImageDirectUpload).mockResolvedValueOnce({
+      vi.mocked(realm.createImageDirectUpload).mockResolvedValueOnce({
         resourceId: 'resource-wrong',
         resourceType: 'VIDEO',
         provider: 'CF_STREAM',
@@ -340,7 +346,7 @@ describe('owner portfolio posts client', () => {
         agent: ownerAgentDetail(),
       }, realm, vi.fn(async () => undefined));
 
-      expect(realm.generated.finalizeResource).not.toHaveBeenCalled();
+      expect(realm.finalizeResource).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: false,
         failure: 'realm-direct-upload-session-invalid',
@@ -359,7 +365,7 @@ describe('owner portfolio posts client', () => {
         agent: ownerAgentDetail(),
       }, realm, storageUpload);
 
-      expect(realm.generated.finalizeResource).not.toHaveBeenCalled();
+      expect(realm.finalizeResource).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: false,
         failure: 'storage-direct-upload-failed',
@@ -369,7 +375,7 @@ describe('owner portfolio posts client', () => {
 
      it('fails closed when finalizeResource throws after storage upload', async () => {
       const realm = mockRealm();
-      vi.mocked(realm.generated.finalizeResource).mockRejectedValueOnce(new Error('finalize rejected'));
+      vi.mocked(realm.finalizeResource).mockRejectedValueOnce(new Error('finalize rejected'));
 
       const result = await uploadReviewedPostMediaResource({
         resourceType: 'IMAGE',
@@ -386,7 +392,7 @@ describe('owner portfolio posts client', () => {
 
      it('fails closed when finalizeResource returns a non-ready media Resource', async () => {
       const realm = mockRealm();
-      vi.mocked(realm.generated.finalizeResource).mockResolvedValueOnce({
+      vi.mocked(realm.finalizeResource).mockResolvedValueOnce({
         id: 'resource-image-upload',
         resourceType: 'IMAGE',
         provider: 'CF_IMAGE',
@@ -427,7 +433,7 @@ describe('owner portfolio posts client', () => {
         id: 'resource-video-upload',
         resourceType: 'VIDEO',
         status: 'PENDING',
-      } as Awaited<ReturnType<Realm['generated']['finalizeResource']>>, 'VIDEO')).toBeNull();
+      } as Awaited<ReturnType<StudioRealmSurface['finalizeResource']>>, 'VIDEO')).toBeNull();
     });
 
      it('fails closed before text Resource creation when reviewed caption content is missing', async () => {
@@ -439,7 +445,7 @@ describe('owner portfolio posts client', () => {
         },
       }, realm);
 
-      expect(realm.generated.createTextResource).not.toHaveBeenCalled();
+      expect(realm.createTextResource).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: false,
         source: 'Realm ResourcesService.createTextResource',
@@ -457,7 +463,7 @@ describe('owner portfolio posts client', () => {
         id: 'resource-image-1',
         resourceType: 'IMAGE',
         status: 'PENDING',
-      } as Awaited<ReturnType<Realm['generated']['createTextResource']>>, submitted!);
+      } as Awaited<ReturnType<StudioRealmSurface['createTextResource']>>, submitted!);
 
       expect(result).toMatchObject({
         ok: false,
@@ -469,7 +475,7 @@ describe('owner portfolio posts client', () => {
     });
 
      it('normalizes Create Post responses without canonical id as publish failure', () => {
-      const result = normalizeRealmPostPublishResult({} as Awaited<ReturnType<Realm['generated']['createPost']>>);
+      const result = normalizeRealmPostPublishResult({} as Awaited<ReturnType<StudioRealmSurface['createPost']>>);
 
       expect(result).toMatchObject({
         ok: false,
@@ -510,6 +516,11 @@ describe('owner portfolio posts client', () => {
       const runtime = mockRuntimeWithRoutes({
         executeScenario,
         routes: [{ capability: 'text.generate', model: 'runtime-default-text' }],
+      });
+      configureStudioAIConfigTargetRefsForTest({
+        targetRefs: {
+          'text.generate': 'runtime-default-text',
+        },
       });
 
       const result = await proposeReviewedPostCopy(ownerAgentDetail(), {

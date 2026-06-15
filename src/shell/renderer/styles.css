@@ -10,25 +10,15 @@
  * and every kit component (FieldShell, Button, Surface, etc.) loses its
  * intended layout. We explicitly include both the pnpm symlink path and the
  * resolved .pnpm/ path to be robust against fast-glob symlink behavior. */
-@source "../../../node_modules/@nimiplatform/kit/dist";
+@source "../../../../../nimi-realm/nimi/kit/**/*.{ts,tsx}";
 @source "../../../node_modules/.pnpm";
 
 /* ─────────────────────────────────────────────────────────────
  * Realm Agent Studio — hand-authored shell + layout CSS
  *
- * Why hand-authored:
- *   Kit ships Button/Surface tones via Tailwind arbitrary values
- *   (`bg-[var(--nimi-action-primary-bg)]`). When kit is consumed
- *   from npm (not from a workspace), Tailwind 4's default scanner
- *   skips `node_modules` and those utilities never compile, so kit
- *   primary buttons silently fall back to white-on-white. The
- *   tester app (`nimiapp-tester`) sidesteps this by writing
- *   semantic CSS classes that read kit's CSS variables directly.
- *   We follow the same pattern here.
- *
- *   Kit CSS variables (loaded by the theme imports above) remain
- *   the single source of truth for color, radius, shadow, motion,
- *   and material tokens.
+ * Kit CSS variables and primitives remain the source of truth for
+ * color, radius, shadow, motion, material, and interactive controls.
+ * This file only owns Studio-specific layout and product chrome.
  * ───────────────────────────────────────────────────────────── */
 
 :root {
@@ -48,10 +38,7 @@ body,
 body {
   font-family: var(--nimi-font-sans);
   color: var(--nimi-text-primary);
-  background:
-    radial-gradient(1200px 600px at 12% -10%, color-mix(in srgb, var(--nimi-action-primary-bg) 14%, transparent), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, color-mix(in srgb, #6366f1 12%, transparent), transparent 65%),
-    linear-gradient(135deg, #f7f8fb 0%, #eef3f7 48%, #f8fbfa 100%);
+  background: var(--nimi-surface-canvas);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -67,6 +54,32 @@ button {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Renderer entry fallback
+ * ───────────────────────────────────────────────────────────── */
+
+.ras-entry-fallback {
+  display: flex;
+  min-height: 100vh;
+  width: 100vw;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.ras-entry-fallback__panel {
+  position: relative;
+  z-index: 1;
+  width: min(360px, 100%);
+}
+
+.ras-entry-fallback__title {
+  margin-bottom: 18px;
+  color: var(--nimi-text-primary);
+  font-size: var(--nimi-type-label-size);
+  font-weight: 700;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -99,92 +112,30 @@ a {
   font-weight: 500;
 }
 
-/* ─────────────────────────────────────────────────────────────
- * Kit Button tone polyfill
- *
- * Kit emits the modifier class (e.g. `nimi-action--primary`)
- * alongside the Tailwind arbitrary-value utilities. The modifier
- * is stable; we style it directly here so the button looks right
- * even when Tailwind doesn't compile the arbitrary utilities.
- * ───────────────────────────────────────────────────────────── */
-
-.nimi-action {
-  border-radius: var(--nimi-radius-action);
-  font-weight: 600;
-  letter-spacing: var(--nimi-type-label-letter-spacing);
-  transition: background-color var(--nimi-motion-fast), border-color var(--nimi-motion-fast),
-    color var(--nimi-motion-fast), box-shadow var(--nimi-motion-fast), transform var(--nimi-motion-fast);
+.ras-fact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  min-width: 0;
 }
 
-.nimi-action--primary {
-  background-color: var(--nimi-action-primary-bg);
-  border-color: var(--nimi-action-primary-bg);
-  color: var(--nimi-action-primary-text);
-}
-.nimi-action--primary:hover:not(:disabled) {
-  background-color: var(--nimi-action-primary-bg-hover);
-  border-color: var(--nimi-action-primary-bg-hover);
-  transform: translateY(-1px);
+.ras-fact {
+  min-width: 0;
+  border: 1px solid var(--nimi-border-subtle);
+  border-radius: var(--nimi-radius-md);
+  background: color-mix(in srgb, var(--nimi-surface-panel) 72%, transparent);
+  padding: 0.75rem;
 }
 
-.nimi-action--secondary {
-  background-color: var(--nimi-action-secondary-bg);
-  border-color: var(--nimi-action-secondary-border);
-  color: var(--nimi-action-secondary-text);
-}
-.nimi-action--secondary:hover:not(:disabled) {
-  border-color: var(--nimi-border-strong);
-  box-shadow: var(--nimi-elevation-base);
-  transform: translateY(-1px);
-}
-
-.nimi-action--ghost {
-  background-color: transparent;
-  border-color: transparent;
-  color: var(--nimi-text-secondary);
-}
-.nimi-action--ghost:hover:not(:disabled) {
-  background-color: var(--nimi-action-ghost-hover);
-  color: var(--nimi-text-primary);
-  transform: translateY(-1px);
-}
-
-.nimi-action--danger {
-  background-color: var(--nimi-status-danger-soft-bg);
-  border-color: transparent;
-  color: var(--nimi-status-danger-soft-text);
-}
-.nimi-action--danger:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.nimi-action--size-sm {
-  min-height: var(--nimi-sizing-action-sm-height);
-  padding-left: 0.75rem;
-  padding-right: 0.75rem;
+.ras-fact__label {
+  color: var(--nimi-text-muted);
   font-size: var(--nimi-type-body-sm-size);
 }
-.nimi-action--size-md {
-  min-height: var(--nimi-sizing-action-md-height);
-  padding-left: 1rem;
-  padding-right: 1rem;
-  font-size: var(--nimi-type-label-size);
-}
-.nimi-action--size-lg {
-  min-height: var(--nimi-sizing-action-lg-height);
-  padding-left: 1.25rem;
-  padding-right: 1.25rem;
-  font-size: var(--nimi-type-label-size);
-}
 
-.nimi-action--active {
-  background-color: var(--nimi-surface-active);
-}
-
-.nimi-action--icon {
-  aspect-ratio: 1 / 1;
-  padding-left: 0;
-  padding-right: 0;
+.ras-fact__value {
+  margin-top: 0.25rem;
+  color: var(--nimi-text-primary);
+  font-weight: 600;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -345,8 +296,10 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
+  gap: 4px;
+  min-width: 48px;
   height: 36px;
+  padding: 2px 8px 2px 2px;
   border-radius: 999px;
   border: 1px solid rgba(0, 0, 0, 0.05);
   background: white;
@@ -360,26 +313,13 @@ a {
 .ras-avatar-trigger:hover {
   transform: scale(1.03);
 }
-
-.ras-avatar-menu {
-  position: absolute;
-  right: 0;
-  top: 48px;
-  z-index: 200;
-  width: 256px;
-  padding: 8px 0;
-  border-radius: 16px;
-  border: 1px solid var(--nimi-material-glass-thick-border);
-  background: var(--nimi-material-glass-thick-bg);
-  backdrop-filter: blur(28px);
-  -webkit-backdrop-filter: blur(28px);
-  box-shadow: var(--nimi-elevation-floating);
-  transition: opacity 0.12s ease, transform 0.12s ease;
+.ras-avatar-trigger__chevron {
+  color: var(--nimi-text-muted);
 }
-.ras-avatar-menu--closed {
-  opacity: 0;
-  transform: translateY(4px) scale(0.96);
-  pointer-events: none;
+.ras-avatar-popover {
+  width: 280px;
+  padding: 0;
+  overflow: hidden;
 }
 
 .ras-avatar-menu__header {
@@ -405,36 +345,23 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.ras-avatar-menu__divider {
-  margin: 4px 12px;
-  border: 0;
-  border-top: 1px solid color-mix(in srgb, var(--nimi-action-primary-bg) 20%, transparent);
-}
-.ras-avatar-menu__item {
+
+.ras-avatar-menu__actions {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  width: calc(100% - 12px);
-  margin: 0 6px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: transparent;
-  color: var(--nimi-text-secondary);
-  font-size: 14px;
-  font-weight: 500;
-  text-align: left;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 8px 8px;
+  border-top: 1px solid var(--nimi-border-subtle);
 }
-.ras-avatar-menu__item:hover {
-  background-color: var(--nimi-action-ghost-hover);
-  color: var(--nimi-text-primary);
+
+.ras-avatar-menu__action {
+  justify-content: flex-start;
 }
-.ras-avatar-menu__item--danger {
+.ras-avatar-menu__error {
+  margin: 8px 18px 6px;
   color: var(--nimi-status-danger);
-}
-.ras-avatar-menu__item--danger:hover {
-  background-color: color-mix(in srgb, var(--nimi-status-danger) 8%, transparent);
-  color: var(--nimi-status-danger);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -725,31 +652,9 @@ a {
   gap: 6px;
 }
 
-/* Centered loading / error screens used by AuthProvider */
-
-.ras-fullscreen-center {
+.ras-bootstrap-copy {
   display: grid;
-  place-items: center;
-  width: 100vw;
-  height: 100vh;
-  padding: 24px;
-  background:
-    radial-gradient(800px 400px at 20% 0%, color-mix(in srgb, var(--nimi-action-primary-bg) 12%, transparent), transparent 60%),
-    linear-gradient(135deg, #f7f8fb 0%, #eef3f7 50%, #f8fbfa 100%);
-}
-
-.ras-spinner {
-  width: 32px;
-  height: 32px;
-  margin: 0 auto;
-  border: 2px solid var(--nimi-border-subtle);
-  border-top-color: var(--nimi-text-primary);
-  border-radius: 999px;
-  animation: ras-spin 0.85s linear infinite;
-}
-
-@keyframes ras-spin {
-  to { transform: rotate(360deg); }
+  gap: 4px;
 }
 
 /* Two-column data grid used by detail / insights */
@@ -779,31 +684,6 @@ a {
   color: var(--nimi-text-primary);
   font-size: 14px;
   font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-/* Post-create handoff card on agent-detail */
-
-.ras-handoff {
-  display: grid;
-  gap: 12px;
-}
-
-.ras-handoff__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.ras-handoff__bio {
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid var(--nimi-border-subtle);
-  background: var(--nimi-surface-panel);
-  font-size: 13px;
-  line-height: 1.55;
   overflow-wrap: anywhere;
 }
 
@@ -930,87 +810,3 @@ a {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 }
-
-/* ─────────────────────────────────────────────────────────────
- * Tailwind arbitrary-value polyfills (for the workspace
- * components copied from the source repo). Tailwind 4 doesn't
- * compile these utilities for kit JS in node_modules, so we
- * generate the exact CSS rules Tailwind would have emitted —
- * matched against the literal class strings present in the DOM.
- * ───────────────────────────────────────────────────────────── */
-
-/* Colors */
-.text-\[var\(--nimi-text-muted\)\] { color: var(--nimi-text-muted); }
-.text-\[var\(--nimi-text-secondary\)\] { color: var(--nimi-text-secondary); }
-.text-\[var\(--nimi-text-primary\)\] { color: var(--nimi-text-primary); }
-.text-\[var\(--nimi-text-inverse\)\] { color: var(--nimi-text-inverse); }
-
-/* Font sizes (Tailwind `text-[length:var(--...)]` syntax) */
-.text-\[length\:var\(--nimi-type-body-sm-size\)\] { font-size: var(--nimi-type-body-sm-size); }
-.text-\[length\:var\(--nimi-type-body-md-size\)\] { font-size: var(--nimi-type-body-md-size); }
-.text-\[length\:var\(--nimi-type-body-lg-size\)\] { font-size: var(--nimi-type-body-lg-size); }
-.text-\[length\:var\(--nimi-type-label-size\)\] { font-size: var(--nimi-type-label-size); }
-
-/* Backgrounds */
-.bg-\[var\(--nimi-surface-card\)\] { background-color: var(--nimi-surface-card); }
-.bg-\[var\(--nimi-surface-panel\)\] { background-color: var(--nimi-surface-panel); }
-.bg-\[var\(--nimi-surface-canvas\)\] { background-color: var(--nimi-surface-canvas); }
-.bg-\[var\(--nimi-surface-active\)\] { background-color: var(--nimi-surface-active); }
-.bg-\[var\(--nimi-action-primary-bg\)\] { background-color: var(--nimi-action-primary-bg); }
-.bg-\[var\(--nimi-action-secondary-bg\)\] { background-color: var(--nimi-action-secondary-bg); }
-.bg-\[var\(--nimi-action-ghost-hover\)\] { background-color: var(--nimi-action-ghost-hover); }
-.bg-\[var\(--nimi-material-glass-thick-bg\)\] { background-color: var(--nimi-material-glass-thick-bg); }
-.bg-\[var\(--nimi-material-glass-regular-bg\)\] { background-color: var(--nimi-material-glass-regular-bg); }
-.bg-\[var\(--nimi-material-glass-thin-bg\)\] { background-color: var(--nimi-material-glass-thin-bg); }
-
-/* Borders (color only — width comes from Tailwind `border` / `border-l` etc.) */
-.border-\[var\(--nimi-border-subtle\)\] { border-color: var(--nimi-border-subtle); }
-.border-\[var\(--nimi-border-strong\)\] { border-color: var(--nimi-border-strong); }
-.border-\[var\(--nimi-action-primary-bg\)\] { border-color: var(--nimi-action-primary-bg); }
-.border-\[var\(--nimi-action-secondary-border\)\] { border-color: var(--nimi-action-secondary-border); }
-.border-\[var\(--nimi-material-glass-thick-border\)\] { border-color: var(--nimi-material-glass-thick-border); }
-
-/* Radii */
-.rounded-\[var\(--nimi-radius-sm\)\] { border-radius: var(--nimi-radius-sm); }
-.rounded-\[var\(--nimi-radius-md\)\] { border-radius: var(--nimi-radius-md); }
-.rounded-\[var\(--nimi-radius-lg\)\] { border-radius: var(--nimi-radius-lg); }
-.rounded-\[var\(--nimi-radius-xl\)\] { border-radius: var(--nimi-radius-xl); }
-.rounded-\[var\(--nimi-radius-field\)\] { border-radius: var(--nimi-radius-field); }
-.rounded-\[var\(--nimi-radius-action\)\] { border-radius: var(--nimi-radius-action); }
-.rounded-\[var\(--nimi-radius-full\)\] { border-radius: var(--nimi-radius-full); }
-
-/* Shadows */
-.shadow-\[var\(--nimi-elevation-base\)\] { box-shadow: var(--nimi-elevation-base); }
-.shadow-\[var\(--nimi-elevation-raised\)\] { box-shadow: var(--nimi-elevation-raised); }
-.shadow-\[var\(--nimi-elevation-floating\)\] { box-shadow: var(--nimi-elevation-floating); }
-
-/* Backdrop blur */
-.backdrop-blur-\[var\(--nimi-backdrop-blur-regular\)\] {
-  backdrop-filter: blur(var(--nimi-backdrop-blur-regular));
-  -webkit-backdrop-filter: blur(var(--nimi-backdrop-blur-regular));
-}
-.backdrop-blur-\[var\(--nimi-backdrop-blur-strong\)\] {
-  backdrop-filter: blur(var(--nimi-backdrop-blur-strong));
-  -webkit-backdrop-filter: blur(var(--nimi-backdrop-blur-strong));
-}
-.backdrop-blur-\[var\(--nimi-backdrop-blur-light\)\] {
-  backdrop-filter: blur(var(--nimi-backdrop-blur-light));
-  -webkit-backdrop-filter: blur(var(--nimi-backdrop-blur-light));
-}
-
-/* Min-height for action buttons (used by kit Button cva size variants) */
-.min-h-\[var\(--nimi-sizing-action-sm-height\)\] { min-height: var(--nimi-sizing-action-sm-height); }
-.min-h-\[var\(--nimi-sizing-action-md-height\)\] { min-height: var(--nimi-sizing-action-md-height); }
-.min-h-\[var\(--nimi-sizing-action-lg-height\)\] { min-height: var(--nimi-sizing-action-lg-height); }
-
-/* Hover states for kit Button (used by buttonVariants tone classes) */
-.hover\:bg-\[var\(--nimi-action-primary-bg-hover\)\]:hover { background-color: var(--nimi-action-primary-bg-hover); }
-.hover\:bg-\[var\(--nimi-action-ghost-hover\)\]:hover { background-color: var(--nimi-action-ghost-hover); }
-.hover\:border-\[var\(--nimi-border-strong\)\]:hover { border-color: var(--nimi-border-strong); }
-.hover\:shadow-\[var\(--nimi-elevation-base\)\]:hover { box-shadow: var(--nimi-elevation-base); }
-.hover\:text-\[var\(--nimi-text-primary\)\]:hover { color: var(--nimi-text-primary); }
-
-/* Misc kit Button utilities */
-.tracking-\[var\(--nimi-type-label-letter-spacing\)\] { letter-spacing: var(--nimi-type-label-letter-spacing); }
-.duration-\[var\(--nimi-motion-fast\)\] { transition-duration: var(--nimi-motion-fast); }
-.disabled\:opacity-\[var\(--nimi-opacity-disabled\)\]:disabled { opacity: var(--nimi-opacity-disabled); }

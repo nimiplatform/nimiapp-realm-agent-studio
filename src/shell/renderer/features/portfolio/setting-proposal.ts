@@ -1,9 +1,11 @@
 import {
+  buildStudioTextRequestParameters,
   buildStudioRuntimeMetadata,
   resolveStudioTextCallParams,
   studioTextMessage,
   type StudioTextGeneratePayload,
 } from './studio-ai-runtime.js';
+import { parseStrictRuntimeJsonObject } from './strict-runtime-json.js';
 
 export const OWNER_SETTINGS_SAVE_SOURCE = 'Realm MeService.updateMyRealmAgentSettings';
 export const SETTINGS_AI_PROPOSAL_SOURCE = 'Runtime runtime.ai.text.generate';
@@ -208,6 +210,12 @@ const RUNTIME_PROPOSAL_ENUM_FIELDS = {
   sentiment: SENTIMENT_VALUES,
 } as const;
 
+const RUNTIME_PROPOSAL_OUTPUT_KEYS = [
+  ...RUNTIME_PROPOSAL_STRING_FIELDS,
+  ...Object.keys(RUNTIME_PROPOSAL_ENUM_FIELDS),
+  'rationale',
+] as const;
+
 function normalizeLineText(value: string): string {
   return value.replace(/\r\n?/g, '\n').trim();
 }
@@ -225,15 +233,6 @@ function parseListText(value: string): string[] {
     .split(/[,\n]/g)
     .map((item) => compactProfileText(item))
     .filter(Boolean);
-}
-
-function extractFirstJsonObject(text: string): unknown {
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) {
-    throw new Error('Runtime settings proposal did not return a JSON object.');
-  }
-  return JSON.parse(text.slice(start, end + 1));
 }
 
 function proposalValueToText(value: unknown): string | null {
@@ -376,20 +375,15 @@ export function buildRuntimeOwnerSettingsProposalPrompt(input: {
   agentId: string;
   current: OwnerAgentSettingsSnapshot;
   draft: OwnerAgentSettingsDraft;
-  model: string;
 }): { ok: true; errors: []; payload: StudioTextGeneratePayload } | { ok: false; errors: string[]; payload: null } {
   const normalizedDraft = normalizeOwnerAgentSettingsDraft(input.draft);
   const callParams = resolveStudioTextCallParams('realm-agent-studio.settings-proposal', {
     maxTokens: 900,
     temperature: 0.2,
   });
-  const model = compactProfileText(input.model) || callParams.model;
   const intent = normalizedDraft.naturalLanguageIntent;
   const errors: string[] = [];
 
-  if (!model) {
-    errors.push('Runtime runtime.ai.text.generate model config missing');
-  }
   if (!intent) {
     errors.push('natural-language setting intent missing');
   }
@@ -405,10 +399,9 @@ export function buildRuntimeOwnerSettingsProposalPrompt(input: {
       surfaceId: 'realm-agent-studio.settings-proposal',
       params: {
         ...callParams,
-        model,
       },
       request: {
-        model: { modelId: model },
+        model: { modelId: callParams.model },
         messages: [
           studioTextMessage('system', [
             'You propose owner-reviewed Realm Agent settings only.',
@@ -424,14 +417,13 @@ export function buildRuntimeOwnerSettingsProposalPrompt(input: {
             currentDraft: normalizedDraft,
           })),
         ],
-        parameters: {
-          maxTokens: 900,
-          temperature: 0.2,
-          metadata: {
+        parameters: buildStudioTextRequestParameters(
+          callParams,
+          {
             ...buildStudioRuntimeMetadata('realm-agent-studio.settings-proposal'),
             domain: 'realm-agent-studio.settings-proposal',
           },
-        },
+        ),
       },
     },
   };
@@ -441,17 +433,17 @@ export function normalizeRuntimeOwnerSettingsProposal(
   outputText: string,
   baseDraft: OwnerAgentSettingsDraft,
 ): RuntimeOwnerSettingsProposal {
-  const parsed = extractFirstJsonObject(outputText);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Runtime settings proposal JSON must be an object.');
-  }
+  const record = parseStrictRuntimeJsonObject({
+    rawText: outputText,
+    label: 'Runtime settings proposal',
+    allowedKeys: RUNTIME_PROPOSAL_OUTPUT_KEYS,
+  });
 
-  const forbiddenKey = assertNoForbiddenOwnerSettingsFields(parsed);
+  const forbiddenKey = assertNoForbiddenOwnerSettingsFields(record);
   if (forbiddenKey) {
     throw new Error(`Runtime settings proposal rejected forbidden ${forbiddenKey}.`);
   }
 
-  const record = parsed as Record<string, unknown>;
   const draftPatch: RuntimeOwnerSettingsProposalPatch = {};
   const changedSettingKeys: string[] = [];
 

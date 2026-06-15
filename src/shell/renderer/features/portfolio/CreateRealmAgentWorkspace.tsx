@@ -17,11 +17,11 @@ import {
 } from './create-agent-draft.js';
 import {
   checkCreateRealmAgentHandleAvailability,
-  createReviewedRealmAgent,
+  createReviewedRealmAgentWithProfileSettings,
   getCreateRealmAgentWorldPreview,
   listCreateRealmAgentSelectableWorlds,
   type RealmAgentHandleAvailabilityResult,
-  type RealmAgentCreateResult,
+  type RealmAgentCreateWithProfileSettingsResult,
 } from './portfolio-client.js';
 import {
   generateAgentSeedFromDescription,
@@ -38,9 +38,7 @@ export type CreatedRealmAgentContext = {
   state: string | null;
   handle: string;
   displayName: string;
-  publicBio: string;
   selectedWorldId: string;
-  needsPostCreateSettings: boolean;
 };
 
 type CreateRealmAgentWorkspaceProps = {
@@ -52,7 +50,6 @@ function createEmptyDraft(): CreateRealmAgentDraftInput {
   return {
     handle: '',
     displayName: '',
-    publicBio: '',
     concept: '',
     description: '',
     ruleText: '',
@@ -133,8 +130,8 @@ function ReadinessPreview({
             <dd className="ras-break-anywhere m-0">{normalizedDraft.displayName || 'not set'}</dd>
           </div>
           <div className="grid gap-1 sm:grid-cols-[140px_1fr]">
-            <dt className="text-[var(--nimi-text-muted)]">Public bio</dt>
-            <dd className="ras-break-anywhere m-0">{normalizedDraft.publicBio || 'not set'}</dd>
+            <dt className="text-[var(--nimi-text-muted)]">Profile description</dt>
+            <dd className="ras-break-anywhere m-0">{normalizedDraft.description || 'not set'}</dd>
           </div>
           <div className="grid gap-1 sm:grid-cols-[140px_1fr]">
             <dt className="text-[var(--nimi-text-muted)]">World ID</dt>
@@ -166,7 +163,7 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
   const [referenceImageResult, setReferenceImageResult] = useState<AgentReferenceImageResult | null>(null);
   const [isGeneratingReferenceImage, setIsGeneratingReferenceImage] = useState(false);
   const [draft, setDraft] = useState<CreateRealmAgentDraftInput>(() => createEmptyDraft());
-  const [submitResult, setSubmitResult] = useState<RealmAgentCreateResult | null>(null);
+  const [submitResult, setSubmitResult] = useState<RealmAgentCreateWithProfileSettingsResult | null>(null);
   const [createdContext, setCreatedContext] = useState<CreatedRealmAgentContext | null>(null);
   const [localSubmitErrors, setLocalSubmitErrors] = useState<string[]>([]);
   const queryClient = useQueryClient();
@@ -207,8 +204,8 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
     setCreatedContext(null);
   }
 
-  const createMutation = useMutation<RealmAgentCreateResult, Error, ReviewedCreateRealmAgentPayload>({
-    mutationFn: (payload) => createReviewedRealmAgent(payload),
+  const createMutation = useMutation<RealmAgentCreateWithProfileSettingsResult, Error, ReviewedCreateRealmAgentPayload>({
+    mutationFn: (payload) => createReviewedRealmAgentWithProfileSettings(payload),
     onSuccess: (result) => {
       setSubmitResult(result);
       if (result.ok) {
@@ -218,9 +215,7 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
           state: result.canonical.state || null,
           handle: currentDraft.handle,
           displayName: currentDraft.displayName,
-          publicBio: currentDraft.publicBio,
           selectedWorldId: currentDraft.selectedWorldId,
-          needsPostCreateSettings: currentDraft.publicBio.length > 0,
         };
         setCreatedContext(context);
         setLocalSubmitErrors([]);
@@ -255,7 +250,6 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
           ...current,
           handle: result.seed.handle || current.handle,
           displayName: result.seed.displayName || current.displayName,
-          publicBio: result.seed.publicBio || current.publicBio,
           concept: result.seed.concept || current.concept,
           description: result.seed.description || current.description,
           ruleText: result.seed.ruleText || current.ruleText,
@@ -433,30 +427,20 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
                   : `Handle @${handleAvailability.normalized} is unavailable: ${handleAvailability.message}`}
               </InlineAlert>
             ) : null}
-            <FieldShell label="Public bio" message="Short profile bio for review.">
+            <FieldShell label="Profile description" message="Public profile description saved through owner settings after create.">
               <TextareaField
-                value={draft.publicBio}
-                placeholder="Short public bio"
-                onChange={(event) => updateDraft({ publicBio: event.currentTarget.value })}
+                value={draft.description}
+                placeholder="Short public profile description"
+                onChange={(event) => updateDraft({ description: event.currentTarget.value })}
               />
             </FieldShell>
-            <InlineAlert tone="warning">Public bio is held in the draft until the profile settings save step.</InlineAlert>
-            <div className="grid gap-4 md:grid-cols-2">
-              <FieldShell label="Concept" message="Core creative concept for the agent.">
-                <TextareaField
-                  value={draft.concept}
-                  placeholder="Creative concept"
-                  onChange={(event) => updateDraft({ concept: event.currentTarget.value })}
-                />
-              </FieldShell>
-              <FieldShell label="Description" message="Public-facing description.">
-                <TextareaField
-                  value={draft.description}
-                  placeholder="Public-facing description"
-                  onChange={(event) => updateDraft({ description: event.currentTarget.value })}
-                />
-              </FieldShell>
-            </div>
+            <FieldShell label="Concept" message="Core creative concept for the agent.">
+              <TextareaField
+                value={draft.concept}
+                placeholder="Creative concept"
+                onChange={(event) => updateDraft({ concept: event.currentTarget.value })}
+              />
+            </FieldShell>
             <FieldShell label="Visible rules" message="Optional behavior and boundary notes for review.">
               <TextareaField
                 value={draft.ruleText}
@@ -555,8 +539,8 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
             {submitResult ? (
               <InlineAlert tone={submitResult.ok ? 'success' : 'danger'}>
                 {submitResult.ok
-                  ? `Realm Agent created: ${submitResult.canonical.id}. Opening the owner detail lane.`
-                  : submitResult.message}
+                  ? `Realm Agent created: ${submitResult.canonical.id}. Profile description completion: ${submitResult.profileSettings.status}.`
+                  : `${submitResult.message}${submitResult.createdCanonical ? ` Created agent id: ${submitResult.createdCanonical.id}.` : ''}`}
               </InlineAlert>
             ) : null}
             {createdContext ? (
@@ -570,20 +554,17 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
                   </div>
                   <StatusBadge tone="success">{createdContext.state || 'created'}</StatusBadge>
                 </div>
-                {createdContext.needsPostCreateSettings ? (
-                  <InlineAlert tone="warning" className="mt-3">
-                    Public bio is preserved for the post-create owner settings step. It was not submitted in the Realm create request.
+                {submitResult?.ok && submitResult.profileSettings.status !== 'not-requested' ? (
+                  <InlineAlert tone="success" className="mt-3">
+                    Profile description is {submitResult.profileSettings.status === 'updated' ? 'saved through owner settings' : 'already current in owner settings'}.
                   </InlineAlert>
                 ) : null}
                 <div className="mt-3 flex flex-wrap gap-3">
                   <Button tone="secondary" onClick={() => onOpenCreatedAgent?.(createdContext.agentId, 'detail')}>
                     Open created detail
                   </Button>
-                  <Button
-                    disabled={!createdContext.needsPostCreateSettings}
-                    onClick={() => onOpenCreatedAgent?.(createdContext.agentId, 'settings')}
-                  >
-                    Continue to settings
+                  <Button tone="ghost" onClick={() => onOpenCreatedAgent?.(createdContext.agentId, 'settings')}>
+                    Open settings
                   </Button>
                 </div>
               </Surface>
@@ -593,7 +574,7 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 600 }}>Reference image (optional)</div>
                   <div className="ras-text-muted ras-text-size-sm" style={{ marginTop: 4 }}>
-                    Generate a visual reference via Runtime <code>ScenarioService.executeScenario image.generate</code>. The URL passes through <code>CreateAgentDto.referenceImageUrl</code> on submit.
+                    Generate a visual reference for owner review. Studio attaches it only when Runtime returns a public image URL that Realm can store.
                   </div>
                 </div>
                 <StatusBadge tone={draft.referenceImageUrl ? 'success' : 'neutral'}>

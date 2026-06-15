@@ -736,12 +736,12 @@ rules:
   - rule_id: R-RAS-AGENT-027
     level: must
     title: 'createagentdto-owner-allowlist'
-    statement: 'Submitted body is a CreateAgentDto owner allowlist with ownershipType MASTER_OWNED and rules only when derived from accepted owner settings.'
+    statement: 'Submitted body is a CreateAgentDto owner allowlist with ownershipType MASTER_OWNED, required dnaPrimary archetype form, optional reviewed dnaSecondary/referenceImageUrl, and rules only when derived from accepted owner settings.'
     doc_ref: project/kernel/realm-agent-object.md
   - rule_id: R-RAS-AGENT-028
     level: must_not
     title: 'forbid-non-owner-create-fields'
-    statement: 'Studio must not submit WORLD_OWNED, creator fields, lifecycle, provider/model, LocalAgent, ids, hidden personality, dna, or referenceImageUrl in create.'
+    statement: 'Studio must not submit WORLD_OWNED, creator fields, lifecycle, provider/model, LocalAgent, ids, hidden personality/worldview, or full raw dna JSON in create; dnaPrimary/dnaSecondary are admitted only as SDK/Realm archetype create input and referenceImageUrl only as reviewed visual reference.'
     doc_ref: project/kernel/realm-agent-object.md
   - rule_id: R-RAS-AGENT-029
     level: must

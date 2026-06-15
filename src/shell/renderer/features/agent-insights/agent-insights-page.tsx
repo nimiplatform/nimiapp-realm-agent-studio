@@ -1,47 +1,15 @@
-import { useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { EmptyState, InlineAlert, StatusBadge, Surface, Button } from '@nimiplatform/kit/ui';
+import { useParams } from 'react-router-dom';
+import { InlineAlert, StatusBadge, Surface } from '@nimiplatform/kit/ui';
 import { AgentShell, WorkspaceIntro } from '@renderer/features/agent-detail/agent-shell.js';
-import { listOwnerPortfolioAgents } from '@renderer/features/portfolio/portfolio-client.js';
-import { ownerPortfolioListQueryKey } from '@renderer/features/agent-detail/use-agent-detail-query.js';
-import type { OwnerPortfolioAgent } from '@renderer/features/portfolio/portfolio-data.js';
 import type { OwnerPortfolioAgentDetail } from '@renderer/features/portfolio/portfolio-data.js';
+import {
+  settingFieldStatusLabel,
+} from '@renderer/features/portfolio/OwnerPortfolio.shared.js';
 
-const STALE_DAY_THRESHOLD = 30;
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function isStale(updatedAt: string | null | undefined): boolean {
-  if (!updatedAt) return false;
-  const parsed = Date.parse(updatedAt);
-  if (Number.isNaN(parsed)) return false;
-  return Date.now() - parsed > STALE_DAY_THRESHOLD * DAY_MS;
-}
-
-function daysAgo(updatedAt: string | null | undefined): number | null {
-  if (!updatedAt) return null;
-  const parsed = Date.parse(updatedAt);
-  if (Number.isNaN(parsed)) return null;
-  return Math.floor((Date.now() - parsed) / DAY_MS);
-}
-
-function InsightsBody({ agent, agentId }: { agent: OwnerPortfolioAgentDetail; agentId: string }) {
-  const navigate = useNavigate();
-  const portfolioQuery = useQuery({
-    queryKey: ownerPortfolioListQueryKey(),
-    queryFn: () => listOwnerPortfolioAgents(),
-  });
-
-  const portfolioRow = useMemo<OwnerPortfolioAgent | null>(
-    () => portfolioQuery.data?.find((row) => row.id === agentId) ?? null,
-    [agentId, portfolioQuery.data],
-  );
-
+function InsightsBody({ agent }: { agent: OwnerPortfolioAgentDetail }) {
   const friendCountMetric = agent.friendCount;
   const friendCountAvailable = friendCountMetric.status === 'available';
   const friendCount = friendCountMetric.status === 'available' ? friendCountMetric.value : null;
-  const settingStale = isStale(portfolioRow?.updatedAt);
-  const settingDays = daysAgo(portfolioRow?.updatedAt);
 
   return (
     <>
@@ -52,7 +20,6 @@ function InsightsBody({ agent, agentId }: { agent: OwnerPortfolioAgentDetail; ag
             <StatusBadge tone={friendCountAvailable ? 'success' : 'warning'}>
               {friendCountAvailable ? `friendCount ${friendCount}` : 'friendCount source unavailable'}
             </StatusBadge>
-            {settingStale ? <StatusBadge tone="warning">stale setting</StatusBadge> : null}
           </>
         }
         description="Source-backed adoption metrics. friendCount values are read directly from Realm; if the source is unavailable, the field is shown as unavailable instead of zero-filled."
@@ -80,35 +47,6 @@ function InsightsBody({ agent, agentId }: { agent: OwnerPortfolioAgentDetail; ag
           </p>
         </Surface>
 
-        <Surface tone="panel" material="glass-regular" padding="lg" className="ras-radius-xl">
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Setting freshness</h3>
-            <StatusBadge tone={settingStale ? 'warning' : 'success'}>
-              {settingStale ? 'stale' : 'recent'}
-            </StatusBadge>
-          </div>
-          <div style={{ marginTop: 16, fontSize: 18, color: 'var(--nimi-text-primary)' }}>
-            {settingDays === null
-              ? 'Last update timestamp unavailable from Realm portfolio read.'
-              : settingDays === 0
-                ? 'Updated today.'
-                : `Updated ${settingDays} day${settingDays === 1 ? '' : 's'} ago.`}
-          </div>
-          {settingStale ? (
-            <div style={{ marginTop: 12 }}>
-              <InlineAlert tone="warning">
-                No reviewed setting changes in the last {STALE_DAY_THRESHOLD} days. Consider running a consistency review or revisiting visibility / personality fields.
-              </InlineAlert>
-            </div>
-          ) : null}
-          <div style={{ marginTop: 16, display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            <Button tone="primary" onClick={() => navigate(`/portfolio/${agentId}/settings`)}>Open settings</Button>
-            <Button tone="secondary" onClick={() => navigate(`/portfolio/${agentId}/settings/review`)}>
-              Run consistency review
-            </Button>
-          </div>
-        </Surface>
-
         <Surface tone="panel" material="glass-regular" padding="lg" className="ras-insights-grid__span ras-radius-xl">
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
             <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Source availability</h3>
@@ -116,18 +54,21 @@ function InsightsBody({ agent, agentId }: { agent: OwnerPortfolioAgentDetail; ag
           </div>
           <ul style={{ margin: '12px 0 0', padding: 0, listStyle: 'none', display: 'grid', gap: 8 }}>
             {([
-              ['displayName', agent.displayName.status],
-              ['handle', agent.handle.status],
-              ['bio', agent.bio.status],
-              ['greeting', agent.greeting.status],
-              ['profileCoverUrl', agent.profileCoverUrl.status],
-              ['world', agent.world.status],
-              ['state', agent.state.status],
-              ['ownership', agent.ownership.status],
-            ] as const).map(([field, status]) => (
+              ['displayName', agent.displayName],
+              ['handle', agent.handle],
+              ['bio', agent.bio],
+              ['greeting', agent.greeting],
+              ['profileCoverUrl', agent.profileCoverUrl],
+              ['world', agent.world],
+              ['state', agent.state],
+              ['ownership', agent.ownership],
+            ] as const).map(([field, setting]) => (
               <li key={field}>
-                <StatusBadge tone={status === 'available' ? 'success' : 'warning'} shape="dot">
-                  {field}
+                <StatusBadge
+                  tone={setting.status === 'available' ? 'success' : setting.status === 'available-empty' ? 'neutral' : 'warning'}
+                  shape="dot"
+                >
+                  {field}: {settingFieldStatusLabel(setting)}
                 </StatusBadge>
               </li>
             ))}
@@ -165,13 +106,6 @@ function InsightsBody({ agent, agentId }: { agent: OwnerPortfolioAgentDetail; ag
           </ul>
         </Surface>
       </div>
-
-      {portfolioRow ? null : (
-        <EmptyState
-          title="Portfolio row not loaded"
-          description="The portfolio list has not finished loading; setting freshness will populate after a refresh."
-        />
-      )}
     </>
   );
 }
@@ -189,7 +123,7 @@ export function AgentInsightsPage() {
 
   return (
     <AgentShell agentId={agentId} current="insights">
-      {(agent) => <InsightsBody agent={agent} agentId={agentId} />}
+      {(agent) => <InsightsBody agent={agent} />}
     </AgentShell>
   );
 }

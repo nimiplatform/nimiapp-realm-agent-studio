@@ -8,6 +8,10 @@ import {
   resolveStudioImageCallParams,
   type StudioImageGeneratePayload,
 } from './studio-ai-runtime.js';
+import {
+  projectStudioRuntimeArtifacts,
+  type StudioRuntimeArtifactProjection,
+} from './runtime-artifact-projection.js';
 
 export const AGENT_REFERENCE_IMAGE_SOURCE = 'Runtime ScenarioService.executeScenario image.generate' as const;
 
@@ -15,7 +19,6 @@ type RuntimeImageClient = Runtime;
 
 export type AgentReferenceImageInput = {
   prompt: string;
-  model?: string;
   aspectRatio?: string;
 };
 
@@ -24,8 +27,10 @@ export type AgentReferenceImageResult =
     ok: true;
     source: typeof AGENT_REFERENCE_IMAGE_SOURCE;
     referenceImageUrl: string;
+    previewUrl: string;
     artifactIds: string[];
     artifactUris: string[];
+    artifacts: StudioRuntimeArtifactProjection[];
     submitted: StudioImageGeneratePayload;
     runtime: {
       jobId?: string;
@@ -40,7 +45,8 @@ export type AgentReferenceImageResult =
       | 'agent-reference-image-payload-invalid'
       | 'agent-reference-image-transport-unavailable'
       | 'agent-reference-image-generate-failed'
-      | 'agent-reference-image-no-artifact';
+      | 'agent-reference-image-no-artifact'
+      | 'agent-reference-image-public-url-unavailable';
     message: string;
     submitted: StudioImageGeneratePayload | null;
   };
@@ -59,12 +65,6 @@ export function buildAgentReferenceImagePayload(input: AgentReferenceImageInput)
   const callParams = resolveStudioImageCallParams('realm-agent-studio.agent-reference-image', {
     ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {}),
   });
-  // Caller can supply an explicit model id for route matching. Empty / "auto"
-  // remains unresolved until studio-ai-runtime binds image.generate.
-  const callerOverride = String(input.model || '').trim();
-  const model = callerOverride && callerOverride.toLowerCase() !== 'auto'
-    ? callerOverride
-    : callParams.model;
   return {
     ok: true,
     errors: [],
@@ -72,20 +72,19 @@ export function buildAgentReferenceImagePayload(input: AgentReferenceImageInput)
       surfaceId: 'realm-agent-studio.agent-reference-image',
       params: {
         ...callParams,
-        model,
       },
       spec: {
         prompt,
         negativePrompt: '',
         n: 1,
-        size: '',
+        size: callParams.size || '',
         aspectRatio: callParams.aspectRatio ?? '',
         quality: '',
         style: '',
-        seed: '',
+        seed: callParams.seed || '',
         referenceImages: [],
         mask: '',
-        responseFormat: 'url',
+        responseFormat: callParams.responseFormat || 'url',
       },
     }),
   };
@@ -124,26 +123,34 @@ export async function generateAgentReferenceImage(
   }
   let submitted = built.payload;
   try {
-    submitted = await bindStudioImageGeneratePayload(built.payload, runtimeClient);
-    const output = await executeStudioImageGenerate(submitted, runtimeClient);
+    const boundPayload = await bindStudioImageGeneratePayload(built.payload, runtimeClient);
+    submitted = boundPayload;
+    const output = await executeStudioImageGenerate(boundPayload, runtimeClient);
     const artifacts = readImageArtifacts(output);
-    const artifactIds: string[] = [];
-    const artifactUris: string[] = [];
-    for (const artifact of artifacts) {
-      if (!artifact || typeof artifact !== 'object') continue;
-      const record = artifact as unknown as Record<string, unknown>;
-      const artifactId = typeof record.artifactId === 'string' ? record.artifactId : '';
-      const uri = typeof record.uri === 'string' ? record.uri : '';
-      if (artifactId) artifactIds.push(artifactId);
-      if (uri) artifactUris.push(uri);
-    }
-    const referenceImageUrl = artifactUris[0] || artifactIds[0] || '';
-    if (!referenceImageUrl) {
+    const projectedArtifacts = await projectStudioRuntimeArtifacts(runtimeClient, artifacts);
+    const artifactIds = projectedArtifacts
+      .map((artifact) => artifact.artifactId)
+      .filter((artifactId): artifactId is string => Boolean(artifactId));
+    const artifactUris = projectedArtifacts
+      .map((artifact) => artifact.publicUri)
+      .filter((uri): uri is string => Boolean(uri));
+    const previewUrl = projectedArtifacts.find((artifact) => artifact.previewUrl)?.previewUrl || artifactUris[0] || '';
+    if (projectedArtifacts.length === 0) {
       return {
         ok: false,
         source: AGENT_REFERENCE_IMAGE_SOURCE,
         failure: 'agent-reference-image-no-artifact',
-        message: 'Runtime imageGenerate scenario returned no artifact URI or id.',
+        message: 'Runtime imageGenerate scenario returned no readable artifact.',
+        submitted,
+      };
+    }
+    const referenceImageUrl = artifactUris[0] || '';
+    if (!referenceImageUrl) {
+      return {
+        ok: false,
+        source: AGENT_REFERENCE_IMAGE_SOURCE,
+        failure: 'agent-reference-image-public-url-unavailable',
+        message: 'Runtime imageGenerate produced a local artifact but no http(s) URL that Realm can store as a public reference image.',
         submitted,
       };
     }
@@ -151,8 +158,10 @@ export async function generateAgentReferenceImage(
       ok: true,
       source: AGENT_REFERENCE_IMAGE_SOURCE,
       referenceImageUrl,
+      previewUrl,
       artifactIds,
       artifactUris,
+      artifacts: projectedArtifacts,
       submitted,
       runtime: {
         ...(output.traceId ? { traceId: output.traceId } : {}),

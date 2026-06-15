@@ -1,13 +1,41 @@
-import { StrictMode } from 'react';
+import { StrictMode, Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
-import { NimiThemeProvider } from '@nimiplatform/kit/ui';
-import { App } from './App.js';
+import {
+  AmbientBackground,
+  LoadingSkeleton,
+  NimiThemeProvider,
+  Surface,
+} from '@nimiplatform/kit/ui';
+import { installNimiShellRuntimeBridge } from '@nimiplatform/kit/shell/renderer/bridge';
+import {
+  DEFAULT_DEV_RENDERER_ENTRY_IMPORT_RETRY_DELAYS_MS,
+  createRendererEntryModuleLoader,
+} from '@nimiplatform/kit/shell/renderer/bootstrap';
 import { installStudioGlobalErrorLogging } from './infra/telemetry/renderer-log.js';
-import { installStudioTauriRuntimeHook } from './app-shell/tauri-runtime-hook.js';
 import './styles.css';
 
 installStudioGlobalErrorLogging();
-installStudioTauriRuntimeHook();
+installNimiShellRuntimeBridge();
+
+const entryModuleLoader = createRendererEntryModuleLoader({
+  retryDelaysMs: import.meta.env.DEV ? DEFAULT_DEV_RENDERER_ENTRY_IMPORT_RETRY_DELAYS_MS : [],
+});
+
+const App = lazy(async () => {
+  const mod = await entryModuleLoader.load('entry:realm-agent-studio-app', () => import('./App.js'));
+  return { default: mod.App };
+});
+
+function EntryFallback() {
+  return (
+    <AmbientBackground variant="mesh" className="ras-entry-fallback">
+      <Surface tone="panel" padding="lg" className="ras-entry-fallback__panel">
+        <div className="ras-entry-fallback__title">Realm Agent Studio</div>
+        <LoadingSkeleton lines={2} aria-label="Loading Realm Agent Studio" />
+      </Surface>
+    </AmbientBackground>
+  );
+}
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -17,7 +45,9 @@ if (!rootElement) {
 createRoot(rootElement).render(
   <StrictMode>
     <NimiThemeProvider accentPack="nimi-accent" defaultScheme="light">
-      <App />
+      <Suspense fallback={<EntryFallback />}>
+        <App />
+      </Suspense>
     </NimiThemeProvider>
   </StrictMode>,
 );
