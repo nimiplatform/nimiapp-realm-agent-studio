@@ -1,8 +1,11 @@
 import type {
   RealmAgentControllerGetVisibilityOperationResponse,
+  RealmGetCbdbCuratedSystemAgentChatReadinessOperationResponse,
+  RealmGetCbdbCuratedSystemAgentSettingsOperationResponse,
   RealmGetMyRealmAgentSettingsOperationResponse,
   RealmProjectRuntimePayloadOperationRequest,
   RealmProjectRuntimePayloadOperationResponse,
+  RealmUpdateCbdbCuratedSystemAgentSettingsOperationRequest,
   RealmUpdateMyRealmAgentSettingsOperationRequest,
 } from '@nimiplatform/sdk/realm/generated';
 import { createStudioRealmClient, type StudioRealmSurface } from '@renderer/data/realm-client.js';
@@ -13,13 +16,14 @@ import {
   type StudioRuntimeAIClient,
   type StudioTextGeneratePayload,
 } from './studio-ai-runtime.js';
-import type { OwnerPortfolioAgentDetail } from './portfolio-data.js';
+import type { OwnerPortfolioAgentDetail, SettingField } from './portfolio-data.js';
 import {
   OWNER_SETTINGS_SAVE_SOURCE,
   SETTINGS_AI_PROPOSAL_SOURCE,
   buildRealmOwnerAgentSettingsUpdateInput,
   buildRuntimeOwnerSettingsProposalPrompt,
   normalizeRuntimeOwnerSettingsProposal,
+  type OwnerAgentSettingsProposalContext,
   type OwnerAgentSettingsDraft,
   type RuntimeOwnerSettingsProposal,
 } from './setting-proposal.js';
@@ -30,13 +34,23 @@ type RuntimeTextClient = StudioRuntimeAIClient;
 
 export type RealmAgentVisibilitySettings = RealmAgentControllerGetVisibilityOperationResponse;
 type RealmAgentVisibilityUpdateInput = Partial<Record<AgentVisibilityField, AgentVisibilityValue>>;
-export type RealmOwnerAgentSettings = RealmGetMyRealmAgentSettingsOperationResponse;
+export type RealmOwnerAgentSettings =
+  | RealmGetMyRealmAgentSettingsOperationResponse
+  | RealmGetCbdbCuratedSystemAgentSettingsOperationResponse;
 type RealmOwnerAgentSettingsUpdateInput = RealmUpdateMyRealmAgentSettingsOperationRequest['body'];
+type RealmCbdbCuratedSystemAgentSettingsUpdateInput = RealmUpdateCbdbCuratedSystemAgentSettingsOperationRequest['body'];
 type RealmRuntimeProjectionInput = RealmProjectRuntimePayloadOperationRequest['body'];
 type RealmRuntimeProjectionResponse = RealmProjectRuntimePayloadOperationResponse;
+type RealmCbdbCuratedAgentChatReadinessResponse = RealmGetCbdbCuratedSystemAgentChatReadinessOperationResponse;
+type AgentChatReadinessSubmittedInput =
+  | RealmRuntimeProjectionInput
+  | { readonly agentId: string; readonly ownerScope: 'cbdb-curated-system' };
 
 export const REALM_RUNTIME_PROJECTION_SOURCE = 'Realm RuntimeProjectionsService.projectRuntimePayload';
+export const CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE =
+  'Realm AgentCuratedSystemService.getCbdbCuratedSystemAgentChatReadiness';
 export const REALM_AGENT_VISIBILITY_SOURCE = 'Realm AgentsService.agentControllerUpdateVisibility';
+export const CBDB_CURATED_SETTINGS_SAVE_SOURCE = 'Realm AgentCuratedSystemService.updateCbdbCuratedSystemAgentSettings';
 export const AGENT_VISIBILITY_VALUES = ['PUBLIC', 'FRIENDS', 'PRIVATE'] as const;
 export const AGENT_VISIBILITY_FIELDS = [
   'accountVisibility',
@@ -56,12 +70,43 @@ export type RuntimeProjectionSummary = {
   rawRuleContentExposed: false;
 };
 
+export type AgentChatReadinessProjectionSummary = RuntimeProjectionSummary & {
+  agentId: string;
+  agentRuleCount: number;
+  selectedOwnerSettingFields: string[];
+};
+
+export type CbdbCuratedAgentChatReadinessSummary = Omit<
+  AgentChatReadinessProjectionSummary,
+  'source' | 'consumerSurface'
+> & {
+  source: typeof CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE;
+  consumerSurface: 'AGENT_CHAT_READINESS';
+  profile: {
+    displayName: string;
+    handle: string;
+    avatarUrl: string | null;
+    profileCoverUrl: string | null;
+    defaultVoiceReference: string | null;
+    speechModelId: string | null;
+    speechRoutePolicy: 'local' | 'cloud' | null;
+  };
+  gates: {
+    localAgentIdentityReady: boolean;
+    profileContextReady: boolean;
+    ownerSettingsReady: boolean;
+    profileMediaReady: boolean;
+    voiceReferenceReady: boolean;
+    speechRouteReady: boolean;
+  };
+};
+
 export type RuntimeProjectionSummaryResult =
   | {
     ok: true;
     source: typeof REALM_RUNTIME_PROJECTION_SOURCE;
     truthWrite: false;
-    summary: RuntimeProjectionSummary;
+    summary: RuntimeProjectionSummary | AgentChatReadinessProjectionSummary;
     submitted: RealmRuntimeProjectionInput;
   }
   | {
@@ -74,6 +119,26 @@ export type RuntimeProjectionSummaryResult =
       | 'runtime-projection-invalid-response';
     message: string;
     submitted: RealmRuntimeProjectionInput | null;
+  };
+
+export type AgentChatReadinessSummaryResult =
+  | {
+    ok: true;
+    source: typeof REALM_RUNTIME_PROJECTION_SOURCE | typeof CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE;
+    truthWrite: false;
+    summary: AgentChatReadinessProjectionSummary | CbdbCuratedAgentChatReadinessSummary;
+    submitted: AgentChatReadinessSubmittedInput;
+  }
+  | {
+    ok: false;
+    source: typeof REALM_RUNTIME_PROJECTION_SOURCE | typeof CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE;
+    truthWrite: false;
+    failure:
+      | 'runtime-projection-world-unavailable'
+      | 'runtime-projection-failed'
+      | 'runtime-projection-invalid-response';
+    message: string;
+    submitted: AgentChatReadinessSubmittedInput | null;
   };
 export type AgentVisibilityValue = typeof AGENT_VISIBILITY_VALUES[number];
 export type AgentVisibilityField = typeof AGENT_VISIBILITY_FIELDS[number];
@@ -100,18 +165,18 @@ export type RealmAgentVisibilityUpdateResult =
 export type RealmOwnerAgentSettingsUpdateResult =
   | {
     ok: true;
-    source: typeof OWNER_SETTINGS_SAVE_SOURCE;
+    source: typeof OWNER_SETTINGS_SAVE_SOURCE | typeof CBDB_CURATED_SETTINGS_SAVE_SOURCE;
     truthWrite: true;
-    submitted: RealmOwnerAgentSettingsUpdateInput;
+    submitted: RealmOwnerAgentSettingsUpdateInput | RealmCbdbCuratedSystemAgentSettingsUpdateInput;
     settings: RealmOwnerAgentSettings;
   }
   | {
     ok: false;
-    source: typeof OWNER_SETTINGS_SAVE_SOURCE;
+    source: typeof OWNER_SETTINGS_SAVE_SOURCE | typeof CBDB_CURATED_SETTINGS_SAVE_SOURCE;
     truthWrite: false;
     failure: 'owner-settings-payload-invalid' | 'owner-settings-no-changes' | 'realm-update-owner-settings-failed';
     message: string;
-    submitted: RealmOwnerAgentSettingsUpdateInput | null;
+    submitted: RealmOwnerAgentSettingsUpdateInput | RealmCbdbCuratedSystemAgentSettingsUpdateInput | null;
     draft: OwnerAgentSettingsDraft;
   };
 
@@ -144,9 +209,47 @@ export type RuntimeOwnerSettingsProposalResult =
     submitted: StudioTextGeneratePayload | null;
   };
 
+function proposalContextText(field: SettingField): string | null {
+  if (field.status === 'available') {
+    return field.value;
+  }
+  return null;
+}
+
+export function buildPortfolioSettingsProposalContext(agent: OwnerPortfolioAgentDetail): OwnerAgentSettingsProposalContext {
+  return {
+    ownerScope: agent.ownerScope,
+    displayName: proposalContextText(agent.displayName),
+    handle: proposalContextText(agent.handle),
+    worldId: proposalContextText(agent.world),
+    worldName: proposalContextText(agent.world),
+  };
+}
+
 function readOptionalString(record: Record<string, unknown>, key: string): string | undefined {
   const value = record[key];
   return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function readNullableString(record: Record<string, unknown>, key: string): string | null | undefined {
+  if (!(key in record)) {
+    return undefined;
+  }
+  const value = record[key];
+  if (value === null) {
+    return null;
+  }
+  return typeof value === 'string' ? value : undefined;
+}
+
+function readBoolean(record: Record<string, unknown>, key: string): boolean | undefined {
+  const value = record[key];
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function readNonNegativeNumber(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key];
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 function readArray(value: unknown): unknown[] {
@@ -209,6 +312,49 @@ export function buildRuntimeProjectionInput(agent: OwnerPortfolioAgentDetail): R
   };
 }
 
+export function buildAgentChatReadinessProjectionInput(agent: OwnerPortfolioAgentDetail): RealmRuntimeProjectionInput | null {
+  if (agent.world.status !== 'available' || !agent.world.value.trim() || !agent.id.trim()) {
+    return null;
+  }
+
+  return {
+    worldId: agent.world.value.trim(),
+    agentId: agent.id.trim(),
+    contextEnvelope: {
+      allowedWorldScopes: ['WORLD', 'REGION', 'FACTION', 'INDIVIDUAL', 'SCENE'],
+      allowedAgentLayers: ['DNA', 'BEHAVIORAL', 'CONTEXTUAL'],
+      allowedAgentScopes: ['SELF'],
+      includeInheritedAgentRules: false,
+      requestedAgentRuleKeys: [
+        'behavioral:style:content',
+        'behavioral:theme:allowed',
+        'behavioral:theme:disallowed',
+        'contextual:audience:target',
+        'contextual:positioning:public',
+      ],
+      focusKeywords: ['content', 'theme', 'audience', 'positioning'],
+    },
+  };
+}
+
+function readStructuredOwnerSettingField(input: unknown): string | null {
+  if (!input || typeof input !== 'object') {
+    return null;
+  }
+  const record = input as Record<string, unknown>;
+  const structured = record.structured && typeof record.structured === 'object'
+    ? record.structured as Record<string, unknown>
+    : null;
+  const ownerSettingField = structured?.ownerSettingField;
+  return typeof ownerSettingField === 'string' && ownerSettingField.trim()
+    ? ownerSettingField.trim()
+    : null;
+}
+
+function uniqueSorted(values: readonly string[]): string[] {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+}
+
 export function normalizeRuntimeProjectionSummary(response: RealmRuntimeProjectionResponse): RuntimeProjectionSummary | null {
   if (!response || typeof response !== 'object') {
     return null;
@@ -235,6 +381,146 @@ export function normalizeRuntimeProjectionSummary(response: RealmRuntimeProjecti
     rawRuleContentExposed: false,
   };
 }
+
+export function normalizeAgentChatReadinessProjectionSummary(
+  response: RealmRuntimeProjectionResponse,
+): AgentChatReadinessProjectionSummary | null {
+  const base = normalizeRuntimeProjectionSummary(response);
+  if (!base) {
+    return null;
+  }
+  const record = response as unknown as Record<string, unknown>;
+  const agentId = readOptionalString(record, 'agentId');
+  if (!agentId) {
+    return null;
+  }
+
+  const payload = record.payload && typeof record.payload === 'object' ? record.payload as Record<string, unknown> : {};
+  const agentRules = readArray(payload.agentRules);
+  return {
+    ...base,
+    agentId,
+    agentRuleCount: agentRules.length,
+    selectedOwnerSettingFields: uniqueSorted(
+      agentRules
+        .map((input) => readStructuredOwnerSettingField(input))
+        .filter((value): value is string => Boolean(value)),
+    ),
+  };
+}
+
+export function normalizeCbdbCuratedAgentChatReadinessSummary(
+  response: RealmCbdbCuratedAgentChatReadinessResponse,
+): CbdbCuratedAgentChatReadinessSummary | null {
+  if (!response || typeof response !== 'object') {
+    return null;
+  }
+  const record = response as unknown as Record<string, unknown>;
+  if (
+    record.ownerScope !== 'cbdb-curated-system'
+    || record.consumerSurface !== 'AGENT_CHAT_READINESS'
+    || record.rawRuleContentExposed !== false
+  ) {
+    return null;
+  }
+
+  const agentId = readOptionalString(record, 'agentId');
+  const worldId = readOptionalString(record, 'worldId');
+  const checksum = readOptionalString(record, 'runtimeProjectionChecksum');
+  const selectedInputCount = readNonNegativeNumber(record, 'selectedInputCount');
+  const suppressedInputCount = readNonNegativeNumber(record, 'suppressedInputCount');
+  const worldRuleCount = readNonNegativeNumber(record, 'worldRuleCount');
+  const agentRuleCount = readNonNegativeNumber(record, 'agentRuleCount');
+  if (
+    !agentId
+    || !worldId
+    || !checksum
+    || selectedInputCount === undefined
+    || suppressedInputCount === undefined
+    || worldRuleCount === undefined
+    || agentRuleCount === undefined
+  ) {
+    return null;
+  }
+
+  const profile = record.profile && typeof record.profile === 'object'
+    ? record.profile as Record<string, unknown>
+    : null;
+  const gates = record.gates && typeof record.gates === 'object'
+    ? record.gates as Record<string, unknown>
+    : null;
+  if (!profile || !gates) {
+    return null;
+  }
+
+  const displayName = readOptionalString(profile, 'displayName');
+  const handle = readOptionalString(profile, 'handle');
+  const avatarUrl = readNullableString(profile, 'avatarUrl');
+  const profileCoverUrl = readNullableString(profile, 'profileCoverUrl');
+  const defaultVoiceReference = readNullableString(profile, 'defaultVoiceReference');
+  const speechModelId = readNullableString(profile, 'speechModelId');
+  const speechRoutePolicy = readNullableString(profile, 'speechRoutePolicy');
+  if (
+    !displayName
+    || !handle
+    || avatarUrl === undefined
+    || profileCoverUrl === undefined
+    || defaultVoiceReference === undefined
+    || speechModelId === undefined
+    || (speechRoutePolicy !== null && speechRoutePolicy !== 'local' && speechRoutePolicy !== 'cloud')
+  ) {
+    return null;
+  }
+
+  const localAgentIdentityReady = readBoolean(gates, 'localAgentIdentityReady');
+  const profileContextReady = readBoolean(gates, 'profileContextReady');
+  const ownerSettingsReady = readBoolean(gates, 'ownerSettingsReady');
+  const profileMediaReady = readBoolean(gates, 'profileMediaReady');
+  const voiceReferenceReady = readBoolean(gates, 'voiceReferenceReady');
+  const speechRouteReady = readBoolean(gates, 'speechRouteReady');
+  if (
+    localAgentIdentityReady === undefined
+    || profileContextReady === undefined
+    || ownerSettingsReady === undefined
+    || profileMediaReady === undefined
+    || voiceReferenceReady === undefined
+    || speechRouteReady === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    source: CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE,
+    consumerSurface: 'AGENT_CHAT_READINESS',
+    worldId,
+    checksum,
+    selectedInputCount,
+    suppressedInputCount,
+    worldRuleCount,
+    rawRuleContentExposed: false,
+    agentId,
+    agentRuleCount,
+    selectedOwnerSettingFields: readArray(record.selectedOwnerSettingFields)
+      .filter((value): value is string => typeof value === 'string'),
+    profile: {
+      displayName,
+      handle,
+      avatarUrl,
+      profileCoverUrl,
+      defaultVoiceReference,
+      speechModelId,
+      speechRoutePolicy,
+    },
+    gates: {
+      localAgentIdentityReady,
+      profileContextReady,
+      ownerSettingsReady,
+      profileMediaReady,
+      voiceReferenceReady,
+      speechRouteReady,
+    },
+  };
+}
 export async function getAgentVisibilitySettings(
   agentId: string,
   realm: StudioRealmClient = createStudioRealmClient(),
@@ -247,6 +533,23 @@ export async function getOwnerAgentSettings(
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<RealmOwnerAgentSettings> {
   return realm.getMyRealmAgentSettings({ path: { agentId } });
+}
+
+export async function getCbdbCuratedSystemAgentSettings(
+  agentId: string,
+  realm: StudioRealmClient = createStudioRealmClient(),
+): Promise<RealmOwnerAgentSettings> {
+  return realm.getCbdbCuratedSystemAgentSettings({ path: { agentId } });
+}
+
+export async function getPortfolioAgentSettings(
+  agent: OwnerPortfolioAgentDetail,
+  realm: StudioRealmClient = createStudioRealmClient(),
+): Promise<RealmOwnerAgentSettings> {
+  if (agent.ownerScope === 'cbdb-curated-system') {
+    return getCbdbCuratedSystemAgentSettings(agent.id, realm);
+  }
+  return getOwnerAgentSettings(agent.id, realm);
 }
 
 export async function updateReviewedAgentVisibility(
@@ -300,6 +603,7 @@ export async function proposeReviewedOwnerAgentSettings(
   draft: OwnerAgentSettingsDraft,
   current: RealmOwnerAgentSettings,
   runtime?: RuntimeTextClient | null,
+  agentContext?: OwnerAgentSettingsProposalContext,
 ): Promise<RuntimeOwnerSettingsProposalResult> {
   // The prompt starts with the unresolved marker; studio-ai-runtime must bind a
   // concrete text.generate route before dispatch.
@@ -307,6 +611,7 @@ export async function proposeReviewedOwnerAgentSettings(
     agentId,
     draft,
     current,
+    ...(agentContext ? { agentContext } : {}),
   });
   if (!built.ok) {
     return {
@@ -375,6 +680,21 @@ export async function proposeReviewedOwnerAgentSettings(
     };
   }
 }
+
+export async function proposeReviewedPortfolioAgentSettings(
+  agent: OwnerPortfolioAgentDetail,
+  draft: OwnerAgentSettingsDraft,
+  current: RealmOwnerAgentSettings,
+  runtime?: RuntimeTextClient | null,
+): Promise<RuntimeOwnerSettingsProposalResult> {
+  return proposeReviewedOwnerAgentSettings(
+    agent.id,
+    draft,
+    current,
+    runtime,
+    buildPortfolioSettingsProposalContext(agent),
+  );
+}
 export async function updateReviewedOwnerAgentSettings(
   agentId: string,
   draft: OwnerAgentSettingsDraft,
@@ -414,6 +734,55 @@ export async function updateReviewedOwnerAgentSettings(
       truthWrite: false,
       failure: 'realm-update-owner-settings-failed',
       message: error instanceof Error ? error.message : 'Realm owner settings update failed.',
+      submitted,
+      draft,
+    };
+  }
+}
+
+export async function updateReviewedPortfolioAgentSettings(
+  agent: OwnerPortfolioAgentDetail,
+  draft: OwnerAgentSettingsDraft,
+  current: RealmOwnerAgentSettings,
+  realm: StudioRealmClient = createStudioRealmClient(),
+): Promise<RealmOwnerAgentSettingsUpdateResult> {
+  if (agent.ownerScope !== 'cbdb-curated-system') {
+    return updateReviewedOwnerAgentSettings(agent.id, draft, current, realm);
+  }
+
+  const built = buildRealmOwnerAgentSettingsUpdateInput(draft, current);
+  if (!built.ok) {
+    return {
+      ok: false,
+      source: CBDB_CURATED_SETTINGS_SAVE_SOURCE,
+      truthWrite: false,
+      failure: built.failure === 'owner-settings-invalid' ? 'owner-settings-payload-invalid' : 'owner-settings-no-changes',
+      message: built.errors.join('; ') || 'CBDB curated system-agent settings payload invalid.',
+      submitted: null,
+      draft,
+    };
+  }
+
+  const submitted = built.input as RealmCbdbCuratedSystemAgentSettingsUpdateInput;
+  try {
+    const settings = await realm.updateCbdbCuratedSystemAgentSettings({
+      path: { agentId: agent.id },
+      body: submitted,
+    });
+    return {
+      ok: true,
+      source: CBDB_CURATED_SETTINGS_SAVE_SOURCE,
+      truthWrite: true,
+      submitted,
+      settings,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      source: CBDB_CURATED_SETTINGS_SAVE_SOURCE,
+      truthWrite: false,
+      failure: 'realm-update-owner-settings-failed',
+      message: error instanceof Error ? error.message : 'Realm CBDB curated system-agent settings update failed.',
       submitted,
       draft,
     };
@@ -465,6 +834,106 @@ export async function projectAgentRuntimeContextSummary(
       truthWrite: false,
       failure: 'runtime-projection-failed',
       message: error instanceof Error ? error.message : 'Realm runtime projection failed.',
+      submitted,
+    };
+  }
+}
+
+export async function projectAgentChatReadinessContextSummary(
+  agent: OwnerPortfolioAgentDetail,
+  realm: StudioRealmClient = createStudioRealmClient(),
+): Promise<AgentChatReadinessSummaryResult> {
+  if (agent.ownerScope === 'cbdb-curated-system') {
+    const submitted = agent.id.trim()
+      ? { agentId: agent.id.trim(), ownerScope: 'cbdb-curated-system' as const }
+      : null;
+    if (!submitted) {
+      return {
+        ok: false,
+        source: CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE,
+        truthWrite: false,
+        failure: 'runtime-projection-world-unavailable',
+        message: 'CBDB Agent Chat readiness requires RealmAgent id evidence.',
+        submitted: null,
+      };
+    }
+
+    try {
+      const response = await realm.getCbdbCuratedSystemAgentChatReadiness({
+        path: { agentId: submitted.agentId },
+      });
+      const summary = normalizeCbdbCuratedAgentChatReadinessSummary(response);
+      if (!summary) {
+        return {
+          ok: false,
+          source: CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE,
+          truthWrite: false,
+          failure: 'runtime-projection-invalid-response',
+          message: 'CBDB Agent Chat readiness response did not include product-safe summary gates.',
+          submitted,
+        };
+      }
+      return {
+        ok: true,
+        source: CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE,
+        truthWrite: false,
+        summary,
+        submitted,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        source: CBDB_CURATED_AGENT_CHAT_READINESS_SOURCE,
+        truthWrite: false,
+        failure: 'runtime-projection-failed',
+        message: error instanceof Error ? error.message : 'Realm CBDB Agent Chat readiness read failed.',
+        submitted,
+      };
+    }
+  }
+
+  const submitted = buildAgentChatReadinessProjectionInput(agent);
+  if (!submitted) {
+    return {
+      ok: false,
+      source: REALM_RUNTIME_PROJECTION_SOURCE,
+      truthWrite: false,
+      failure: 'runtime-projection-world-unavailable',
+      message: 'Agent Chat readiness projection requires RealmAgent id and worldId evidence.',
+      submitted: null,
+    };
+  }
+
+  try {
+    const response = await realm.projectRuntimePayload({
+      path: {},
+      body: submitted,
+    });
+    const summary = normalizeAgentChatReadinessProjectionSummary(response);
+    if (!summary) {
+      return {
+        ok: false,
+        source: REALM_RUNTIME_PROJECTION_SOURCE,
+        truthWrite: false,
+        failure: 'runtime-projection-invalid-response',
+        message: 'Agent Chat readiness projection response did not include agent-specific RUNTIME_PAYLOAD summary.',
+        submitted,
+      };
+    }
+    return {
+      ok: true,
+      source: REALM_RUNTIME_PROJECTION_SOURCE,
+      truthWrite: false,
+      summary,
+      submitted,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      source: REALM_RUNTIME_PROJECTION_SOURCE,
+      truthWrite: false,
+      failure: 'runtime-projection-failed',
+      message: error instanceof Error ? error.message : 'Realm Agent Chat readiness projection failed.',
       submitted,
     };
   }

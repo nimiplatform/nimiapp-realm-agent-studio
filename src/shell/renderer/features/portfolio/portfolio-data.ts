@@ -1,10 +1,22 @@
 import type {
+  RealmGetCbdbCuratedSystemAgentOperationResponse,
   RealmGetMyRealmAgentOperationResponse,
+  RealmListCbdbCuratedSystemAgentsOperationResponse,
   RealmListMyRealmAgentsOperationResponse,
 } from '@nimiplatform/sdk/realm/generated';
 
 export type MyRealmAgentDto = RealmListMyRealmAgentsOperationResponse[number];
 export type MyRealmAgentDetailDto = RealmGetMyRealmAgentOperationResponse;
+export type CbdbCuratedSystemAgentDto = RealmListCbdbCuratedSystemAgentsOperationResponse[number];
+export type CbdbCuratedSystemAgentDetailDto = RealmGetCbdbCuratedSystemAgentOperationResponse;
+
+export type PortfolioAgentOwnerScope = 'owner-created' | 'cbdb-curated-system';
+export type PortfolioAgentListSource =
+  | 'Realm MeService.listMyRealmAgents'
+  | 'Realm AgentCuratedSystemService.listCbdbCuratedSystemAgents';
+export type PortfolioAgentDetailSource =
+  | 'Realm MeService.getMyRealmAgent'
+  | 'Realm AgentCuratedSystemService.getCbdbCuratedSystemAgent';
 
 export type FriendCountMetric =
   | { status: 'available'; value: number }
@@ -16,8 +28,8 @@ export type OwnerPortfolioAgent = {
   handle: string;
   coverUrl: string | null;
   avatarUrl: string | null;
-  ownerScope: 'owner-created';
-  source: 'Realm MeService.listMyRealmAgents';
+  ownerScope: PortfolioAgentOwnerScope;
+  source: PortfolioAgentListSource;
   realmState: string | null;
   worldName: string | null;
   updatedAt: string | null;
@@ -48,10 +60,20 @@ export type SettingField = {
   label: string;
   value: string;
   status: 'available' | 'available-empty' | 'source-unavailable';
-  source: 'Realm MeService.getMyRealmAgent';
+  source: PortfolioAgentDetailSource;
   readOnly: true;
   unavailableLabel?: 'setting source unavailable';
   emptyLabel?: 'not set';
+};
+
+export type PortfolioAgentVoiceConfig = {
+  voiceId: string;
+  description: string;
+  emotionEnabled: boolean | null;
+  speed: number | null;
+  pitch: number | null;
+  speechModelId: string;
+  speechRoutePolicy: 'local' | 'cloud' | null;
 };
 
 export type OwnerPortfolioAgentDetail = {
@@ -65,8 +87,10 @@ export type OwnerPortfolioAgentDetail = {
   world: SettingField;
   state: SettingField;
   avatarUrl: string | null;
+  voice?: PortfolioAgentVoiceConfig;
   friendCount: FriendCountMetric;
-  source: 'Realm MeService.getMyRealmAgent';
+  ownerScope: PortfolioAgentOwnerScope;
+  source: PortfolioAgentDetailSource;
 };
 
 export type PortfolioFailureKind =
@@ -98,6 +122,14 @@ function readHttpStatus(error: unknown): number | null {
 
 function readString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function readBoolean(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null;
+}
+
+function readOptionalNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 type StringFieldRead = { present: true; value: string } | { present: false };
@@ -137,15 +169,21 @@ function readUpdatedAt(agent: MyRealmAgentDto): string | null {
   return readString(profile?.updatedAt) || readString(metadata?.updatedAt) || readString(record.createdAt);
 }
 
-export function normalizeFriendCount(agent: MyRealmAgentDto): FriendCountMetric {
+export function normalizeFriendCount(agent: MyRealmAgentDto | CbdbCuratedSystemAgentDto): FriendCountMetric {
   if (Object.prototype.hasOwnProperty.call(agent, 'friendCount') && typeof agent.friendCount === 'number') {
     return { status: 'available', value: agent.friendCount };
   }
   return { status: 'source-unavailable', label: 'friendCount source unavailable' };
 }
 
-export function normalizeOwnerPortfolioAgent(agent: MyRealmAgentDto): OwnerPortfolioAgent {
+export function normalizeOwnerPortfolioAgent(
+  agent: MyRealmAgentDto | CbdbCuratedSystemAgentDto,
+  scope: PortfolioAgentOwnerScope = 'owner-created',
+): OwnerPortfolioAgent {
   const profile = readOptionalRecord(agent.agentProfile);
+  const source: PortfolioAgentListSource = scope === 'cbdb-curated-system'
+    ? 'Realm AgentCuratedSystemService.listCbdbCuratedSystemAgents'
+    : 'Realm MeService.listMyRealmAgents';
 
   return {
     id: agent.id,
@@ -153,8 +191,8 @@ export function normalizeOwnerPortfolioAgent(agent: MyRealmAgentDto): OwnerPortf
     handle: agent.handle,
     coverUrl: agent.profileCoverUrl || null,
     avatarUrl: agent.avatarUrl || null,
-    ownerScope: 'owner-created',
-    source: 'Realm MeService.listMyRealmAgents',
+    ownerScope: scope,
+    source,
     realmState: readString(profile?.state),
     worldName: readWorldName(profile),
     updatedAt: readUpdatedAt(agent),
@@ -163,7 +201,11 @@ export function normalizeOwnerPortfolioAgent(agent: MyRealmAgentDto): OwnerPortf
 }
 
 export function normalizeOwnerPortfolio(agents: readonly MyRealmAgentDto[]): OwnerPortfolioAgent[] {
-  return agents.map(normalizeOwnerPortfolioAgent);
+  return agents.map((agent) => normalizeOwnerPortfolioAgent(agent));
+}
+
+export function normalizeCbdbCuratedSystemPortfolio(agents: readonly CbdbCuratedSystemAgentDto[]): OwnerPortfolioAgent[] {
+  return agents.map((agent) => normalizeOwnerPortfolioAgent(agent, 'cbdb-curated-system'));
 }
 
 function compareText(left: string, right: string): number {
@@ -254,14 +296,19 @@ export function applyOwnerPortfolioView(
   });
 }
 
-function settingField(key: SettingFieldKey, label: string, field: StringFieldRead): SettingField {
+function settingField(
+  key: SettingFieldKey,
+  label: string,
+  field: StringFieldRead,
+  source: PortfolioAgentDetailSource,
+): SettingField {
   if (!field.present) {
     return {
       key,
       label,
       value: '',
       status: 'source-unavailable',
-      source: 'Realm MeService.getMyRealmAgent',
+      source,
       readOnly: true,
       unavailableLabel: 'setting source unavailable',
     };
@@ -273,7 +320,7 @@ function settingField(key: SettingFieldKey, label: string, field: StringFieldRea
       label,
       value: '',
       status: 'available-empty',
-      source: 'Realm MeService.getMyRealmAgent',
+      source,
       readOnly: true,
       emptyLabel: 'not set',
     };
@@ -284,28 +331,53 @@ function settingField(key: SettingFieldKey, label: string, field: StringFieldRea
     label,
     value: field.value,
     status: 'available',
-    source: 'Realm MeService.getMyRealmAgent',
+    source,
     readOnly: true,
   };
 }
 
-export function normalizeOwnerPortfolioAgentDetail(agent: MyRealmAgentDetailDto): OwnerPortfolioAgentDetail {
+function readAgentVoiceConfig(profile: Record<string, unknown> | null): PortfolioAgentVoiceConfig {
+  const dna = readOptionalRecord(profile?.dna);
+  const voice = readOptionalRecord(dna?.voice);
+  const speechRoutePolicy = readString(voice?.speechRoutePolicy);
+  return {
+    voiceId: readString(voice?.voiceId) || '',
+    description: readString(voice?.description) || '',
+    emotionEnabled: readBoolean(voice?.emotionEnabled),
+    speed: readOptionalNumber(voice?.speed),
+    pitch: readOptionalNumber(voice?.pitch),
+    speechModelId: readString(voice?.speechModelId) || '',
+    speechRoutePolicy: speechRoutePolicy === 'local' || speechRoutePolicy === 'cloud'
+      ? speechRoutePolicy
+      : null,
+  };
+}
+
+export function normalizeOwnerPortfolioAgentDetail(
+  agent: MyRealmAgentDetailDto | CbdbCuratedSystemAgentDetailDto,
+  scope: PortfolioAgentOwnerScope = 'owner-created',
+): OwnerPortfolioAgentDetail {
   const agentRecord = agent as unknown as Record<string, unknown>;
   const profile = readOptionalRecord(agent.agentProfile);
   const bio = readFirstStringField(agentRecord, ['bio', 'description']);
+  const source: PortfolioAgentDetailSource = scope === 'cbdb-curated-system'
+    ? 'Realm AgentCuratedSystemService.getCbdbCuratedSystemAgent'
+    : 'Realm MeService.getMyRealmAgent';
   return {
     id: agent.id,
-    displayName: settingField('displayName', 'Display name', readStringField(agentRecord, 'displayName')),
-    handle: settingField('handle', 'Handle', readStringField(agentRecord, 'handle')),
-    bio: settingField('bio', 'Profile description', bio.present ? bio : readFirstStringField(profile, ['bio', 'description'])),
-    greeting: settingField('greeting', 'Greeting', readStringField(profile, 'greeting')),
-    profileCoverUrl: settingField('profileCoverUrl', 'Profile cover URL', readStringField(agentRecord, 'profileCoverUrl')),
-    ownership: settingField('ownership', 'Ownership evidence', readStringField(profile, 'ownershipType')),
-    world: settingField('world', 'World evidence', readFirstStringField(profile, ['activeWorldId', 'ownerWorldId', 'worldId'])),
-    state: settingField('state', 'State evidence', readStringField(profile, 'state')),
+    displayName: settingField('displayName', 'Display name', readStringField(agentRecord, 'displayName'), source),
+    handle: settingField('handle', 'Handle', readStringField(agentRecord, 'handle'), source),
+    bio: settingField('bio', 'Profile description', bio.present ? bio : readFirstStringField(profile, ['bio', 'description']), source),
+    greeting: settingField('greeting', 'Greeting', readStringField(profile, 'greeting'), source),
+    profileCoverUrl: settingField('profileCoverUrl', 'Profile cover URL', readStringField(agentRecord, 'profileCoverUrl'), source),
+    ownership: settingField('ownership', 'Ownership evidence', readStringField(profile, 'ownershipType'), source),
+    world: settingField('world', 'World evidence', readFirstStringField(profile, ['activeWorldId', 'ownerWorldId', 'worldId']), source),
+    state: settingField('state', 'State evidence', readStringField(profile, 'state'), source),
     avatarUrl: agent.avatarUrl || null,
+    voice: readAgentVoiceConfig(profile),
     friendCount: normalizeFriendCount(agent),
-    source: 'Realm MeService.getMyRealmAgent',
+    ownerScope: scope,
+    source,
   };
 }
 

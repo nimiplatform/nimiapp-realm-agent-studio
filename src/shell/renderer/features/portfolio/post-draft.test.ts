@@ -84,6 +84,7 @@ const agent: OwnerPortfolioAgentDetail = {
   },
   avatarUrl: null,
   friendCount: { status: 'available', value: 7 },
+  ownerScope: 'owner-created',
   source: 'Realm MeService.getMyRealmAgent',
 };
 

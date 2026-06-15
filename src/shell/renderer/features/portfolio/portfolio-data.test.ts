@@ -143,8 +143,19 @@ describe('owner portfolio detail normalization', () => {
         ownershipType: 'MASTER_OWNED',
         state: 'ACTIVE',
         worldId: 'world-1',
+        dna: {
+          voice: {
+            voiceId: 'zh_narrator',
+            description: 'Reviewed narrator voice.',
+            emotionEnabled: true,
+            speed: -8,
+            pitch: -1,
+            speechModelId: 'speech/qwen3tts',
+            speechRoutePolicy: 'local',
+          },
+        },
       },
-    });
+    } as unknown as MyRealmAgentDto);
 
     expect(detail.source).toBe('Realm MeService.getMyRealmAgent');
     expect(detail.displayName).toMatchObject({ value: 'Mira', readOnly: true, status: 'available' });
@@ -155,6 +166,15 @@ describe('owner portfolio detail normalization', () => {
     expect(detail.ownership.value).toBe('MASTER_OWNED');
     expect(detail.world.value).toBe('world-1');
     expect(detail.state.value).toBe('ACTIVE');
+    expect(detail.voice).toEqual({
+      voiceId: 'zh_narrator',
+      description: 'Reviewed narrator voice.',
+      emotionEnabled: true,
+      speed: -8,
+      pitch: -1,
+      speechModelId: 'speech/qwen3tts',
+      speechRoutePolicy: 'local',
+    });
     expect(detail.friendCount).toEqual({ status: 'available', value: 7 });
   });
 
@@ -171,6 +191,15 @@ describe('owner portfolio detail normalization', () => {
     expect(detail.ownership.status).toBe('source-unavailable');
     expect(detail.world.status).toBe('source-unavailable');
     expect(detail.state.status).toBe('source-unavailable');
+    expect(detail.voice).toEqual({
+      voiceId: '',
+      description: '',
+      emotionEnabled: null,
+      speed: null,
+      pitch: null,
+      speechModelId: '',
+      speechRoutePolicy: null,
+    });
     expect(detail.friendCount).toEqual({
       status: 'source-unavailable',
       label: 'friendCount source unavailable',

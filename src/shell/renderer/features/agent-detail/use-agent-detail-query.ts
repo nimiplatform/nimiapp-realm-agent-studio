@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getOwnerPortfolioAgentDetail } from '@renderer/features/portfolio/portfolio-client.js';
+import { getRealmAgentStudioPortfolioAgentDetail } from '@renderer/features/portfolio/portfolio-client.js';
 
 export function ownerAgentDetailQueryKey(agentId: string): readonly unknown[] {
   return ['realm-agent-studio', 'owner-portfolio-agent-detail', agentId] as const;
@@ -12,7 +12,7 @@ export function ownerPortfolioListQueryKey(): readonly unknown[] {
 export function useOwnerAgentDetailQuery(agentId: string) {
   return useQuery({
     queryKey: ownerAgentDetailQueryKey(agentId),
-    queryFn: () => getOwnerPortfolioAgentDetail(agentId),
+    queryFn: () => getRealmAgentStudioPortfolioAgentDetail(agentId),
     enabled: agentId.length > 0,
   });
 }

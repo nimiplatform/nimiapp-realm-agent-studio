@@ -3,6 +3,7 @@ import { FinishReason, RoutePolicy } from '@nimiplatform/sdk/runtime/generated';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildFinalizeDirectMediaResourceInput,
+  buildAgentChatReadinessProjectionInput,
   buildRealmCreateAgentInput,
   buildRealmCreatePostInput,
   buildRealmPostTextResourceInput,
@@ -15,8 +16,10 @@ import {
   createReviewedRealmAgent,
   generateReviewedVisualImageCandidate,
   getAgentVisibilitySettings,
+  getCbdbCuratedSystemPortfolioAgentDetail,
   getCreateRealmAgentWorldPreview,
   getOwnerAgentSettings,
+  getPortfolioAgentSettings,
   getOwnerPortfolioAgentDetail,
   listCreateRealmAgentSelectableWorlds,
   listOwnerPortfolioAgents,
@@ -27,22 +30,29 @@ import {
   normalizeRealmAgentCreateResult,
   normalizeRealmPostPublishResult,
   normalizeRealmTextResourceCreateResult,
+  normalizeCbdbCuratedAgentChatReadinessSummary,
+  normalizeAgentChatReadinessProjectionSummary,
   normalizeRuntimeProjectionSummary,
+  projectAgentChatReadinessContextSummary,
   projectAgentRuntimeContextSummary,
+  promoteReviewedCbdbCuratedProfileMedia,
+  promoteReviewedCbdbCuratedVoice,
   proposeReviewedOwnerAgentSettings,
+  proposeReviewedPortfolioAgentSettings,
   proposeReviewedPostCopy,
   publishReviewedPostDraft,
   selectReviewedAgentAvatarUrl,
   synthesizeReviewedVoiceDemo,
   updateReviewedAgentVisibility,
   updateReviewedOwnerAgentSettings,
+  updateReviewedPortfolioAgentSettings,
   uploadReviewedIdentityMediaResource,
   uploadReviewedPostMediaResource,
   type AgentVisibilityDraft,
   type RealmAgentVisibilitySettings,
 } from './portfolio-client.js';
 import { REALM_AGENT_CREATE_SOURCE, type ReviewedCreateRealmAgentPayload } from './create-agent-draft.js';
-import { createOwnerAgentSettingsDraft } from './setting-proposal.js';
+import { applyRuntimeOwnerSettingsProposal, createOwnerAgentSettingsDraft } from './setting-proposal.js';
 import {
   candidatePayload,
   collectKeys,
@@ -124,6 +134,40 @@ describe('owner portfolio settings client', () => {
       });
     });
 
+     it('reads and updates CBDB curated system settings through the curated endpoint', async () => {
+      const realm = mockRealm();
+      const agent = await getCbdbCuratedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
+      const current = await getPortfolioAgentSettings(agent, realm);
+      const draft = {
+        ...createOwnerAgentSettingsDraft(current),
+        greeting: '大江东去。',
+        contentStyle: '宋人语感，现代可读。',
+      };
+      const result = await updateReviewedPortfolioAgentSettings(agent, draft, current, realm);
+
+      expect(realm.getCbdbCuratedSystemAgentSettings).toHaveBeenCalledWith({
+        path: { agentId: 'cbdb-agent-su-shi' },
+      });
+      expect(realm.updateCbdbCuratedSystemAgentSettings).toHaveBeenCalledWith({
+        path: { agentId: 'cbdb-agent-su-shi' },
+        body: {
+          greeting: '大江东去。',
+          communication: {
+            contentStyle: '宋人语感，现代可读。',
+          },
+        },
+      });
+      expect(realm.updateMyRealmAgentSettings).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        ok: true,
+        source: 'Realm AgentCuratedSystemService.updateCbdbCuratedSystemAgentSettings',
+        truthWrite: true,
+        settings: {
+          agentRuleVersion: 2,
+        },
+      });
+    });
+
      it('uses Runtime text.generate for candidate owner settings proposals only', async () => {
       // Studio resolves a concrete Runtime route before dispatch; `auto` never
       // reaches ScenarioService.
@@ -197,6 +241,298 @@ describe('owner portfolio settings client', () => {
         },
       });
       expect(realm.updateMyRealmAgentSettings).not.toHaveBeenCalled();
+    });
+
+     it('uses CBDB curated context for AI-assisted settings candidates before curated Realm save', async () => {
+      const realm = mockRealm();
+      const agent = await getCbdbCuratedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
+      const current = await getPortfolioAgentSettings(agent, realm);
+      const draft = {
+        ...createOwnerAgentSettingsDraft(current),
+        naturalLanguageIntent: 'Add a self-introduction, Song speech posture, and portrait direction without inventing facts.',
+      };
+      const executeScenario = vi.fn(async (_input: unknown) => ({
+        output: {
+          output: {
+            oneofKind: 'textGenerate' as const,
+            textGenerate: {
+              text: JSON.stringify({
+                description: 'Source-backed Song literatus introduction for public profile review.',
+                greeting: 'I speak from the Song record; ask what is known before what is imagined.',
+                personalitySummary: 'Historically grounded, candid, and literate.',
+                contentStyle: 'Song literati cadence, clear modern explanation, no unsupported biography.',
+                rawRuleTextCandidate: 'Keep unsupported portrait and voice details as reviewed candidates.',
+                rationale: 'Maps requested self-introduction and accent into admitted settings fields.',
+              }),
+            },
+          },
+        },
+        finishReason: FinishReason.STOP,
+        routeDecision: RoutePolicy.UNSPECIFIED,
+        modelResolved: 'runtime-default-text',
+        traceId: 'trace-cbdb-settings',
+        ignoredExtensions: [],
+      }));
+      const runtime = mockRuntimeWithRoutes({
+        executeScenario,
+        routes: [{ capability: 'text.generate', model: 'runtime-default-text' }],
+      });
+      configureStudioAIConfigTargetRefsForTest({
+        targetRefs: {
+          'text.generate': 'runtime-default-text',
+        },
+      });
+
+      const proposalResult = await proposeReviewedPortfolioAgentSettings(agent, draft, current, runtime);
+      if (!proposalResult.ok) {
+        throw new Error(proposalResult.message);
+      }
+      const submittedPayload = executeScenario.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+      const textGenerate = (submittedPayload?.spec as { spec?: { textGenerate?: { input?: unknown } } } | undefined)
+        ?.spec?.textGenerate;
+      const submittedUserInput = JSON.stringify(textGenerate?.input ?? []);
+
+      expect(submittedUserInput).toContain('cbdb-curated-system');
+      expect(submittedUserInput).toContain('self-introduction -> description/greeting/personalitySummary/publicRole/worldview');
+      expect(submittedUserInput).toContain('portrait/final look -> visual image candidate outside owner settings');
+      expect(submittedUserInput).not.toContain('LocalAgent');
+      expect(proposalResult).toMatchObject({
+        ok: true,
+        candidate: true,
+        truthWrite: false,
+        proposal: {
+          draftPatch: {
+            description: 'Source-backed Song literatus introduction for public profile review.',
+            greeting: 'I speak from the Song record; ask what is known before what is imagined.',
+            personalitySummary: 'Historically grounded, candid, and literate.',
+            contentStyle: 'Song literati cadence, clear modern explanation, no unsupported biography.',
+            rawRuleTextCandidate: 'Keep unsupported portrait and voice details as reviewed candidates.',
+          },
+        },
+      });
+
+      const reviewedDraft = applyRuntimeOwnerSettingsProposal(draft, proposalResult.proposal);
+      const saveResult = await updateReviewedPortfolioAgentSettings(agent, reviewedDraft, current, realm);
+      const updateSettings = realm.updateCbdbCuratedSystemAgentSettings;
+      const submittedRequest = vi.mocked(updateSettings).mock.calls[0]?.[0];
+      const submittedBody = submittedRequest?.body;
+      const submittedKeys = collectKeys(submittedBody);
+
+      expect(updateSettings).toHaveBeenCalledWith({
+        path: { agentId: 'cbdb-agent-su-shi' },
+        body: {
+          description: 'Source-backed Song literatus introduction for public profile review.',
+          greeting: 'I speak from the Song record; ask what is known before what is imagined.',
+          naturalLanguageIntent: 'Add a self-introduction, Song speech posture, and portrait direction without inventing facts.',
+          personality: {
+            summary: 'Historically grounded, candid, and literate.',
+          },
+          communication: {
+            contentStyle: 'Song literati cadence, clear modern explanation, no unsupported biography.',
+          },
+        },
+      });
+      expect(realm.updateMyRealmAgentSettings).not.toHaveBeenCalled();
+      expect(submittedKeys.has('rawRuleTextCandidate')).toBe(false);
+      expect(submittedKeys.has('avatarUrl')).toBe(false);
+      expect(submittedKeys.has('profileCoverUrl')).toBe(false);
+      expect(submittedKeys.has('agentRules')).toBe(false);
+      expect(submittedKeys.has('model')).toBe(false);
+      expect(saveResult).toMatchObject({
+        ok: true,
+        source: 'Realm AgentCuratedSystemService.updateCbdbCuratedSystemAgentSettings',
+        truthWrite: true,
+      });
+
+      vi.mocked(realm.getCbdbCuratedSystemAgentSettings).mockResolvedValueOnce({
+        ...current,
+        description: 'Source-backed Song literatus introduction for public profile review.',
+        greeting: 'I speak from the Song record; ask what is known before what is imagined.',
+        naturalLanguageIntent: 'Add a self-introduction, Song speech posture, and portrait direction without inventing facts.',
+        personality: {
+          ...current.personality,
+          summary: 'Historically grounded, candid, and literate.',
+        },
+        communication: {
+          ...current.communication,
+          contentStyle: 'Song literati cadence, clear modern explanation, no unsupported biography.',
+        },
+        agentRuleVersion: 2,
+      });
+      const reread = await getPortfolioAgentSettings(agent, realm);
+      expect(reread).toMatchObject({
+        agentId: 'cbdb-agent-su-shi',
+        greeting: 'I speak from the Song record; ask what is known before what is imagined.',
+        personality: {
+          summary: 'Historically grounded, candid, and literate.',
+        },
+        communication: {
+          contentStyle: 'Song literati cadence, clear modern explanation, no unsupported biography.',
+        },
+      });
+
+      const chatReadiness = await projectAgentChatReadinessContextSummary(agent, realm);
+      expect(realm.getCbdbCuratedSystemAgentChatReadiness).toHaveBeenCalledWith({
+        path: { agentId: 'cbdb-agent-su-shi' },
+      });
+      expect(realm.projectRuntimePayload).not.toHaveBeenCalled();
+      expect(chatReadiness).toMatchObject({
+        ok: true,
+        source: 'Realm AgentCuratedSystemService.getCbdbCuratedSystemAgentChatReadiness',
+        truthWrite: false,
+        submitted: {
+          agentId: 'cbdb-agent-su-shi',
+          ownerScope: 'cbdb-curated-system',
+        },
+        summary: {
+          consumerSurface: 'AGENT_CHAT_READINESS',
+          agentId: 'cbdb-agent-su-shi',
+          agentRuleCount: 2,
+          selectedOwnerSettingFields: ['boundaries.allowedThemes', 'communication.contentStyle'],
+          rawRuleContentExposed: false,
+          profile: {
+            speechModelId: 'speech/qwen3tts',
+            speechRoutePolicy: 'local',
+          },
+          gates: {
+            localAgentIdentityReady: true,
+            profileContextReady: true,
+            speechRouteReady: true,
+          },
+        },
+      });
+      expect(collectKeys(chatReadiness).has('statement')).toBe(false);
+      expect(collectKeys(chatReadiness).has('contentStyle')).toBe(false);
+    });
+
+     it('promotes reviewed CBDB portrait URLs through the curated profile-media endpoint', async () => {
+      const realm = mockRealm();
+      const agent = await getCbdbCuratedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
+
+      const result = await promoteReviewedCbdbCuratedProfileMedia(agent, {
+        avatarUrl: ' https://cdn.example.com/cbdb/su-shi-reviewed.png ',
+        profileCoverUrl: 'https://cdn.example.com/cbdb/song-literati-cover.png',
+      }, realm);
+
+      expect(realm.updateCbdbCuratedSystemAgentProfileMedia).toHaveBeenCalledWith({
+        path: { agentId: 'cbdb-agent-su-shi' },
+        body: {
+          avatarUrl: 'https://cdn.example.com/cbdb/su-shi-reviewed.png',
+          profileCoverUrl: 'https://cdn.example.com/cbdb/song-literati-cover.png',
+        },
+      });
+      expect(realm.agentControllerSelectAvatar).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        ok: true,
+        source: 'Realm AgentCuratedSystemService.updateCbdbCuratedSystemAgentProfileMedia',
+        publicTruth: true,
+        submitted: {
+          avatarUrl: 'https://cdn.example.com/cbdb/su-shi-reviewed.png',
+          profileCoverUrl: 'https://cdn.example.com/cbdb/song-literati-cover.png',
+        },
+      });
+      expect(collectKeys(result).has('agentRules')).toBe(false);
+      expect(collectKeys(result).has('model')).toBe(false);
+    });
+
+     it('keeps CBDB curated profile media promotion scoped to curated system agents', async () => {
+      const realm = mockRealm();
+      const result = await promoteReviewedCbdbCuratedProfileMedia(ownerAgentDetail(), {
+        avatarUrl: 'https://cdn.example.com/cbdb/su-shi-reviewed.png',
+      }, realm);
+
+      expect(result).toMatchObject({
+        ok: false,
+        failure: 'profile-media-scope-unsupported',
+        publicTruth: false,
+      });
+      expect(realm.updateCbdbCuratedSystemAgentProfileMedia).not.toHaveBeenCalled();
+    });
+
+     it('fails closed for invalid CBDB curated profile media URLs', async () => {
+      const realm = mockRealm();
+      const agent = await getCbdbCuratedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
+      const result = await promoteReviewedCbdbCuratedProfileMedia(agent, {
+        avatarUrl: 'file:///tmp/not-admitted.png',
+      }, realm);
+
+      expect(result).toMatchObject({
+        ok: false,
+        failure: 'avatar-url-invalid',
+        publicTruth: false,
+      });
+      expect(realm.updateCbdbCuratedSystemAgentProfileMedia).not.toHaveBeenCalled();
+    });
+
+     it('promotes reviewed CBDB voice config through the curated voice endpoint', async () => {
+      const realm = mockRealm();
+      const agent = await getCbdbCuratedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
+
+      const result = await promoteReviewedCbdbCuratedVoice(agent, {
+        voiceId: ' zh_narrator ',
+        description: ' Reviewed Song literati narrator with measured cadence. ',
+        emotionEnabled: true,
+        speed: -8,
+        pitch: -1,
+        speechModelId: ' speech/qwen3tts ',
+        speechRoutePolicy: 'local',
+      }, realm);
+
+      expect(realm.updateCbdbCuratedSystemAgentVoice).toHaveBeenCalledWith({
+        path: { agentId: 'cbdb-agent-su-shi' },
+        body: {
+          voiceId: 'zh_narrator',
+          description: 'Reviewed Song literati narrator with measured cadence.',
+          emotionEnabled: true,
+          speed: -8,
+          pitch: -1,
+          speechModelId: 'speech/qwen3tts',
+          speechRoutePolicy: 'local',
+        },
+      });
+      expect(result).toMatchObject({
+        ok: true,
+        source: 'Realm AgentCuratedSystemService.updateCbdbCuratedSystemAgentVoice',
+        publicTruth: true,
+        submitted: {
+          voiceId: 'zh_narrator',
+          description: 'Reviewed Song literati narrator with measured cadence.',
+          speechModelId: 'speech/qwen3tts',
+          speechRoutePolicy: 'local',
+        },
+      });
+      expect(collectKeys(result).has('agentRules')).toBe(false);
+      expect(collectKeys(result).has('model')).toBe(false);
+    });
+
+     it('keeps CBDB curated voice promotion scoped to curated system agents', async () => {
+      const realm = mockRealm();
+      const result = await promoteReviewedCbdbCuratedVoice(ownerAgentDetail(), {
+        voiceId: 'zh_narrator',
+      }, realm);
+
+      expect(result).toMatchObject({
+        ok: false,
+        failure: 'voice-scope-unsupported',
+        publicTruth: false,
+      });
+      expect(realm.updateCbdbCuratedSystemAgentVoice).not.toHaveBeenCalled();
+    });
+
+     it('fails closed for invalid CBDB curated voice numeric ranges', async () => {
+      const realm = mockRealm();
+      const agent = await getCbdbCuratedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
+      const result = await promoteReviewedCbdbCuratedVoice(agent, {
+        voiceId: 'zh_narrator',
+        speed: 999,
+      }, realm);
+
+      expect(result).toMatchObject({
+        ok: false,
+        failure: 'voice-speed-invalid',
+        publicTruth: false,
+      });
+      expect(realm.updateCbdbCuratedSystemAgentVoice).not.toHaveBeenCalled();
     });
 
      it('fails closed for Runtime settings proposal when intent is missing', async () => {
@@ -427,6 +763,113 @@ describe('owner portfolio settings client', () => {
       expect(collectKeys(summary).has('agentId')).toBe(false);
     });
 
+     it('normalizes Agent Chat readiness projection summary to agent setting fields only', () => {
+      const summary = normalizeAgentChatReadinessProjectionSummary({
+        worldId: 'world-1',
+        agentId: 'agent-1',
+        consumerSurface: 'RUNTIME_PAYLOAD',
+        checksum: 'checksum-1',
+        selectedInputs: [{ statement: 'raw statement' }],
+        trace: {
+          selectedInputIds: ['agent-rule-1'],
+          suppressedInputs: [{ input: { statement: 'suppressed raw' }, reason: 'SURFACE_POLICY' }],
+          resolutionOutcomes: [],
+        },
+        payload: {
+          worldRules: [],
+          agentRules: [{
+            statement: 'raw reviewed content style',
+            structured: {
+              ownerSettingField: 'communication.contentStyle',
+              contentStyle: 'must stay hidden',
+            },
+          }],
+        },
+      } as unknown as Awaited<ReturnType<StudioRealmSurface['projectRuntimePayload']>>);
+
+      expect(summary).toEqual({
+        source: 'Realm RuntimeProjectionsService.projectRuntimePayload',
+        consumerSurface: 'RUNTIME_PAYLOAD',
+        worldId: 'world-1',
+        checksum: 'checksum-1',
+        selectedInputCount: 1,
+        suppressedInputCount: 1,
+        worldRuleCount: 0,
+        rawRuleContentExposed: false,
+        agentId: 'agent-1',
+        agentRuleCount: 1,
+        selectedOwnerSettingFields: ['communication.contentStyle'],
+      });
+      expect(collectKeys(summary).has('statement')).toBe(false);
+      expect(collectKeys(summary).has('contentStyle')).toBe(false);
+    });
+
+     it('normalizes CBDB curated Agent Chat readiness summary without raw projection payloads', () => {
+      const summary = normalizeCbdbCuratedAgentChatReadinessSummary({
+        agentId: 'cbdb-agent-su-shi',
+        worldId: 'cbdb-song-slice-real-20260614-world',
+        ownerScope: 'cbdb-curated-system',
+        consumerSurface: 'AGENT_CHAT_READINESS',
+        runtimeProjectionChecksum: 'checksum-cbdb-chat-readiness-1',
+        selectedInputCount: 2,
+        suppressedInputCount: 0,
+        worldRuleCount: 0,
+        agentRuleCount: 2,
+        selectedOwnerSettingFields: ['communication.contentStyle', 'boundaries.allowedThemes'],
+        rawRuleContentExposed: false,
+        profile: {
+          displayName: 'CBDB Su Shi',
+          handle: 'su-shi',
+          avatarUrl: 'https://cdn.example.com/cbdb/su-shi-reviewed.png',
+          profileCoverUrl: 'https://cdn.example.com/cbdb/song-literati-cover.png',
+          defaultVoiceReference: 'preset_voice_id:zh_narrator',
+          speechModelId: 'speech/qwen3tts',
+          speechRoutePolicy: 'local',
+        },
+        gates: {
+          localAgentIdentityReady: true,
+          profileContextReady: true,
+          ownerSettingsReady: true,
+          profileMediaReady: true,
+          voiceReferenceReady: true,
+          speechRouteReady: true,
+        },
+      } as unknown as Awaited<ReturnType<StudioRealmSurface['getCbdbCuratedSystemAgentChatReadiness']>>);
+
+      expect(summary).toEqual({
+        source: 'Realm AgentCuratedSystemService.getCbdbCuratedSystemAgentChatReadiness',
+        consumerSurface: 'AGENT_CHAT_READINESS',
+        worldId: 'cbdb-song-slice-real-20260614-world',
+        checksum: 'checksum-cbdb-chat-readiness-1',
+        selectedInputCount: 2,
+        suppressedInputCount: 0,
+        worldRuleCount: 0,
+        rawRuleContentExposed: false,
+        agentId: 'cbdb-agent-su-shi',
+        agentRuleCount: 2,
+        selectedOwnerSettingFields: ['communication.contentStyle', 'boundaries.allowedThemes'],
+        profile: {
+          displayName: 'CBDB Su Shi',
+          handle: 'su-shi',
+          avatarUrl: 'https://cdn.example.com/cbdb/su-shi-reviewed.png',
+          profileCoverUrl: 'https://cdn.example.com/cbdb/song-literati-cover.png',
+          defaultVoiceReference: 'preset_voice_id:zh_narrator',
+          speechModelId: 'speech/qwen3tts',
+          speechRoutePolicy: 'local',
+        },
+        gates: {
+          localAgentIdentityReady: true,
+          profileContextReady: true,
+          ownerSettingsReady: true,
+          profileMediaReady: true,
+          voiceReferenceReady: true,
+          speechRouteReady: true,
+        },
+      });
+      expect(collectKeys(summary).has('statement')).toBe(false);
+      expect(collectKeys(summary).has('selectedInputs')).toBe(false);
+    });
+
      it('fails closed before Runtime projection when world evidence is missing', async () => {
       const realm = mockRealm();
       const result = await projectAgentRuntimeContextSummary({
@@ -448,5 +891,20 @@ describe('owner portfolio settings client', () => {
         worldId: 'OASIS',
       });
       expect(collectKeys(buildRuntimeProjectionInput(ownerAgentDetail())).has('agentId')).toBe(false);
+    });
+
+     it('builds agent-specific Runtime projection request for Agent Chat readiness only', () => {
+      const input = buildAgentChatReadinessProjectionInput(ownerAgentDetailWithWorldId('world-oasis'));
+      expect(input).toMatchObject({
+        worldId: 'world-oasis',
+        agentId: 'agent-1',
+        contextEnvelope: {
+          allowedAgentLayers: ['DNA', 'BEHAVIORAL', 'CONTEXTUAL'],
+          allowedAgentScopes: ['SELF'],
+          includeInheritedAgentRules: false,
+          requestedAgentRuleKeys: expect.arrayContaining(['behavioral:style:content']),
+        },
+      });
+      expect(collectKeys(input).has('statement')).toBe(false);
     });
 });

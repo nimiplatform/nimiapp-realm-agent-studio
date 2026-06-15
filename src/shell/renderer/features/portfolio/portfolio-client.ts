@@ -4,6 +4,7 @@ import type {
 } from '@nimiplatform/sdk/realm/generated';
 import { createStudioRealmClient, type StudioRealmSurface } from '@renderer/data/realm-client.js';
 import {
+  normalizeCbdbCuratedSystemPortfolio,
   normalizeOwnerPortfolio,
   normalizeOwnerPortfolioAgentDetail,
   type OwnerPortfolioAgent,
@@ -186,12 +187,52 @@ export async function listOwnerPortfolioAgents(realm: StudioRealmClient = create
   return normalizeOwnerPortfolio(agents);
 }
 
+export async function listCbdbCuratedSystemPortfolioAgents(
+  realm: StudioRealmClient = createStudioRealmClient(),
+): Promise<OwnerPortfolioAgent[]> {
+  const agents = await realm.listCbdbCuratedSystemAgents({ path: {} });
+  return normalizeCbdbCuratedSystemPortfolio(agents);
+}
+
+export async function listRealmAgentStudioPortfolioAgents(
+  realm: StudioRealmClient = createStudioRealmClient(),
+): Promise<OwnerPortfolioAgent[]> {
+  const [ownerAgents, cbdbAgents] = await Promise.all([
+    listOwnerPortfolioAgents(realm),
+    listCbdbCuratedSystemPortfolioAgents(realm),
+  ]);
+  return [...ownerAgents, ...cbdbAgents];
+}
+
 export async function getOwnerPortfolioAgentDetail(
   agentId: string,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<OwnerPortfolioAgentDetail> {
   const agent = await realm.getMyRealmAgent({ path: { agentId } });
   return normalizeOwnerPortfolioAgentDetail(agent);
+}
+
+export async function getCbdbCuratedSystemPortfolioAgentDetail(
+  agentId: string,
+  realm: StudioRealmClient = createStudioRealmClient(),
+): Promise<OwnerPortfolioAgentDetail> {
+  const agent = await realm.getCbdbCuratedSystemAgent({ path: { agentId } });
+  return normalizeOwnerPortfolioAgentDetail(agent, 'cbdb-curated-system');
+}
+
+export async function getRealmAgentStudioPortfolioAgentDetail(
+  agentId: string,
+  realm: StudioRealmClient = createStudioRealmClient(),
+): Promise<OwnerPortfolioAgentDetail> {
+  try {
+    return await getOwnerPortfolioAgentDetail(agentId, realm);
+  } catch (ownerError) {
+    try {
+      return await getCbdbCuratedSystemPortfolioAgentDetail(agentId, realm);
+    } catch {
+      throw ownerError;
+    }
+  }
 }
 
 export async function listCreateRealmAgentSelectableWorlds(

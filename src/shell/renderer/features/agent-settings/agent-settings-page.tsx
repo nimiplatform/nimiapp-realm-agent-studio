@@ -27,9 +27,9 @@ export function AgentSettingsPage() {
       {(agent) => (
         <>
           <WorkspaceIntro
-            title="Owner settings"
+            title="Agent settings"
             badges={<StatusBadge tone="info">workspace</StatusBadge>}
-            description="Edit visibility, identity, communication, and boundary fields. Save flows through the owner-scoped settings ingress."
+            description="Edit identity, communication, and boundary fields. Save flows through the admitted settings ingress for this agent source."
             actions={
               <Button tone="secondary" onClick={() => navigate(`/portfolio/${agentId}/settings/review`)}>
                 Open consistency review
@@ -37,7 +37,9 @@ export function AgentSettingsPage() {
             }
           />
 
-          <VisibilitySettingsWorkspace agent={agent} onAgentWrite={refreshOwnerAgentReads} />
+          {agent.ownerScope === 'owner-created' ? (
+            <VisibilitySettingsWorkspace agent={agent} onAgentWrite={refreshOwnerAgentReads} />
+          ) : null}
           <SettingProposalWorkspace agent={agent} onAgentWrite={refreshOwnerAgentReads} />
           <RuntimeProjectionWorkspace agent={agent} />
         </>

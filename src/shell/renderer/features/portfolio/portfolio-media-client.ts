@@ -37,6 +37,10 @@ type RealmSelectAvatarInput = RealmAgentControllerSelectAvatarOperationRequest['
 type RealmSelectAvatarResponse = RealmAgentControllerSelectAvatarOperationResponse;
 
 export const REALM_AGENT_AVATAR_SELECT_SOURCE = 'Realm AgentsService.agentControllerSelectAvatar';
+export const CBDB_CURATED_PROFILE_MEDIA_SOURCE =
+  'Realm AgentCuratedSystemService.updateCbdbCuratedSystemAgentProfileMedia';
+export const CBDB_CURATED_VOICE_SOURCE =
+  'Realm AgentCuratedSystemService.updateCbdbCuratedSystemAgentVoice';
 
 type RuntimeVoiceClient = Runtime;
 type RuntimeImageClient = Runtime;
@@ -58,6 +62,73 @@ export type RealmAgentAvatarSelectResult =
     failure: 'avatar-url-invalid' | 'realm-select-avatar-failed' | 'realm-select-avatar-rejected';
     message: string;
     submitted: RealmSelectAvatarInput | null;
+  };
+
+export type CbdbCuratedProfileMediaInput = {
+  avatarUrl?: string;
+  profileCoverUrl?: string;
+};
+
+export type CbdbCuratedVoiceInput = {
+  voiceId?: string;
+  description?: string;
+  emotionEnabled?: boolean;
+  speed?: number;
+  pitch?: number;
+  speechModelId?: string;
+  speechRoutePolicy?: 'local' | 'cloud';
+};
+
+type CbdbCuratedProfileMediaFailure =
+  | 'profile-media-scope-unsupported'
+  | 'profile-media-no-reviewed-changes'
+  | 'avatar-url-invalid'
+  | 'profile-cover-url-invalid'
+  | 'realm-update-profile-media-failed';
+
+export type CbdbCuratedProfileMediaPromotionResult =
+  | {
+    ok: true;
+    source: typeof CBDB_CURATED_PROFILE_MEDIA_SOURCE;
+    publicTruth: true;
+    submitted: CbdbCuratedProfileMediaInput;
+    agent: unknown;
+  }
+  | {
+    ok: false;
+    source: typeof CBDB_CURATED_PROFILE_MEDIA_SOURCE;
+    publicTruth: false;
+    failure: CbdbCuratedProfileMediaFailure;
+    message: string;
+    submitted: CbdbCuratedProfileMediaInput | null;
+  };
+
+type CbdbCuratedVoiceFailure =
+  | 'voice-scope-unsupported'
+  | 'voice-no-reviewed-changes'
+  | 'voice-id-invalid'
+  | 'voice-description-invalid'
+  | 'voice-speed-invalid'
+  | 'voice-pitch-invalid'
+  | 'voice-speech-model-invalid'
+  | 'voice-speech-route-invalid'
+  | 'realm-update-voice-failed';
+
+export type CbdbCuratedVoicePromotionResult =
+  | {
+    ok: true;
+    source: typeof CBDB_CURATED_VOICE_SOURCE;
+    publicTruth: true;
+    submitted: CbdbCuratedVoiceInput;
+    agent: unknown;
+  }
+  | {
+    ok: false;
+    source: typeof CBDB_CURATED_VOICE_SOURCE;
+    publicTruth: false;
+    failure: CbdbCuratedVoiceFailure;
+    message: string;
+    submitted: CbdbCuratedVoiceInput | null;
   };
 export type RuntimeVisualImageGenerationResult =
   | {
@@ -234,6 +305,148 @@ export function buildRealmSelectAvatarInput(avatarUrl: string): RealmSelectAvata
     avatarUrl: normalizedAvatarUrl,
   };
 }
+
+export function buildCbdbCuratedProfileMediaInput(
+  input: CbdbCuratedProfileMediaInput,
+): {
+  input: CbdbCuratedProfileMediaInput | null;
+  failure?: Exclude<CbdbCuratedProfileMediaFailure, 'profile-media-scope-unsupported' | 'realm-update-profile-media-failed'>;
+  message?: string;
+} {
+  const built: CbdbCuratedProfileMediaInput = {};
+  if (Object.prototype.hasOwnProperty.call(input, 'avatarUrl')) {
+    const avatarUrl = normalizeAvatarUrl(String(input.avatarUrl || ''));
+    if (!avatarUrl) {
+      return {
+        input: null,
+        failure: 'avatar-url-invalid',
+        message: 'Reviewed avatar promotion requires a valid http(s) URL.',
+      };
+    }
+    built.avatarUrl = avatarUrl;
+  }
+  if (Object.prototype.hasOwnProperty.call(input, 'profileCoverUrl')) {
+    const profileCoverUrl = normalizeAvatarUrl(String(input.profileCoverUrl || ''));
+    if (!profileCoverUrl) {
+      return {
+        input: null,
+        failure: 'profile-cover-url-invalid',
+        message: 'Reviewed profile-cover promotion requires a valid http(s) URL.',
+      };
+    }
+    built.profileCoverUrl = profileCoverUrl;
+  }
+  if (!Object.prototype.hasOwnProperty.call(built, 'avatarUrl')
+    && !Object.prototype.hasOwnProperty.call(built, 'profileCoverUrl')) {
+    return {
+      input: null,
+      failure: 'profile-media-no-reviewed-changes',
+      message: 'Reviewed profile media promotion requires avatarUrl or profileCoverUrl.',
+    };
+  }
+  return { input: built };
+}
+
+function normalizeVoiceText(value: unknown): string | null {
+  const text = String(value || '').trim();
+  return text ? text : null;
+}
+
+function normalizeVoiceNumber(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+export function buildCbdbCuratedVoiceInput(
+  input: CbdbCuratedVoiceInput,
+): {
+  input: CbdbCuratedVoiceInput | null;
+  failure?: Exclude<CbdbCuratedVoiceFailure, 'voice-scope-unsupported' | 'realm-update-voice-failed'>;
+  message?: string;
+} {
+  const built: CbdbCuratedVoiceInput = {};
+  if (Object.prototype.hasOwnProperty.call(input, 'voiceId')) {
+    const voiceId = normalizeVoiceText(input.voiceId);
+    if (!voiceId) {
+      return {
+        input: null,
+        failure: 'voice-id-invalid',
+        message: 'Reviewed voice promotion requires a non-empty voiceId.',
+      };
+    }
+    built.voiceId = voiceId;
+  }
+  if (Object.prototype.hasOwnProperty.call(input, 'description')) {
+    const description = normalizeVoiceText(input.description);
+    if (!description) {
+      return {
+        input: null,
+        failure: 'voice-description-invalid',
+        message: 'Reviewed voice promotion requires a non-empty voice description.',
+      };
+    }
+    built.description = description;
+  }
+  if (Object.prototype.hasOwnProperty.call(input, 'emotionEnabled')) {
+    built.emotionEnabled = Boolean(input.emotionEnabled);
+  }
+  if (Object.prototype.hasOwnProperty.call(input, 'speed')) {
+    const speed = normalizeVoiceNumber(input.speed);
+    if (speed === null || speed < -50 || speed > 100) {
+      return {
+        input: null,
+        failure: 'voice-speed-invalid',
+        message: 'Reviewed voice speed must be between -50 and 100.',
+      };
+    }
+    built.speed = speed;
+  }
+  if (Object.prototype.hasOwnProperty.call(input, 'pitch')) {
+    const pitch = normalizeVoiceNumber(input.pitch);
+    if (pitch === null || pitch < -12 || pitch > 12) {
+      return {
+        input: null,
+        failure: 'voice-pitch-invalid',
+        message: 'Reviewed voice pitch must be between -12 and 12.',
+      };
+    }
+    built.pitch = pitch;
+  }
+  if (Object.prototype.hasOwnProperty.call(input, 'speechModelId')) {
+    const speechModelId = normalizeVoiceText(input.speechModelId);
+    if (!speechModelId) {
+      return {
+        input: null,
+        failure: 'voice-speech-model-invalid',
+        message: 'Reviewed voice speech route requires a non-empty speech model id.',
+      };
+    }
+    built.speechModelId = speechModelId;
+  }
+  if (Object.prototype.hasOwnProperty.call(input, 'speechRoutePolicy')) {
+    const speechRoutePolicy = normalizeVoiceText(input.speechRoutePolicy);
+    if (speechRoutePolicy !== 'local' && speechRoutePolicy !== 'cloud') {
+      return {
+        input: null,
+        failure: 'voice-speech-route-invalid',
+        message: 'Reviewed voice speech route policy must be local or cloud.',
+      };
+    }
+    built.speechRoutePolicy = speechRoutePolicy;
+  }
+  if (Object.keys(built).length === 0) {
+    return {
+      input: null,
+      failure: 'voice-no-reviewed-changes',
+      message: 'Reviewed voice promotion requires voiceId, description, emotionEnabled, speed, pitch, speechModelId, or speechRoutePolicy.',
+    };
+  }
+  return { input: built };
+}
+
 export function normalizeRealmAgentAvatarSelectResult(
   response: RealmSelectAvatarResponse,
   submitted: RealmSelectAvatarInput,
@@ -259,6 +472,107 @@ export function normalizeRealmAgentAvatarSelectResult(
     },
   };
 }
+
+export async function promoteReviewedCbdbCuratedProfileMedia(
+  agent: OwnerPortfolioAgentDetail,
+  input: CbdbCuratedProfileMediaInput,
+  realm: StudioRealmClient = createStudioRealmClient(),
+): Promise<CbdbCuratedProfileMediaPromotionResult> {
+  if (agent.ownerScope !== 'cbdb-curated-system') {
+    return {
+      ok: false,
+      source: CBDB_CURATED_PROFILE_MEDIA_SOURCE,
+      publicTruth: false,
+      failure: 'profile-media-scope-unsupported',
+      message: 'CBDB curated profile media promotion requires a curated system-agent target.',
+      submitted: null,
+    };
+  }
+  const built = buildCbdbCuratedProfileMediaInput(input);
+  if (!built.input) {
+    return {
+      ok: false,
+      source: CBDB_CURATED_PROFILE_MEDIA_SOURCE,
+      publicTruth: false,
+      failure: built.failure || 'profile-media-no-reviewed-changes',
+      message: built.message || 'Reviewed profile media payload invalid.',
+      submitted: null,
+    };
+  }
+  try {
+    const updatedAgent = await realm.updateCbdbCuratedSystemAgentProfileMedia({
+      path: { agentId: agent.id },
+      body: built.input,
+    });
+    return {
+      ok: true,
+      source: CBDB_CURATED_PROFILE_MEDIA_SOURCE,
+      publicTruth: true,
+      submitted: built.input,
+      agent: updatedAgent,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      source: CBDB_CURATED_PROFILE_MEDIA_SOURCE,
+      publicTruth: false,
+      failure: 'realm-update-profile-media-failed',
+      message: error instanceof Error ? error.message : 'Realm CBDB curated profile media update failed.',
+      submitted: built.input,
+    };
+  }
+}
+
+export async function promoteReviewedCbdbCuratedVoice(
+  agent: OwnerPortfolioAgentDetail,
+  input: CbdbCuratedVoiceInput,
+  realm: StudioRealmClient = createStudioRealmClient(),
+): Promise<CbdbCuratedVoicePromotionResult> {
+  if (agent.ownerScope !== 'cbdb-curated-system') {
+    return {
+      ok: false,
+      source: CBDB_CURATED_VOICE_SOURCE,
+      publicTruth: false,
+      failure: 'voice-scope-unsupported',
+      message: 'CBDB curated voice promotion requires a curated system-agent target.',
+      submitted: null,
+    };
+  }
+  const built = buildCbdbCuratedVoiceInput(input);
+  if (!built.input) {
+    return {
+      ok: false,
+      source: CBDB_CURATED_VOICE_SOURCE,
+      publicTruth: false,
+      failure: built.failure || 'voice-no-reviewed-changes',
+      message: built.message || 'Reviewed voice payload invalid.',
+      submitted: null,
+    };
+  }
+  try {
+    const updatedAgent = await realm.updateCbdbCuratedSystemAgentVoice({
+      path: { agentId: agent.id },
+      body: built.input,
+    });
+    return {
+      ok: true,
+      source: CBDB_CURATED_VOICE_SOURCE,
+      publicTruth: true,
+      submitted: built.input,
+      agent: updatedAgent,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      source: CBDB_CURATED_VOICE_SOURCE,
+      publicTruth: false,
+      failure: 'realm-update-voice-failed',
+      message: error instanceof Error ? error.message : 'Realm CBDB curated voice update failed.',
+      submitted: built.input,
+    };
+  }
+}
+
 export async function selectReviewedAgentAvatarUrl(
   agentId: string,
   avatarUrl: string,

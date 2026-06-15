@@ -44,6 +44,10 @@ export function detailFriendCountLabel(agent: OwnerPortfolioAgentDetail) {
   return agent.friendCount.label;
 }
 
+export function ownerScopeLabel(scope: OwnerPortfolioAgent['ownerScope'] | OwnerPortfolioAgentDetail['ownerScope']): string {
+  return scope === 'cbdb-curated-system' ? 'CBDB curated system' : 'owner-created';
+}
+
 export function settingFieldStatusLabel(field: SettingField): string {
   if (field.status === 'available') return 'available';
   if (field.status === 'available-empty') return field.emptyLabel || 'not set';
@@ -90,7 +94,7 @@ export function AgentCard({ agent, active, onSelect }: { agent: OwnerPortfolioAg
           @{agent.handle}
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
-          <StatusBadge tone="info">owner-created</StatusBadge>
+          <StatusBadge tone="info">{ownerScopeLabel(agent.ownerScope)}</StatusBadge>
           <StatusBadge tone="neutral">{agent.worldName || 'world source unavailable'}</StatusBadge>
         </div>
       </div>

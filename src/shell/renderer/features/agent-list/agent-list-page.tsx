@@ -18,7 +18,7 @@ import {
   type OwnerPortfolioFilter,
   type OwnerPortfolioSort,
 } from '@renderer/features/portfolio/portfolio-data.js';
-import { listOwnerPortfolioAgents } from '@renderer/features/portfolio/portfolio-client.js';
+import { listRealmAgentStudioPortfolioAgents } from '@renderer/features/portfolio/portfolio-client.js';
 import { AgentCard } from '@renderer/features/portfolio/OwnerPortfolio.shared.js';
 import { ownerPortfolioListQueryKey } from '@renderer/features/agent-detail/use-agent-detail-query.js';
 
@@ -147,7 +147,7 @@ export function AgentListPage() {
 
   const portfolioQuery = useQuery({
     queryKey: ownerPortfolioListQueryKey(),
-    queryFn: () => listOwnerPortfolioAgents(),
+    queryFn: () => listRealmAgentStudioPortfolioAgents(),
   });
 
   const agents = portfolioQuery.data || [];
@@ -165,9 +165,9 @@ export function AgentListPage() {
         <header className="ras-page-header">
           <div style={{ minWidth: 0 }}>
             <p className="ras-page-header__eyebrow">Realm Agent Studio</p>
-            <h1 className="ras-page-header__title">Owner portfolio</h1>
+            <h1 className="ras-page-header__title">Realm Agent portfolio</h1>
             <p className="ras-page-header__description">
-              Your user-owned Realm Agents. Pick one to open its workspaces.
+              Owner-created agents and admitted CBDB curated system agents. Pick one to open its workspaces.
             </p>
           </div>
           <div className="ras-page-header__actions">
@@ -210,9 +210,9 @@ export function AgentListPage() {
               <LayoutGrid size={28} strokeWidth={1.8} />
             </div>
             <div className="ras-stack-tight">
-              <h2 className="ras-hero-empty__title">No owner-created Realm Agents</h2>
+              <h2 className="ras-hero-empty__title">No Realm Agents available</h2>
               <p className="ras-hero-empty__description">
-                You have not created any user-owned Realm Agents yet. Create the first one to start your portfolio.
+                Realm returned no owner-created agents or admitted CBDB curated system agents.
               </p>
             </div>
             <Button

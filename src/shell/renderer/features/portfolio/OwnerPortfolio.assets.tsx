@@ -3,8 +3,13 @@ import { Button, Checkbox, EmptyState, FieldShell, InlineAlert, SelectField, Sta
 import type { OwnerPortfolioAgentDetail } from './portfolio-data.js';
 import {
   generateReviewedVisualImageCandidate,
+  promoteReviewedCbdbCuratedProfileMedia,
+  promoteReviewedCbdbCuratedVoice,
   selectReviewedAgentAvatarUrl,
   synthesizeReviewedVoiceDemo,
+  type CbdbCuratedProfileMediaPromotionResult,
+  type CbdbCuratedVoiceInput,
+  type CbdbCuratedVoicePromotionResult,
   type RealmAgentAvatarSelectResult,
   type RuntimeVisualImageGenerationResult,
   type RuntimeVoiceDemoSynthesisResult,
@@ -54,6 +59,58 @@ export function createVoiceDemoCandidateInput(agent: OwnerPortfolioAgentDetail):
   };
 }
 
+export type ReviewedVoiceConfigDraft = {
+  voiceId: string;
+  description: string;
+  emotionEnabled: boolean;
+  speed: string;
+  pitch: string;
+  speechModelId: string;
+  speechRoutePolicy: 'local' | 'cloud';
+};
+
+export function createReviewedVoiceConfigDraft(agent: OwnerPortfolioAgentDetail): ReviewedVoiceConfigDraft {
+  const voice = agent.voice ?? {
+    voiceId: '',
+    description: '',
+    emotionEnabled: null,
+    speed: null,
+    pitch: null,
+    speechModelId: '',
+    speechRoutePolicy: null,
+  };
+  return {
+    voiceId: voice.voiceId,
+    description: voice.description,
+    emotionEnabled: voice.emotionEnabled ?? true,
+    speed: voice.speed === null ? '' : String(voice.speed),
+    pitch: voice.pitch === null ? '' : String(voice.pitch),
+    speechModelId: voice.speechModelId,
+    speechRoutePolicy: voice.speechRoutePolicy ?? 'local',
+  };
+}
+
+function normalizeOptionalNumberText(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const number = Number(trimmed);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function buildReviewedVoiceConfigInput(draft: ReviewedVoiceConfigDraft): CbdbCuratedVoiceInput {
+  return {
+    ...(draft.voiceId.trim() ? { voiceId: draft.voiceId.trim() } : {}),
+    ...(draft.description.trim() ? { description: draft.description.trim() } : {}),
+    emotionEnabled: draft.emotionEnabled,
+    ...(normalizeOptionalNumberText(draft.speed) !== undefined ? { speed: normalizeOptionalNumberText(draft.speed) } : {}),
+    ...(normalizeOptionalNumberText(draft.pitch) !== undefined ? { pitch: normalizeOptionalNumberText(draft.pitch) } : {}),
+    ...(draft.speechModelId.trim() ? { speechModelId: draft.speechModelId.trim() } : {}),
+    speechRoutePolicy: draft.speechRoutePolicy,
+  };
+}
+
 export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: OwnerPortfolioAgentDetail; onAgentWrite: () => Promise<void> }) {
   const [visualImageDraft, setVisualImageDraft] = useState(() => createVisualImageGenerationDraft());
   const [visualImageResult, setVisualImageResult] = useState<RuntimeVisualImageGenerationResult | null>(null);
@@ -65,14 +122,22 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
   const [creativeHistory, setCreativeHistory] = useState<CreativeAssetHistoryRecord[]>([]);
   const [avatarUrlDraft, setAvatarUrlDraft] = useState(() => agent.avatarUrl || '');
   const [avatarReviewed, setAvatarReviewed] = useState(false);
-  const [avatarResult, setAvatarResult] = useState<RealmAgentAvatarSelectResult | null>(null);
+  const [profileCoverUrlDraft, setProfileCoverUrlDraft] = useState(() => agent.profileCoverUrl.value || '');
+  const [avatarResult, setAvatarResult] = useState<RealmAgentAvatarSelectResult | CbdbCuratedProfileMediaPromotionResult | null>(null);
   const [isSelectingAvatar, setIsSelectingAvatar] = useState(false);
+  const [voiceConfigDraft, setVoiceConfigDraft] = useState<ReviewedVoiceConfigDraft>(() => createReviewedVoiceConfigDraft(agent));
+  const [voiceConfigReviewed, setVoiceConfigReviewed] = useState(false);
+  const [voiceConfigResult, setVoiceConfigResult] = useState<CbdbCuratedVoicePromotionResult | null>(null);
+  const [isPromotingVoiceConfig, setIsPromotingVoiceConfig] = useState(false);
   const [voiceDraft, setVoiceDraft] = useState<VoiceDemoCandidateInput>(() => createVoiceDemoCandidateInput(agent));
   const [voiceResult, setVoiceResult] = useState<RuntimeVoiceDemoSynthesisResult | null>(null);
   const [isSynthesizingVoice, setIsSynthesizingVoice] = useState(false);
   const visualImagePayload = useMemo(() => buildReviewedVisualImageCandidatePayload(visualImageDraft, agent), [agent, visualImageDraft]);
   const voicePayload = useMemo(() => buildReviewedVoiceDemoCandidatePayload(voiceDraft, agent), [agent, voiceDraft]);
   const avatarUrlChanged = avatarUrlDraft.trim() !== (agent.avatarUrl || '');
+  const profileCoverUrlChanged = profileCoverUrlDraft.trim() !== (agent.profileCoverUrl.value || '');
+  const profileMediaChanged = avatarUrlChanged || (agent.ownerScope === 'cbdb-curated-system' && profileCoverUrlChanged);
+  const voiceConfigChanged = JSON.stringify(createReviewedVoiceConfigDraft(agent)) !== JSON.stringify(voiceConfigDraft);
   const visualResourceTypes = MEDIA_CANDIDATE_RESOURCE_TYPES.filter((resourceType): resourceType is VisualCandidateResourceType => resourceType === 'IMAGE');
   const visualBindingPoints = MEDIA_CANDIDATE_BINDING_POINTS.filter((bindingPoint) => bindingPoint !== 'AGENT_VOICE_SAMPLE');
   const visualPreviewUrl = visualImageResult?.ok ? visualImageResult.runtime.previewUrls[0] || '' : '';
@@ -88,9 +153,14 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
     setIsUploadingIdentityResource(false);
     setCreativeHistory(loadLocalCreativeAssetHistory(agent.id));
     setAvatarUrlDraft(agent.avatarUrl || '');
+    setProfileCoverUrlDraft(agent.profileCoverUrl.value || '');
     setAvatarReviewed(false);
     setAvatarResult(null);
     setIsSelectingAvatar(false);
+    setVoiceConfigDraft(createReviewedVoiceConfigDraft(agent));
+    setVoiceConfigReviewed(false);
+    setVoiceConfigResult(null);
+    setIsPromotingVoiceConfig(false);
     setVoiceDraft(createVoiceDemoCandidateInput(agent));
     setVoiceResult(null);
     setIsSynthesizingVoice(false);
@@ -107,6 +177,18 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
     setAvatarResult(null);
   }
 
+  function updateProfileCoverUrlDraft(value: string) {
+    setProfileCoverUrlDraft(value);
+    setAvatarReviewed(false);
+    setAvatarResult(null);
+  }
+
+  function updateVoiceConfigDraft(patch: Partial<ReviewedVoiceConfigDraft>) {
+    setVoiceConfigDraft((current) => ({ ...current, ...patch }));
+    setVoiceConfigReviewed(false);
+    setVoiceConfigResult(null);
+  }
+
   function updateVoiceDraft(patch: Partial<VoiceDemoCandidateInput>) {
     setVoiceDraft((current) => ({ ...current, ...patch }));
     setVoiceResult(null);
@@ -116,13 +198,32 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
     setIsSelectingAvatar(true);
     setAvatarResult(null);
     try {
-      const result = await selectReviewedAgentAvatarUrl(agent.id, avatarUrlDraft);
+      const result = agent.ownerScope === 'cbdb-curated-system'
+        ? await promoteReviewedCbdbCuratedProfileMedia(agent, {
+          ...(avatarUrlChanged ? { avatarUrl: avatarUrlDraft } : {}),
+          ...(profileCoverUrlChanged ? { profileCoverUrl: profileCoverUrlDraft } : {}),
+        })
+        : await selectReviewedAgentAvatarUrl(agent.id, avatarUrlDraft);
       setAvatarResult(result);
       if (result.ok) {
         await onAgentWrite();
       }
     } finally {
       setIsSelectingAvatar(false);
+    }
+  }
+
+  async function promoteVoiceConfig() {
+    setIsPromotingVoiceConfig(true);
+    setVoiceConfigResult(null);
+    try {
+      const result = await promoteReviewedCbdbCuratedVoice(agent, buildReviewedVoiceConfigInput(voiceConfigDraft));
+      setVoiceConfigResult(result);
+      if (result.ok) {
+        await onAgentWrite();
+      }
+    } finally {
+      setIsPromotingVoiceConfig(false);
     }
   }
 
@@ -222,9 +323,13 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
             <Surface tone="card" padding="md">
               <div className="flex min-w-0 flex-wrap items-center gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium">Avatar URL selection</div>
+                  <div className="font-medium">
+                    {agent.ownerScope === 'cbdb-curated-system' ? 'Reviewed profile media promotion' : 'Avatar URL selection'}
+                  </div>
                   <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                    Saves the reviewed avatar URL on the public profile. It does not publish generated asset candidates.
+                    {agent.ownerScope === 'cbdb-curated-system'
+                      ? 'Saves reviewed portrait and cover URLs through the CBDB curated system-agent lane.'
+                      : 'Saves the reviewed avatar URL on the public profile. It does not publish generated asset candidates.'}
                   </div>
                 </div>
                 <StatusBadge tone="info">Realm save</StatusBadge>
@@ -241,6 +346,15 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                       onChange={(event) => updateAvatarUrlDraft(event.currentTarget.value)}
                     />
                   </FieldShell>
+                  {agent.ownerScope === 'cbdb-curated-system' ? (
+                    <FieldShell label="Profile cover URL" message="Owner-reviewed http(s) URL only.">
+                      <TextField
+                        value={profileCoverUrlDraft}
+                        placeholder="https://..."
+                        onChange={(event) => updateProfileCoverUrlDraft(event.currentTarget.value)}
+                      />
+                    </FieldShell>
+                  ) : null}
                   <Checkbox
                     checked={avatarReviewed}
                     onChange={(event) => setAvatarReviewed(event.currentTarget.checked)}
@@ -248,11 +362,11 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                   />
                   <div className="flex flex-wrap gap-3">
                     <Button
-                      disabled={!avatarUrlChanged || !avatarReviewed || isSelectingAvatar}
+                      disabled={!profileMediaChanged || !avatarReviewed || isSelectingAvatar}
                       loading={isSelectingAvatar}
                       onClick={() => void selectAvatarUrl()}
                     >
-                      Select avatar URL
+                      {agent.ownerScope === 'cbdb-curated-system' ? 'Promote reviewed profile media' : 'Select avatar URL'}
                     </Button>
                   </div>
                 </div>
@@ -260,12 +374,12 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
               {avatarResult ? (
                 <InlineAlert tone={avatarResult.ok ? 'success' : 'danger'} className="mt-3">
                   {avatarResult.ok
-                    ? 'Avatar URL saved. The profile has been refreshed.'
+                    ? 'Reviewed profile media saved. The profile has been refreshed.'
                     : avatarResult.message}
                 </InlineAlert>
               ) : null}
               {avatarResult ? (
-                <TechnicalReviewDetails title="Avatar save response">
+                <TechnicalReviewDetails title="Profile media save response">
                   <pre className="ras-json-preview m-0 min-h-24 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-panel)] p-3 text-xs">
                     {JSON.stringify(avatarResult, null, 2)}
                   </pre>
@@ -456,10 +570,14 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
             <h3 className="m-0 text-xl font-semibold">Voice demo candidate</h3>
             <StatusBadge tone="info">AI assisted</StatusBadge>
             <StatusBadge tone="neutral">sample only</StatusBadge>
-            <StatusBadge tone="warning">not published</StatusBadge>
+            <StatusBadge tone={agent.ownerScope === 'cbdb-curated-system' ? 'success' : 'warning'}>
+              {agent.ownerScope === 'cbdb-curated-system' ? 'voice profile writable' : 'not published'}
+            </StatusBadge>
           </div>
           <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-            Generate a voice sample for review. Publishing the sample as a public profile asset is deferred until the owner asset path is available.
+            {agent.ownerScope === 'cbdb-curated-system'
+              ? 'Generate a voice sample for review, then promote reviewed voice identity into the CBDB RealmAgent profile.'
+              : 'Generate a voice sample for review. Publishing the sample as a public profile asset is deferred until the owner asset path is available.'}
           </p>
           <div className="mt-4 grid gap-4">
             <Surface tone="card" padding="md">
@@ -474,6 +592,103 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                 </div>
               </div>
             </Surface>
+            {agent.ownerScope === 'cbdb-curated-system' ? (
+              <Surface tone="card" padding="md">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium">Reviewed voice profile</div>
+                    <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
+                      Saves reviewed voice and accent configuration to `dna.voice` for Agent Chat profile context.
+                    </div>
+                  </div>
+                  <StatusBadge tone="info">Realm save</StatusBadge>
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <FieldShell label="Voice ID" message="Preset voice id or admitted provider voice reference.">
+                    <TextField
+                      value={voiceConfigDraft.voiceId}
+                      placeholder="zh_narrator"
+                      onChange={(event) => updateVoiceConfigDraft({ voiceId: event.currentTarget.value })}
+                    />
+                  </FieldShell>
+                  <FieldShell label="Emotion">
+                    <Checkbox
+                      checked={voiceConfigDraft.emotionEnabled}
+                      onChange={(event) => updateVoiceConfigDraft({ emotionEnabled: event.currentTarget.checked })}
+                      label="Emotion modulation enabled"
+                    />
+                  </FieldShell>
+                  <FieldShell label="Speed" message="-50 to 100">
+                    <TextField
+                      type="number"
+                      value={voiceConfigDraft.speed}
+                      placeholder="-8"
+                      onChange={(event) => updateVoiceConfigDraft({ speed: event.currentTarget.value })}
+                    />
+                  </FieldShell>
+              <FieldShell label="Pitch" message="-12 to 12">
+                <TextField
+                  type="number"
+                  value={voiceConfigDraft.pitch}
+                  placeholder="-1"
+                  onChange={(event) => updateVoiceConfigDraft({ pitch: event.currentTarget.value })}
+                />
+              </FieldShell>
+              <FieldShell label="Speech model" message="Runtime speech.synthesize model id.">
+                <TextField
+                  value={voiceConfigDraft.speechModelId}
+                  placeholder="speech/qwen3tts"
+                  onChange={(event) => updateVoiceConfigDraft({ speechModelId: event.currentTarget.value })}
+                />
+              </FieldShell>
+              <FieldShell label="Speech route">
+                <SelectField
+                  value={voiceConfigDraft.speechRoutePolicy}
+                  options={[
+                    { value: 'local', label: 'local' },
+                    { value: 'cloud', label: 'cloud' },
+                  ]}
+                  onValueChange={(value) => updateVoiceConfigDraft({ speechRoutePolicy: value as 'local' | 'cloud' })}
+                />
+              </FieldShell>
+            </div>
+                <FieldShell label="Voice description" message="Reviewed accent, cadence, and timbre note." className="mt-3">
+                  <TextareaField
+                    value={voiceConfigDraft.description}
+                    placeholder="Reviewed Song literati narrator with measured cadence."
+                    onChange={(event) => updateVoiceConfigDraft({ description: event.currentTarget.value })}
+                  />
+                </FieldShell>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <Checkbox
+                    checked={voiceConfigReviewed}
+                    onChange={(event) => setVoiceConfigReviewed(event.currentTarget.checked)}
+                    label="Human review complete"
+                  />
+                  <Button
+                    disabled={!voiceConfigChanged || !voiceConfigReviewed || isPromotingVoiceConfig}
+                    loading={isPromotingVoiceConfig}
+                    onClick={() => void promoteVoiceConfig()}
+                  >
+                    Promote reviewed voice
+                  </Button>
+                </div>
+                {voiceConfigResult ? (
+                  <InlineAlert tone={voiceConfigResult.ok ? 'success' : 'danger'} className="mt-3">
+                    {voiceConfigResult.ok
+                      ? 'Reviewed voice saved. The profile has been refreshed.'
+                      : voiceConfigResult.message}
+                  </InlineAlert>
+                ) : null}
+                {voiceConfigResult ? (
+                  <TechnicalReviewDetails title="Voice profile save response">
+                    <pre className="ras-json-preview m-0 min-h-24 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-panel)] p-3 text-xs">
+                      {JSON.stringify(voiceConfigResult, null, 2)}
+                    </pre>
+                  </TechnicalReviewDetails>
+                ) : null}
+              </Surface>
+            ) : null}
             <FieldShell label="Demo script" message="Short text the agent will speak for the sample.">
               <TextareaField
                 value={voiceDraft.scriptText}

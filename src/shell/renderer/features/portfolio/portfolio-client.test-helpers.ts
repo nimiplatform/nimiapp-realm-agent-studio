@@ -149,6 +149,32 @@ export function mockRealm(): StudioRealmSurface {
         id: request.path.agentId,
         bio: 'Detail bio',
       })),
+      listCbdbCuratedSystemAgents: vi.fn(async () => [{
+        id: 'cbdb-agent-su-shi',
+        handle: 'su-shi',
+        displayName: 'CBDB Su Shi',
+        createdAt: '2026-06-14T00:00:00.000Z',
+        isAgent: true,
+        agentProfile: {
+          worldId: 'cbdb-song-slice-real-20260614-world',
+          ownershipType: 'WORLD_OWNED',
+          state: 'PUBLIC',
+        },
+      }]),
+      getCbdbCuratedSystemAgent: vi.fn(async (request: { readonly path: { readonly agentId: string } }) => ({
+        id: request.path.agentId,
+        handle: 'su-shi',
+        displayName: 'CBDB Su Shi',
+        createdAt: '2026-06-14T00:00:00.000Z',
+        isAgent: true,
+        bio: 'CBDB seeded Song literatus.',
+        agentProfile: {
+          worldId: 'cbdb-song-slice-real-20260614-world',
+          ownershipType: 'WORLD_OWNED',
+          state: 'PUBLIC',
+          greeting: 'Clear wind comes slowly.',
+        },
+      })),
       getMyRealmAgentSettings: vi.fn(async (request: { readonly path: { readonly agentId: string } }) => ({
           agentId: request.path.agentId,
           worldId: 'world-oasis',
@@ -225,6 +251,170 @@ export function mockRealm(): StudioRealmSurface {
           updatedAt: '2026-05-22T00:00:00.000Z',
         };
       }),
+      getCbdbCuratedSystemAgentSettings: vi.fn(async (request: { readonly path: { readonly agentId: string } }) => ({
+          agentId: request.path.agentId,
+          worldId: 'cbdb-song-slice-real-20260614-world',
+          agentRuleVersion: 1,
+          displayName: 'CBDB Su Shi',
+          description: 'CBDB seeded Song literatus.',
+          greeting: 'Clear wind comes slowly.',
+          naturalLanguageIntent: null,
+          identity: {
+            publicRole: 'Song literatus',
+            worldview: 'Northern Song scholarly world.',
+          },
+          personality: {
+            summary: 'Broad-minded and precise.',
+            relationshipMode: 'mentor',
+            interests: ['poetry'],
+            goals: ['preserve historical register'],
+          },
+          communication: {
+            contentStyle: 'Classical but readable.',
+            formality: 'formal',
+            responseLength: 'medium',
+            sentiment: 'positive',
+          },
+          boundaries: {
+            allowedThemes: ['history'],
+            disallowedThemes: ['anachronism'],
+          },
+          positioning: {
+            targetAudience: 'history builders',
+            positioning: 'curated historical agent',
+          },
+          updatedAt: '2026-06-14T00:00:00.000Z',
+      })),
+      updateCbdbCuratedSystemAgentSettings: vi.fn(async (request: { readonly path: { readonly agentId: string }; readonly body: Record<string, unknown> }) => {
+        const input = request.body;
+        return {
+          agentId: request.path.agentId,
+          worldId: 'cbdb-song-slice-real-20260614-world',
+          agentRuleVersion: 2,
+          displayName: typeof input.displayName === 'string' ? input.displayName : 'CBDB Su Shi',
+          description: typeof input.description === 'string' ? input.description : 'CBDB seeded Song literatus.',
+          greeting: typeof input.greeting === 'string' ? input.greeting : 'Clear wind comes slowly.',
+          naturalLanguageIntent: typeof input.naturalLanguageIntent === 'string' ? input.naturalLanguageIntent : null,
+          identity: {
+            publicRole: 'Song literatus',
+            worldview: 'Northern Song scholarly world.',
+            ...((input.identity && typeof input.identity === 'object') ? input.identity as Record<string, unknown> : {}),
+          },
+          personality: {
+            summary: 'Broad-minded and precise.',
+            relationshipMode: 'mentor',
+            interests: ['poetry'],
+            goals: ['preserve historical register'],
+            ...((input.personality && typeof input.personality === 'object') ? input.personality as Record<string, unknown> : {}),
+          },
+          communication: {
+            contentStyle: 'Classical but readable.',
+            formality: 'formal',
+            responseLength: 'medium',
+            sentiment: 'positive',
+            ...((input.communication && typeof input.communication === 'object') ? input.communication as Record<string, unknown> : {}),
+          },
+          boundaries: {
+            allowedThemes: ['history'],
+            disallowedThemes: ['anachronism'],
+            ...((input.boundaries && typeof input.boundaries === 'object') ? input.boundaries as Record<string, unknown> : {}),
+          },
+          positioning: {
+            targetAudience: 'history builders',
+            positioning: 'curated historical agent',
+            ...((input.positioning && typeof input.positioning === 'object') ? input.positioning as Record<string, unknown> : {}),
+          },
+          updatedAt: '2026-06-15T00:00:00.000Z',
+        };
+      }),
+      updateCbdbCuratedSystemAgentProfileMedia: vi.fn(async (
+        request: {
+          readonly path: { readonly agentId: string };
+          readonly body: { readonly avatarUrl?: string | null; readonly profileCoverUrl?: string | null };
+        },
+      ) => ({
+        id: request.path.agentId,
+        handle: '@su-shi',
+        displayName: 'CBDB Su Shi',
+        createdAt: '2026-06-14T00:00:00.000Z',
+        isAgent: true,
+        avatarUrl: request.body.avatarUrl ?? undefined,
+        profileCoverUrl: request.body.profileCoverUrl ?? undefined,
+        agentProfile: {
+          ownershipType: 'WORLD_OWNED',
+          worldId: 'cbdb-song-slice-real-20260614-world',
+          ownerWorldId: 'cbdb-song-slice-real-20260614-world',
+          activeWorldId: 'cbdb-song-slice-real-20260614-world',
+          state: 'ACTIVE',
+          importance: 'SECONDARY',
+        },
+      })),
+      updateCbdbCuratedSystemAgentVoice: vi.fn(async (
+        request: {
+          readonly path: { readonly agentId: string };
+          readonly body: {
+            readonly voiceId?: string;
+            readonly description?: string;
+            readonly emotionEnabled?: boolean;
+            readonly speed?: number;
+            readonly pitch?: number;
+            readonly speechModelId?: string;
+            readonly speechRoutePolicy?: 'local' | 'cloud';
+          };
+        },
+      ) => ({
+        id: request.path.agentId,
+        handle: '@su-shi',
+        displayName: 'CBDB Su Shi',
+        createdAt: '2026-06-14T00:00:00.000Z',
+        isAgent: true,
+        agentProfile: {
+          ownershipType: 'WORLD_OWNED',
+          worldId: 'cbdb-song-slice-real-20260614-world',
+          ownerWorldId: 'cbdb-song-slice-real-20260614-world',
+          activeWorldId: 'cbdb-song-slice-real-20260614-world',
+          state: 'ACTIVE',
+          importance: 'SECONDARY',
+          dna: {
+            voice: request.body,
+          },
+        },
+      })),
+      getCbdbCuratedSystemAgentChatReadiness: vi.fn(async (
+        request: { readonly path: { readonly agentId: string } },
+      ) => ({
+        agentId: request.path.agentId,
+        worldId: 'cbdb-song-slice-real-20260614-world',
+        ownerScope: 'cbdb-curated-system',
+        consumerSurface: 'AGENT_CHAT_READINESS',
+        runtimeProjectionChecksum: 'checksum-cbdb-chat-readiness-1',
+        selectedInputCount: 2,
+        suppressedInputCount: 0,
+        worldRuleCount: 0,
+        agentRuleCount: 2,
+        selectedOwnerSettingFields: [
+          'boundaries.allowedThemes',
+          'communication.contentStyle',
+        ],
+        rawRuleContentExposed: false,
+        profile: {
+          displayName: 'CBDB Su Shi',
+          handle: 'su-shi',
+          avatarUrl: 'https://cdn.example.com/cbdb/su-shi-reviewed.png',
+          profileCoverUrl: 'https://cdn.example.com/cbdb/song-literati-cover.png',
+          defaultVoiceReference: 'preset_voice_id:zh_narrator',
+          speechModelId: 'speech/qwen3tts',
+          speechRoutePolicy: 'local',
+        },
+        gates: {
+          localAgentIdentityReady: true,
+          profileContextReady: true,
+          ownerSettingsReady: true,
+          profileMediaReady: true,
+          voiceReferenceReady: true,
+          speechRouteReady: true,
+        },
+      })),
       worldControllerListWorlds: vi.fn(async () => [world]),
       worldControllerGetWorldDetailWithAgents: vi.fn(async (request: { readonly path: { readonly id: string } }) => ({
           ...world,
@@ -368,7 +558,49 @@ export function mockRealm(): StudioRealmSurface {
         createdAt: '2026-05-21T00:00:00.000Z',
         updatedAt: '2026-05-21T00:00:00.000Z',
       })),
-      projectRuntimePayload: vi.fn(async () => ({
+      projectRuntimePayload: vi.fn(async (request: { readonly body?: { readonly agentId?: string; readonly worldId?: string } }) => {
+        if (request.body?.agentId) {
+          const worldId = request.body.worldId || 'cbdb-song-slice-real-20260614-world';
+          const agentId = request.body.agentId;
+          const agentRuleInput = {
+            id: 'agent-rule-input-1',
+            sourceType: 'AGENT_RULE',
+            sourceId: 'agent-rule-content-style',
+            lineageId: 'lineage-agent-content-style',
+            worldId,
+            agentId,
+            ruleKey: 'behavioral:style:content',
+            title: 'Owner Content Style',
+            statement: 'Reviewed content style that must not reach Studio UI.',
+            hardness: 'SOFT',
+            priority: 70,
+            scope: 'SELF',
+            layer: 'BEHAVIORAL',
+            provenance: 'SYSTEM',
+            structured: {
+              ownerSettingField: 'communication.contentStyle',
+              contentStyle: 'Uses reviewed Song-literati register.',
+            },
+          };
+          return {
+            worldId,
+            agentId,
+            consumerSurface: 'RUNTIME_PAYLOAD',
+            releaseAnchor: null,
+            checksum: 'checksum-runtime-agent-1',
+            selectedInputs: [agentRuleInput],
+            trace: {
+              selectedInputIds: ['agent-rule-input-1'],
+              suppressedInputs: [],
+              resolutionOutcomes: [],
+            },
+            payload: {
+              worldRules: [],
+              agentRules: [agentRuleInput],
+            },
+          };
+        }
+        return {
           worldId: 'OASIS',
           consumerSurface: 'RUNTIME_PAYLOAD',
           releaseAnchor: null,
@@ -426,7 +658,8 @@ export function mockRealm(): StudioRealmSurface {
             }],
             agentRules: [],
           },
-      })),
+        };
+      }),
   } as unknown as StudioRealmSurface;
 }
 
@@ -535,7 +768,17 @@ export function ownerAgentDetail(): OwnerPortfolioAgentDetail {
     world: detailField('world', 'World evidence', 'OASIS'),
     state: detailField('state', 'State evidence', 'ACTIVE'),
     avatarUrl: null,
+    voice: {
+      voiceId: '',
+      description: '',
+      emotionEnabled: null,
+      speed: null,
+      pitch: null,
+      speechModelId: '',
+      speechRoutePolicy: null,
+    },
     friendCount: { status: 'source-unavailable', label: 'friendCount source unavailable' },
+    ownerScope: 'owner-created',
     source: 'Realm MeService.getMyRealmAgent',
   };
 }

@@ -4,6 +4,7 @@ import {
   EvidenceCard,
   ReadOnlySettingField,
   detailFriendCountLabel,
+  ownerScopeLabel,
   settingFieldDisplayValue,
 } from '@renderer/features/portfolio/OwnerPortfolio.shared.js';
 
@@ -72,7 +73,7 @@ export function AgentProfileOverview({
             <>
               <div className="ras-info-tile">
                 <div className="ras-info-tile__label">Ownership</div>
-                <div className="ras-info-tile__value">User-owned Realm Agent</div>
+                <div className="ras-info-tile__value">{ownerScopeLabel(agent.ownerScope)} Realm Agent</div>
               </div>
               {agent.friendCount.status === 'available' ? (
                 <div className="ras-info-tile">

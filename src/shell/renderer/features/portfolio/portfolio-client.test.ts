@@ -15,11 +15,16 @@ import {
   createReviewedRealmAgentWithProfileSettings,
   generateReviewedVisualImageCandidate,
   getAgentVisibilitySettings,
+  getCbdbCuratedSystemPortfolioAgentDetail,
   getCreateRealmAgentWorldPreview,
   getOwnerAgentSettings,
   getOwnerPortfolioAgentDetail,
+  getPortfolioAgentSettings,
+  getRealmAgentStudioPortfolioAgentDetail,
   listCreateRealmAgentSelectableWorlds,
+  listCbdbCuratedSystemPortfolioAgents,
   listOwnerPortfolioAgents,
+  listRealmAgentStudioPortfolioAgents,
   listReadyPostAttachmentResources,
   normalizeFinalizedDirectMediaResource,
   normalizePostAttachmentResourceOptions,
@@ -36,6 +41,7 @@ import {
   synthesizeReviewedVoiceDemo,
   updateReviewedAgentVisibility,
   updateReviewedOwnerAgentSettings,
+  updateReviewedPortfolioAgentSettings,
   uploadReviewedIdentityMediaResource,
   uploadReviewedPostMediaResource,
   type AgentVisibilityDraft,
@@ -68,6 +74,39 @@ describe('owner portfolio core client', () => {
       expect(agents[0]?.source).toBe('Realm MeService.listMyRealmAgents');
     });
 
+    it('lists owner-created and CBDB curated system agents through admitted portfolio lanes', async () => {
+      const realm = mockRealm();
+      const agents = await listRealmAgentStudioPortfolioAgents(realm);
+
+      expect(realm.listMyRealmAgents).toHaveBeenCalledTimes(1);
+      expect(realm.listCbdbCuratedSystemAgents).toHaveBeenCalledTimes(1);
+      expect(agents.map((item) => [item.id, item.ownerScope, item.source])).toEqual([
+        ['agent-1', 'owner-created', 'Realm MeService.listMyRealmAgents'],
+        ['cbdb-agent-su-shi', 'cbdb-curated-system', 'Realm AgentCuratedSystemService.listCbdbCuratedSystemAgents'],
+      ]);
+    });
+
+    it('reads CBDB curated system agent details through the curated lane', async () => {
+      const realm = mockRealm();
+      const detail = await getCbdbCuratedSystemPortfolioAgentDetail('cbdb-agent-su-shi', realm);
+
+      expect(realm.getCbdbCuratedSystemAgent).toHaveBeenCalledWith({ path: { agentId: 'cbdb-agent-su-shi' } });
+      expect(detail.ownerScope).toBe('cbdb-curated-system');
+      expect(detail.source).toBe('Realm AgentCuratedSystemService.getCbdbCuratedSystemAgent');
+      expect(detail.world.value).toBe('cbdb-song-slice-real-20260614-world');
+    });
+
+    it('falls through to CBDB curated system detail when owner authority does not contain the agent', async () => {
+      const realm = mockRealm();
+      vi.mocked(realm.getMyRealmAgent).mockRejectedValueOnce(new Error('owner authority missing'));
+
+      const detail = await getRealmAgentStudioPortfolioAgentDetail('cbdb-agent-su-shi', realm);
+
+      expect(realm.getMyRealmAgent).toHaveBeenCalledWith({ path: { agentId: 'cbdb-agent-su-shi' } });
+      expect(realm.getCbdbCuratedSystemAgent).toHaveBeenCalledWith({ path: { agentId: 'cbdb-agent-su-shi' } });
+      expect(detail.ownerScope).toBe('cbdb-curated-system');
+    });
+
     it('fetches selected detail through getMyRealmAgent', async () => {
       const realm = mockRealm();
       const detail = await getOwnerPortfolioAgentDetail('agent-detail-1', realm);
@@ -77,6 +116,15 @@ describe('owner portfolio core client', () => {
       expect(detail.id).toBe('agent-detail-1');
       expect(detail.bio.value).toBe('Detail bio');
       expect(detail.source).toBe('Realm MeService.getMyRealmAgent');
+    });
+
+    it('keeps standalone CBDB list reads off owner-created portfolio methods', async () => {
+      const realm = mockRealm();
+      const agents = await listCbdbCuratedSystemPortfolioAgents(realm);
+
+      expect(realm.listCbdbCuratedSystemAgents).toHaveBeenCalledTimes(1);
+      expect(realm.listMyRealmAgents).not.toHaveBeenCalled();
+      expect(agents[0]?.ownerScope).toBe('cbdb-curated-system');
     });
 
     it('uses WorldsService only for create readiness world list reads', async () => {

@@ -1,4 +1,4 @@
-import type { OwnerPortfolioAgentDetail } from './portfolio-data.js';
+import type { OwnerPortfolioAgentDetail, PortfolioAgentDetailSource } from './portfolio-data.js';
 import {
   buildStudioTextRequestParameters,
   buildStudioRuntimeMetadata,
@@ -37,7 +37,7 @@ export type CandidatePostPayload = {
   candidate: true;
   source: 'realm-agent-studio.local-post-draft';
   agentRef: {
-    source: 'Realm MeService.getMyRealmAgent';
+    source: PortfolioAgentDetailSource;
     agentKey: string;
     handle: string;
     displayName: string;

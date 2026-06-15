@@ -39,6 +39,7 @@ const agent: OwnerPortfolioAgentDetail = {
   state: settingField('state', 'State evidence', 'ACTIVE'),
   avatarUrl: 'https://cdn.example.test/avatar.png',
   friendCount: { status: 'available', value: 7 },
+  ownerScope: 'owner-created',
   source: 'Realm MeService.getMyRealmAgent',
 };
 

@@ -7,11 +7,13 @@ import {
   AGENT_VISIBILITY_VALUES,
   createAgentVisibilityDraft,
   getAgentVisibilitySettings,
-  getOwnerAgentSettings,
+  getPortfolioAgentSettings,
+  projectAgentChatReadinessContextSummary,
   projectAgentRuntimeContextSummary,
-  proposeReviewedOwnerAgentSettings,
+  proposeReviewedPortfolioAgentSettings,
   updateReviewedAgentVisibility,
-  updateReviewedOwnerAgentSettings,
+  updateReviewedPortfolioAgentSettings,
+  type AgentChatReadinessSummaryResult,
   type AgentVisibilityDraft,
   type AgentVisibilityField,
   type RealmAgentVisibilityUpdateResult,
@@ -31,8 +33,8 @@ import { TechnicalReviewDetails } from './OwnerPortfolio.shared.js';
 
 export function SettingProposalWorkspace({ agent, onAgentWrite }: { agent: OwnerPortfolioAgentDetail; onAgentWrite: () => Promise<void> }) {
   const settingsQuery = useQuery({
-    queryKey: ['realm-agent-studio', 'owner-agent-settings', agent.id],
-    queryFn: () => getOwnerAgentSettings(agent.id),
+    queryKey: ['realm-agent-studio', 'agent-settings', agent.ownerScope, agent.id],
+    queryFn: () => getPortfolioAgentSettings(agent),
   });
   const [draft, setDraft] = useState<OwnerAgentSettingsDraft | null>(null);
   const [ownerReviewed, setOwnerReviewed] = useState(false);
@@ -78,7 +80,7 @@ export function SettingProposalWorkspace({ agent, onAgentWrite }: { agent: Owner
     setIsSaving(true);
     setResult(null);
     try {
-      const updateResult = await updateReviewedOwnerAgentSettings(agent.id, draft, settingsQuery.data);
+      const updateResult = await updateReviewedPortfolioAgentSettings(agent, draft, settingsQuery.data);
       setResult(updateResult);
       if (updateResult.ok) {
         await settingsQuery.refetch();
@@ -96,7 +98,7 @@ export function SettingProposalWorkspace({ agent, onAgentWrite }: { agent: Owner
     setIsProposing(true);
     setRuntimeProposal(null);
     try {
-      const proposalResult = await proposeReviewedOwnerAgentSettings(agent.id, draft, settingsQuery.data);
+      const proposalResult = await proposeReviewedPortfolioAgentSettings(agent, draft, settingsQuery.data);
       setRuntimeProposal(proposalResult);
     } finally {
       setIsProposing(false);
@@ -117,20 +119,20 @@ export function SettingProposalWorkspace({ agent, onAgentWrite }: { agent: Owner
       <div className="grid min-w-0 gap-5 xl:grid-cols-[1fr_360px]">
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <h3 className="m-0 text-xl font-semibold">Owner settings</h3>
+            <h3 className="m-0 text-xl font-semibold">Agent settings</h3>
             <StatusBadge tone="success">Realm save</StatusBadge>
-            <StatusBadge tone="neutral">owner-reviewed</StatusBadge>
+            <StatusBadge tone="neutral">{agent.ownerScope === 'cbdb-curated-system' ? 'system-curated' : 'owner-reviewed'}</StatusBadge>
           </div>
           <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
             Edit the agent's public identity, behavior notes, and communication style. Changes are reviewed before save.
           </p>
 
           {settingsQuery.isLoading ? (
-            <EmptyState title="Loading owner settings" description="Loading editable settings for this Realm Agent." />
+            <EmptyState title="Loading agent settings" description="Loading editable settings for this Realm Agent." />
           ) : null}
           {settingsQuery.isError ? (
             <InlineAlert tone="danger">
-              Owner settings unavailable: {settingsQuery.error instanceof Error ? settingsQuery.error.message : 'Realm owner settings read failed.'}
+              Agent settings unavailable: {settingsQuery.error instanceof Error ? settingsQuery.error.message : 'Realm agent settings read failed.'}
             </InlineAlert>
           ) : null}
           {draft && settingsQuery.data ? (
@@ -559,7 +561,9 @@ export function VisibilitySettingsWorkspace({ agent, onAgentWrite }: { agent: Ow
 }
 
 export function RuntimeProjectionWorkspace({ agent }: { agent: OwnerPortfolioAgentDetail }) {
-  const [projectionResult, setProjectionResult] = useState<RuntimeProjectionSummaryResult | null>(null);
+  const [projectionResult, setProjectionResult] = useState<
+    RuntimeProjectionSummaryResult | AgentChatReadinessSummaryResult | null
+  >(null);
   const [isProjecting, setIsProjecting] = useState(false);
 
   useEffect(() => {
@@ -572,6 +576,17 @@ export function RuntimeProjectionWorkspace({ agent }: { agent: OwnerPortfolioAge
     setProjectionResult(null);
     try {
       const result = await projectAgentRuntimeContextSummary(agent);
+      setProjectionResult(result);
+    } finally {
+      setIsProjecting(false);
+    }
+  }
+
+  async function projectAgentChatReadinessContext() {
+    setIsProjecting(true);
+    setProjectionResult(null);
+    try {
+      const result = await projectAgentChatReadinessContextSummary(agent);
       setProjectionResult(result);
     } finally {
       setIsProjecting(false);
@@ -593,6 +608,9 @@ export function RuntimeProjectionWorkspace({ agent }: { agent: OwnerPortfolioAge
         <Button disabled={isProjecting || agent.world.status !== 'available'} loading={isProjecting} onClick={() => void projectRuntimeContext()}>
           Generate world context summary
         </Button>
+        <Button disabled={isProjecting || agent.world.status !== 'available'} loading={isProjecting} onClick={() => void projectAgentChatReadinessContext()}>
+          Generate Agent Chat readiness summary
+        </Button>
       </div>
       {agent.world.status !== 'available' ? (
         <InlineAlert tone="warning">
@@ -602,7 +620,7 @@ export function RuntimeProjectionWorkspace({ agent }: { agent: OwnerPortfolioAge
       {projectionResult ? (
         <InlineAlert tone={projectionResult.ok ? 'success' : 'danger'} className="mt-3">
           {projectionResult.ok
-            ? 'World context summary generated. No agent settings were changed.'
+            ? 'Runtime context summary generated. No agent settings were changed.'
             : projectionResult.message}
         </InlineAlert>
       ) : null}
