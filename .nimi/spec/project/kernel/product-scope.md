@@ -11,12 +11,13 @@ updated: 2026-05-22
 ## Product Position
 
 Realm Agent Studio is for agent owners who incubate and operate user-owned
-public Realm Agents as durable Agent IP. **[R-RAS-SCOPE-001]** It is not a general agent management
-center. **[R-RAS-SCOPE-002]** It does not manage LocalAgent private runtime forks, world-created
+public Realm Agents as durable Agent IP, plus the admitted CBDB curated
+system-agent lane for Halliday-owned seeded RealmAgents. **[R-RAS-SCOPE-001]** It is not a general agent management
+center. **[R-RAS-SCOPE-002]** It does not manage LocalAgent private runtime forks, generic world-created
 agents, world NPCs, or Forge package sources.
 
 The primary user is an agent owner who may operate one public Realm Agent or a
-portfolio of public Realm Agents. **[R-RAS-SCOPE-003]** The first-version depth is owner-only: no
+portfolio of public Realm Agents. **[R-RAS-SCOPE-003]** The first-version depth is owner-led plus the CBDB curated system-agent exception: no
 invited editors, no team workspace, and no world-owner override over
 owner-created agents.
 
@@ -32,6 +33,10 @@ owner-created agents.
 - **[R-RAS-SCOPE-006]** Update canonical public setting through owner settings input: natural
   language, structured setting fields, AI proposal/review, and canonical rule
   review only when an admitted owner-scoped rule-content read surface exists.
+- **[R-RAS-SCOPE-033]** Update Halliday-owned CBDB seeded `WORLD_OWNED`
+  RealmAgents through the curated system-agent settings ingress
+  `/api/agent/curated-system/cbdb/agents/{agentId}/settings`. This lane is
+  not owner quota/listing truth and is not generic world-created agent tooling.
 - **[R-RAS-SCOPE-007]** Generate or upload visual/media candidates, keep app-local preview/history
   only, and mark assets public only after Realm write succeeds.
 - **[R-RAS-SCOPE-008]** Generate voice-demo candidates through Runtime `audio.synthesize` when the
@@ -52,8 +57,8 @@ owner-created agents.
 - **[R-RAS-SCOPE-014]** LocalAgent private memory, emotion, cognition, runtime state, or app-specific
   memory fragments.
 - **[R-RAS-SCOPE-015]** RealmAgent direct chat as a Studio feature.
-- **[R-RAS-SCOPE-016]** World-created agents, world-owned NPCs, package-derived world agents, and
-  world maintainer tooling.
+- **[R-RAS-SCOPE-016]** Generic world-created agents, world-owned NPCs,
+  non-CBDB package-derived world agents, and world maintainer tooling.
 - **[R-RAS-SCOPE-017]** Forge `agentBlueprint` provenance or package-to-RealmAgent import mapping.
 - **[R-RAS-SCOPE-018]** World transfer.
 - **[R-RAS-SCOPE-019]** Team collaboration, invited editors, shared operation, or workspace roles.

@@ -24,7 +24,7 @@ These rules are the cross-cutting invariants every Realm Agent Studio kernel doc
 
 ## Owner Authority And Surface Boundary
 
-- **[R-RAS-CORE-007]** Realm Agent Studio MUST scope its product authority to current-authenticated-user `MASTER_OWNED` Realm Agents only; `WORLD_OWNED` agents, world-created agents, world NPCs, and world maintainer tooling are out of scope.
+- **[R-RAS-CORE-007]** Realm Agent Studio MUST keep its default owner portfolio scoped to current-authenticated-user `MASTER_OWNED` Realm Agents. The only admitted `WORLD_OWNED` exception is the CBDB curated system-agent lane for Halliday-owned seeded agents; generic world-created agents, world NPCs, and world maintainer tooling remain out of scope.
 - **[R-RAS-CORE-008]** Studio MUST NOT reuse creator/world-maintainer/world-control surfaces (including `/api/creator/agents`, `/api/agent/dev/my-agents`, `AgentRulesService` world-scoped CRUD, `WorldControlService.worldControlControllerBatchUpsertWorldBindings`, `UpdateCreatorAgentDto.*`) as default owner save, read, or review paths.
 - **[R-RAS-CORE-009]** `AgentRule` remains the canonical Realm truth anchor; raw `AgentRule` CRUD MUST NOT be promoted to the default owner editing UX, and canonical rule review remains deferred until Realm admits a dedicated owner-scoped rule-content read surface.
 

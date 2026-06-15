@@ -57,12 +57,12 @@ rule CRUD or owner rule-content review.
 
 ## Owner Boundary
 
-**[R-RAS-AGENT-007]** Realm Agent Studio manages user-owned public Realm Agents only. Current DTO
+**[R-RAS-AGENT-007]** Realm Agent Studio manages user-owned public Realm Agents and the admitted CBDB curated system-agent lane only. Current DTO
 evidence exposes `AgentOwnershipType` as `MASTER_OWNED | WORLD_OWNED`
 (`sdk/src/realm/generated/schema.ts:3889`), but **[R-RAS-AGENT-008]** this app spec does not
 rename that source model. **[R-RAS-AGENT-009]** Studio owner-created scope is the current
 authenticated user's `MASTER_OWNED` Realm Agents and excludes `WORLD_OWNED`
-agents.
+agents except for the explicit CBDB curated system-agent lane.
 
 Studio portfolio reads use the current-user owner-owned RealmAgent read surface:
 `GET /api/me/agents` / `listMyRealmAgents` returns `UserLiteDto[]`
@@ -72,6 +72,16 @@ and `GET /api/me/agents/{agentId}` / `getMyRealmAgent` returns one
 to `:11844`). **[R-RAS-AGENT-010]** These surfaces are current authenticated user scoped and
 `MASTER_OWNED` only.
 
+The CBDB curated system-agent lane uses
+`GET /api/agent/curated-system/cbdb/agents`,
+`GET /api/agent/curated-system/cbdb/agents/{agentId}`, and
+`GET/PATCH /api/agent/curated-system/cbdb/agents/{agentId}/settings` for
+Halliday-owned seeded `WORLD_OWNED` RealmAgents. **[R-RAS-AGENT-036]** This
+lane must not weaken `/api/me/agents`, owner-agent quotas, or generic
+world-created/NPC boundaries. **[R-RAS-AGENT-037]** Accepted curated settings
+writes use `SYSTEM` AgentRule provenance and `curated-system-agent-settings:*`
+source refs.
+
 **[R-RAS-AGENT-011]** `GET /api/creator/agents` is a creator/world-creator surface, not the Studio
 canonical my-agents surface and not an owner create path. **[R-RAS-AGENT-012]** `/api/creator/agents`
 belongs to World Creator / Maintainer semantics and may be cited only as
@@ -80,7 +90,8 @@ surface and carries development/limit/stats/delete/unbind/state management
 context; **[R-RAS-AGENT-013]** Studio must not use it as canonical portfolio authority.
 
 **[R-RAS-AGENT-014]** World ownership does not grant edit authority over an owner-created Realm Agent.
-World-created agents belong to world tooling. **[R-RAS-AGENT-015]** AgentFriend creation/removal
+Generic world-created agents belong to world tooling; the CBDB curated system
+lane is a separately admitted Halliday-owned exception. **[R-RAS-AGENT-015]** AgentFriend creation/removal
 linkages must not mutate the source RealmAgent truth
 (`.nimi/spec/realm/kernel/social-contract.md:92` to `:100`).
 
