@@ -10,10 +10,10 @@ importers:
     dependencies:
       '@nimiplatform/kit':
         specifier: workspace:*
-        version: link:../../nimi-realm/nimi/kit
+        version: link:../../nimi/kit
       '@nimiplatform/sdk':
         specifier: workspace:*
-        version: link:../../nimi-realm/nimi/sdks/typescript
+        version: link:../../nimi/sdks/typescript
       '@tanstack/react-query':
         specifier: ^5.100.11
         version: 5.100.14(react@19.2.6)
@@ -106,7 +106,7 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
 
-  ../../nimi-realm/nimi/kit:
+  ../../nimi/kit:
     dependencies:
       '@nimiplatform/sdk':
         specifier: workspace:*
@@ -209,7 +209,7 @@ importers:
         specifier: ^4.1.7
         version: 4.1.7(@types/node@25.9.1)(jsdom@28.1.0)(vite@7.3.3(@types/node@25.9.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
 
-  ../../nimi-realm/nimi/sdks/typescript:
+  ../../nimi/sdks/typescript:
     dependencies:
       '@protobuf-ts/runtime':
         specifier: 2.11.1

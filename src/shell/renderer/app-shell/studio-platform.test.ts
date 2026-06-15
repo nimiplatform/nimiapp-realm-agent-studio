@@ -48,7 +48,7 @@ describe('studio platform runtime auth boundary', () => {
     expect(viteConfigSource).toContain("'@nimiplatform/kit/shell/renderer/bootstrap'");
     expect(viteConfigSource).not.toMatch(/include:\s*\[[^\]]*'@nimiplatform\/sdk\/runtime'/);
     expect(viteConfigSource).not.toMatch(/include:\s*\[[^\]]*'@nimiplatform\/kit\/shell\/renderer\/bootstrap'/);
-    expect(stylesSource).toContain('@source "../../../../../nimi-realm/nimi/kit/**/*.{ts,tsx}";');
+    expect(stylesSource).toContain('@source "../../../../../nimi/kit/**/*.{ts,tsx}";');
     expect(stylesSource).not.toContain('@nimiplatform/kit/dist');
   });
 });

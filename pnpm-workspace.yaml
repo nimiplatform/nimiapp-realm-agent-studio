@@ -1,4 +1,4 @@
 packages:
   - .
-  - ../../nimi-realm/nimi/kit
-  - ../../nimi-realm/nimi/sdks/typescript
+  - ../../nimi/kit
+  - ../../nimi/sdks/typescript

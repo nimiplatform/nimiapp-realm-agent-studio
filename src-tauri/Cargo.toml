@@ -14,7 +14,7 @@ serde_json = "1"
 tauri = { version = "2", features = [] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "net", "sync", "time"] }
 dotenvy = "0.15"
-nimi-shell-tauri = { path = "../../../nimi-realm/nimi/kit/shell/tauri" }
+nimi-shell-tauri = { path = "../../../nimi/kit/shell/tauri" }
 
 [dev-dependencies]
 tempfile = "3"
