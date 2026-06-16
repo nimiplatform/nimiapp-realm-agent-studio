@@ -1,11 +1,8 @@
 import type {
   RealmAgentControllerGetVisibilityOperationResponse,
-  RealmGetForgeImportedSystemAgentChatReadinessOperationResponse,
-  RealmGetForgeImportedSystemAgentSettingsOperationResponse,
   RealmGetMyRealmAgentSettingsOperationResponse,
   RealmProjectRuntimePayloadOperationRequest,
   RealmProjectRuntimePayloadOperationResponse,
-  RealmUpdateForgeImportedSystemAgentSettingsOperationRequest,
   RealmUpdateMyRealmAgentSettingsOperationRequest,
 } from '@nimiplatform/sdk/realm/generated';
 import { createStudioRealmClient, type StudioRealmSurface } from '@renderer/data/realm-client.js';
@@ -34,23 +31,14 @@ type RuntimeTextClient = StudioRuntimeAIClient;
 
 export type RealmAgentVisibilitySettings = RealmAgentControllerGetVisibilityOperationResponse;
 type RealmAgentVisibilityUpdateInput = Partial<Record<AgentVisibilityField, AgentVisibilityValue>>;
-export type RealmOwnerAgentSettings =
-  | RealmGetMyRealmAgentSettingsOperationResponse
-  | RealmGetForgeImportedSystemAgentSettingsOperationResponse;
+export type RealmOwnerAgentSettings = RealmGetMyRealmAgentSettingsOperationResponse;
 type RealmOwnerAgentSettingsUpdateInput = RealmUpdateMyRealmAgentSettingsOperationRequest['body'];
-type RealmForgeImportedSystemAgentSettingsUpdateInput = RealmUpdateForgeImportedSystemAgentSettingsOperationRequest['body'];
 type RealmRuntimeProjectionInput = RealmProjectRuntimePayloadOperationRequest['body'];
 type RealmRuntimeProjectionResponse = RealmProjectRuntimePayloadOperationResponse;
-type RealmForgeImportedAgentChatReadinessResponse = RealmGetForgeImportedSystemAgentChatReadinessOperationResponse;
-type AgentChatReadinessSubmittedInput =
-  | RealmRuntimeProjectionInput
-  | { readonly agentId: string; readonly ownerScope: 'forge-imported-system' };
+type AgentChatReadinessSubmittedInput = RealmRuntimeProjectionInput;
 
 export const REALM_RUNTIME_PROJECTION_SOURCE = 'Realm RuntimeProjectionsService.projectRuntimePayload';
-export const FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE =
-  'Realm AgentCuratedSystemService.getForgeImportedSystemAgentChatReadiness';
 export const REALM_AGENT_VISIBILITY_SOURCE = 'Realm AgentsService.agentControllerUpdateVisibility';
-export const FORGE_IMPORTED_SETTINGS_SAVE_SOURCE = 'Realm AgentCuratedSystemService.updateForgeImportedSystemAgentSettings';
 export const AGENT_VISIBILITY_VALUES = ['PUBLIC', 'FRIENDS', 'PRIVATE'] as const;
 export const AGENT_VISIBILITY_FIELDS = [
   'accountVisibility',
@@ -76,31 +64,6 @@ export type AgentChatReadinessProjectionSummary = RuntimeProjectionSummary & {
   selectedOwnerSettingFields: string[];
 };
 
-export type ForgeImportedAgentChatReadinessSummary = Omit<
-  AgentChatReadinessProjectionSummary,
-  'source' | 'consumerSurface'
-> & {
-  source: typeof FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE;
-  consumerSurface: 'AGENT_CHAT_READINESS';
-  profile: {
-    displayName: string;
-    handle: string;
-    avatarUrl: string | null;
-    profileCoverUrl: string | null;
-    defaultVoiceReference: string | null;
-    speechModelId: string | null;
-    speechRoutePolicy: 'local' | 'cloud' | null;
-  };
-  gates: {
-    localAgentIdentityReady: boolean;
-    profileContextReady: boolean;
-    ownerSettingsReady: boolean;
-    profileMediaReady: boolean;
-    voiceReferenceReady: boolean;
-    speechRouteReady: boolean;
-  };
-};
-
 export type RuntimeProjectionSummaryResult =
   | {
     ok: true;
@@ -124,14 +87,14 @@ export type RuntimeProjectionSummaryResult =
 export type AgentChatReadinessSummaryResult =
   | {
     ok: true;
-    source: typeof REALM_RUNTIME_PROJECTION_SOURCE | typeof FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE;
+    source: typeof REALM_RUNTIME_PROJECTION_SOURCE;
     truthWrite: false;
-    summary: AgentChatReadinessProjectionSummary | ForgeImportedAgentChatReadinessSummary;
+    summary: AgentChatReadinessProjectionSummary;
     submitted: AgentChatReadinessSubmittedInput;
   }
   | {
     ok: false;
-    source: typeof REALM_RUNTIME_PROJECTION_SOURCE | typeof FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE;
+    source: typeof REALM_RUNTIME_PROJECTION_SOURCE;
     truthWrite: false;
     failure:
       | 'runtime-projection-world-unavailable'
@@ -165,18 +128,18 @@ export type RealmAgentVisibilityUpdateResult =
 export type RealmOwnerAgentSettingsUpdateResult =
   | {
     ok: true;
-    source: typeof OWNER_SETTINGS_SAVE_SOURCE | typeof FORGE_IMPORTED_SETTINGS_SAVE_SOURCE;
+    source: typeof OWNER_SETTINGS_SAVE_SOURCE;
     truthWrite: true;
-    submitted: RealmOwnerAgentSettingsUpdateInput | RealmForgeImportedSystemAgentSettingsUpdateInput;
+    submitted: RealmOwnerAgentSettingsUpdateInput;
     settings: RealmOwnerAgentSettings;
   }
   | {
     ok: false;
-    source: typeof OWNER_SETTINGS_SAVE_SOURCE | typeof FORGE_IMPORTED_SETTINGS_SAVE_SOURCE;
+    source: typeof OWNER_SETTINGS_SAVE_SOURCE;
     truthWrite: false;
     failure: 'owner-settings-payload-invalid' | 'owner-settings-no-changes' | 'realm-update-owner-settings-failed';
     message: string;
-    submitted: RealmOwnerAgentSettingsUpdateInput | RealmForgeImportedSystemAgentSettingsUpdateInput | null;
+    submitted: RealmOwnerAgentSettingsUpdateInput | null;
     draft: OwnerAgentSettingsDraft;
   };
 
@@ -229,27 +192,6 @@ export function buildPortfolioSettingsProposalContext(agent: OwnerPortfolioAgent
 function readOptionalString(record: Record<string, unknown>, key: string): string | undefined {
   const value = record[key];
   return typeof value === 'string' && value.trim() ? value : undefined;
-}
-
-function readNullableString(record: Record<string, unknown>, key: string): string | null | undefined {
-  if (!(key in record)) {
-    return undefined;
-  }
-  const value = record[key];
-  if (value === null) {
-    return null;
-  }
-  return typeof value === 'string' ? value : undefined;
-}
-
-function readBoolean(record: Record<string, unknown>, key: string): boolean | undefined {
-  const value = record[key];
-  return typeof value === 'boolean' ? value : undefined;
-}
-
-function readNonNegativeNumber(record: Record<string, unknown>, key: string): number | undefined {
-  const value = record[key];
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 function readArray(value: unknown): unknown[] {
@@ -409,118 +351,6 @@ export function normalizeAgentChatReadinessProjectionSummary(
   };
 }
 
-export function normalizeForgeImportedAgentChatReadinessSummary(
-  response: RealmForgeImportedAgentChatReadinessResponse,
-): ForgeImportedAgentChatReadinessSummary | null {
-  if (!response || typeof response !== 'object') {
-    return null;
-  }
-  const record = response as unknown as Record<string, unknown>;
-  if (
-    record.ownerScope !== 'forge-imported-system'
-    || record.consumerSurface !== 'AGENT_CHAT_READINESS'
-    || record.rawRuleContentExposed !== false
-  ) {
-    return null;
-  }
-
-  const agentId = readOptionalString(record, 'agentId');
-  const worldId = readOptionalString(record, 'worldId');
-  const checksum = readOptionalString(record, 'runtimeProjectionChecksum');
-  const selectedInputCount = readNonNegativeNumber(record, 'selectedInputCount');
-  const suppressedInputCount = readNonNegativeNumber(record, 'suppressedInputCount');
-  const worldRuleCount = readNonNegativeNumber(record, 'worldRuleCount');
-  const agentRuleCount = readNonNegativeNumber(record, 'agentRuleCount');
-  if (
-    !agentId
-    || !worldId
-    || !checksum
-    || selectedInputCount === undefined
-    || suppressedInputCount === undefined
-    || worldRuleCount === undefined
-    || agentRuleCount === undefined
-  ) {
-    return null;
-  }
-
-  const profile = record.profile && typeof record.profile === 'object'
-    ? record.profile as Record<string, unknown>
-    : null;
-  const gates = record.gates && typeof record.gates === 'object'
-    ? record.gates as Record<string, unknown>
-    : null;
-  if (!profile || !gates) {
-    return null;
-  }
-
-  const displayName = readOptionalString(profile, 'displayName');
-  const handle = readOptionalString(profile, 'handle');
-  const avatarUrl = readNullableString(profile, 'avatarUrl');
-  const profileCoverUrl = readNullableString(profile, 'profileCoverUrl');
-  const defaultVoiceReference = readNullableString(profile, 'defaultVoiceReference');
-  const speechModelId = readNullableString(profile, 'speechModelId');
-  const speechRoutePolicy = readNullableString(profile, 'speechRoutePolicy');
-  if (
-    !displayName
-    || !handle
-    || avatarUrl === undefined
-    || profileCoverUrl === undefined
-    || defaultVoiceReference === undefined
-    || speechModelId === undefined
-    || (speechRoutePolicy !== null && speechRoutePolicy !== 'local' && speechRoutePolicy !== 'cloud')
-  ) {
-    return null;
-  }
-
-  const localAgentIdentityReady = readBoolean(gates, 'localAgentIdentityReady');
-  const profileContextReady = readBoolean(gates, 'profileContextReady');
-  const ownerSettingsReady = readBoolean(gates, 'ownerSettingsReady');
-  const profileMediaReady = readBoolean(gates, 'profileMediaReady');
-  const voiceReferenceReady = readBoolean(gates, 'voiceReferenceReady');
-  const speechRouteReady = readBoolean(gates, 'speechRouteReady');
-  if (
-    localAgentIdentityReady === undefined
-    || profileContextReady === undefined
-    || ownerSettingsReady === undefined
-    || profileMediaReady === undefined
-    || voiceReferenceReady === undefined
-    || speechRouteReady === undefined
-  ) {
-    return null;
-  }
-
-  return {
-    source: FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE,
-    consumerSurface: 'AGENT_CHAT_READINESS',
-    worldId,
-    checksum,
-    selectedInputCount,
-    suppressedInputCount,
-    worldRuleCount,
-    rawRuleContentExposed: false,
-    agentId,
-    agentRuleCount,
-    selectedOwnerSettingFields: readArray(record.selectedOwnerSettingFields)
-      .filter((value): value is string => typeof value === 'string'),
-    profile: {
-      displayName,
-      handle,
-      avatarUrl,
-      profileCoverUrl,
-      defaultVoiceReference,
-      speechModelId,
-      speechRoutePolicy,
-    },
-    gates: {
-      localAgentIdentityReady,
-      profileContextReady,
-      ownerSettingsReady,
-      profileMediaReady,
-      voiceReferenceReady,
-      speechRouteReady,
-    },
-  };
-}
 export async function getAgentVisibilitySettings(
   agentId: string,
   realm: StudioRealmClient = createStudioRealmClient(),
@@ -535,20 +365,10 @@ export async function getOwnerAgentSettings(
   return realm.getMyRealmAgentSettings({ path: { agentId } });
 }
 
-export async function getForgeImportedSystemAgentSettings(
-  agentId: string,
-  realm: StudioRealmClient = createStudioRealmClient(),
-): Promise<RealmOwnerAgentSettings> {
-  return realm.getForgeImportedSystemAgentSettings({ path: { agentId } });
-}
-
 export async function getPortfolioAgentSettings(
   agent: OwnerPortfolioAgentDetail,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<RealmOwnerAgentSettings> {
-  if (agent.ownerScope === 'forge-imported-system') {
-    return getForgeImportedSystemAgentSettings(agent.id, realm);
-  }
   return getOwnerAgentSettings(agent.id, realm);
 }
 
@@ -746,47 +566,7 @@ export async function updateReviewedPortfolioAgentSettings(
   current: RealmOwnerAgentSettings,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<RealmOwnerAgentSettingsUpdateResult> {
-  if (agent.ownerScope !== 'forge-imported-system') {
-    return updateReviewedOwnerAgentSettings(agent.id, draft, current, realm);
-  }
-
-  const built = buildRealmOwnerAgentSettingsUpdateInput(draft, current);
-  if (!built.ok) {
-    return {
-      ok: false,
-      source: FORGE_IMPORTED_SETTINGS_SAVE_SOURCE,
-      truthWrite: false,
-      failure: built.failure === 'owner-settings-invalid' ? 'owner-settings-payload-invalid' : 'owner-settings-no-changes',
-      message: built.errors.join('; ') || 'Forge-imported system-agent settings payload invalid.',
-      submitted: null,
-      draft,
-    };
-  }
-
-  const submitted = built.input as RealmForgeImportedSystemAgentSettingsUpdateInput;
-  try {
-    const settings = await realm.updateForgeImportedSystemAgentSettings({
-      path: { agentId: agent.id },
-      body: submitted,
-    });
-    return {
-      ok: true,
-      source: FORGE_IMPORTED_SETTINGS_SAVE_SOURCE,
-      truthWrite: true,
-      submitted,
-      settings,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      source: FORGE_IMPORTED_SETTINGS_SAVE_SOURCE,
-      truthWrite: false,
-      failure: 'realm-update-owner-settings-failed',
-      message: error instanceof Error ? error.message : 'Realm Forge-imported system-agent settings update failed.',
-      submitted,
-      draft,
-    };
-  }
+  return updateReviewedOwnerAgentSettings(agent.id, draft, current, realm);
 }
 export async function projectAgentRuntimeContextSummary(
   agent: OwnerPortfolioAgentDetail,
@@ -843,55 +623,6 @@ export async function projectAgentChatReadinessContextSummary(
   agent: OwnerPortfolioAgentDetail,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<AgentChatReadinessSummaryResult> {
-  if (agent.ownerScope === 'forge-imported-system') {
-    const submitted = agent.id.trim()
-      ? { agentId: agent.id.trim(), ownerScope: 'forge-imported-system' as const }
-      : null;
-    if (!submitted) {
-      return {
-        ok: false,
-        source: FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE,
-        truthWrite: false,
-        failure: 'runtime-projection-world-unavailable',
-        message: 'Forge-imported Agent Chat readiness requires RealmAgent id evidence.',
-        submitted: null,
-      };
-    }
-
-    try {
-      const response = await realm.getForgeImportedSystemAgentChatReadiness({
-        path: { agentId: submitted.agentId },
-      });
-      const summary = normalizeForgeImportedAgentChatReadinessSummary(response);
-      if (!summary) {
-        return {
-          ok: false,
-          source: FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE,
-          truthWrite: false,
-          failure: 'runtime-projection-invalid-response',
-          message: 'Forge-imported Agent Chat readiness response did not include product-safe summary gates.',
-          submitted,
-        };
-      }
-      return {
-        ok: true,
-        source: FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE,
-        truthWrite: false,
-        summary,
-        submitted,
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        source: FORGE_IMPORTED_AGENT_CHAT_READINESS_SOURCE,
-        truthWrite: false,
-        failure: 'runtime-projection-failed',
-        message: error instanceof Error ? error.message : 'Realm Forge-imported Agent Chat readiness read failed.',
-        submitted,
-      };
-    }
-  }
-
   const submitted = buildAgentChatReadinessProjectionInput(agent);
   if (!submitted) {
     return {

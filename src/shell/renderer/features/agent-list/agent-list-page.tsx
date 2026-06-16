@@ -19,15 +19,9 @@ import {
   type OwnerPortfolioFilter,
   type OwnerPortfolioSort,
 } from '@renderer/features/portfolio/portfolio-data.js';
-import {
-  listForgeImportedSystemPortfolioAgents,
-  listOwnerPortfolioAgents,
-} from '@renderer/features/portfolio/portfolio-client.js';
+import { listOwnerPortfolioAgents } from '@renderer/features/portfolio/portfolio-client.js';
 import { AgentCard } from '@renderer/features/portfolio/OwnerPortfolio.shared.js';
-import {
-  curationPortfolioListQueryKey,
-  ownerPortfolioListQueryKey,
-} from '@renderer/features/agent-detail/use-agent-detail-query.js';
+import { ownerPortfolioListQueryKey } from '@renderer/features/agent-detail/use-agent-detail-query.js';
 
 const PORTFOLIO_FILTER_OPTIONS: { value: OwnerPortfolioFilter; label: string }[] = [
   { value: 'all', label: 'All agents' },
@@ -157,38 +151,7 @@ type AgentListMode = {
   refreshLabel: string;
   createEnabled: boolean;
   detailPath: (agentId: string) => string;
-  classifyFailure?: (error: unknown) => {
-    title: string;
-    detail: string;
-  };
 };
-
-function readHttpStatus(error: unknown): number | null {
-  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
-  const match = /(?:HTTP_|HTTP\s+)(\d{3})/i.exec(message);
-  if (match?.[1]) return Number(match[1]);
-  if (!error || typeof error !== 'object') return null;
-  const record = error as Record<string, unknown>;
-  const direct = record.status ?? record.statusCode ?? record.httpStatus;
-  if (typeof direct === 'number') return direct;
-  const details = record.details;
-  if (details && typeof details === 'object') {
-    const nested = (details as Record<string, unknown>).httpStatus;
-    if (typeof nested === 'number') return nested;
-  }
-  return null;
-}
-
-function classifyCurationFailure(error: unknown) {
-  const status = readHttpStatus(error);
-  if (status === 401 || status === 403) {
-    return {
-      title: 'System curation unavailable',
-      detail: 'System curation unavailable for this Runtime account.',
-    };
-  }
-  return classifyPortfolioFailure(error);
-}
 
 function PortfolioListPage({ mode }: { mode: AgentListMode }) {
   const navigate = useNavigate();
@@ -247,9 +210,7 @@ function PortfolioListPage({ mode }: { mode: AgentListMode }) {
           <PortfolioLoadingState />
         ) : portfolioQuery.isError ? (
           (() => {
-            const failure = mode.classifyFailure
-              ? mode.classifyFailure(portfolioQuery.error)
-              : classifyPortfolioFailure(portfolioQuery.error);
+            const failure = classifyPortfolioFailure(portfolioQuery.error);
             return (
               <PortfolioFailureState
                 title={failure.title}
@@ -341,26 +302,6 @@ export function AgentListPage() {
         refreshLabel: 'Refresh',
         createEnabled: true,
         detailPath: (agentId) => `/portfolio/${agentId}`,
-      }}
-    />
-  );
-}
-
-export function CurationAgentListPage() {
-  return (
-    <PortfolioListPage
-      mode={{
-        queryKey: curationPortfolioListQueryKey(),
-        queryFn: () => listForgeImportedSystemPortfolioAgents(),
-        eyebrow: 'System curation',
-        title: 'Forge-imported system agents',
-        description: 'Halliday-owned Forge-imported system agents for admitted curation.',
-        emptyTitle: 'No Forge-imported system agents',
-        emptyDescription: 'Realm returned no Halliday-owned Forge-imported system agents for curation.',
-        refreshLabel: 'Refresh curation',
-        createEnabled: false,
-        detailPath: (agentId) => `/curation/forge-imported-system/${agentId}`,
-        classifyFailure: classifyCurationFailure,
       }}
     />
   );

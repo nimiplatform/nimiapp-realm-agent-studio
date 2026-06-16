@@ -1,6 +1,6 @@
 import { useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { ChevronDown, LayoutGrid, Plus, LogOut, User, SlidersHorizontal, ShieldCheck } from 'lucide-react';
+import { ChevronDown, LayoutGrid, Plus, LogOut, User, SlidersHorizontal } from 'lucide-react';
 import {
   AmbientBackground,
   Avatar,
@@ -31,7 +31,6 @@ const TITLEBAR_INTERACTIVE_SELECTOR = [
 const navItems = [
   { to: '/portfolio', label: 'Portfolio', Icon: LayoutGrid, end: true },
   { to: '/portfolio/create', label: 'Create', Icon: Plus, end: true },
-  { to: '/curation/forge-imported-system', label: 'Curation', Icon: ShieldCheck, end: false },
   { to: '/ai-config', label: 'AI models', Icon: SlidersHorizontal, end: true },
 ] as const;
 

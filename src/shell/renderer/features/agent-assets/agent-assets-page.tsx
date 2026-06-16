@@ -1,15 +1,12 @@
 import { useParams } from 'react-router-dom';
 import { InlineAlert, StatusBadge, Surface } from '@nimiplatform/kit/ui';
 import { AgentShell, WorkspaceIntro } from '@renderer/features/agent-detail/agent-shell.js';
-import {
-  type AgentDetailReadScope,
-  useRefreshAgentReads,
-} from '@renderer/features/agent-detail/use-agent-detail-query.js';
+import { useRefreshAgentReads } from '@renderer/features/agent-detail/use-agent-detail-query.js';
 import { MediaVoiceCandidateWorkspace } from '@renderer/features/portfolio/OwnerPortfolio.assets.js';
 
-function AgentAssetsPageForScope({ mode = 'owner' }: { mode?: AgentDetailReadScope }) {
+function AgentAssetsPageForScope() {
   const { agentId } = useParams<{ agentId: string }>();
-  const refreshAgentReads = useRefreshAgentReads(agentId ?? '', mode);
+  const refreshAgentReads = useRefreshAgentReads(agentId ?? '');
 
   if (!agentId) {
     return (
@@ -20,7 +17,7 @@ function AgentAssetsPageForScope({ mode = 'owner' }: { mode?: AgentDetailReadSco
   }
 
   return (
-    <AgentShell agentId={agentId} current="assets" mode={mode}>
+    <AgentShell agentId={agentId} current="assets">
       {(agent) => (
         <>
           <WorkspaceIntro
@@ -38,8 +35,4 @@ function AgentAssetsPageForScope({ mode = 'owner' }: { mode?: AgentDetailReadSco
 
 export function AgentAssetsPage() {
   return <AgentAssetsPageForScope />;
-}
-
-export function CurationAgentAssetsPage() {
-  return <AgentAssetsPageForScope mode="forge-imported-system" />;
 }

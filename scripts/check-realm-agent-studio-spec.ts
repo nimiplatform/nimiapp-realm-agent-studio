@@ -51,6 +51,34 @@ const FORBIDDEN_PHRASES: Array<{ phrase: string; rationale: string }> = [
     rationale: 'Evidence-only surface; must not be promoted into Studio canonical surfaces (per kernel core-rules and metrics-and-realm-gaps).',
   },
   {
+    phrase: '/api/agent/forge-imported-system',
+    rationale: 'Forge/system curation is outside Realm Agent Studio implementation scope.',
+  },
+  {
+    phrase: '/api/me/creator/worlds',
+    rationale: 'Creator-world maintenance belongs to Realm World Studio, not the owner Agent Studio.',
+  },
+  {
+    phrase: 'listMyCreatorWorlds',
+    rationale: 'Creator-world list authority belongs to Realm World Studio, not the owner Agent Studio.',
+  },
+  {
+    phrase: 'listCreatorWorldAgents',
+    rationale: 'Creator world-agent list authority belongs to Realm World Studio, not the owner Agent Studio.',
+  },
+  {
+    phrase: 'getCreatorWorldAgent',
+    rationale: 'Creator world-agent detail authority belongs to Realm World Studio, not the owner Agent Studio.',
+  },
+  {
+    phrase: 'listRealmAgentStudioPortfolioAgents',
+    rationale: 'Do not reintroduce app-local portfolio aggregation aliases; owner portfolio reads must name the owner surface directly.',
+  },
+  {
+    phrase: 'getRealmAgentStudioPortfolioAgentDetail',
+    rationale: 'Do not reintroduce app-local detail aggregation aliases; owner detail reads must name the owner surface directly.',
+  },
+  {
     phrase: 'agentFriendCount',
     rationale: 'First-version owner-visible metric is top-level `friendCount`; do not invent `agentFriendCount` (per kernel metrics-and-realm-gaps).',
   },

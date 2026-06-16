@@ -98,7 +98,7 @@ export type RuntimeOwnerSettingsProposal = {
 };
 
 export type OwnerAgentSettingsProposalContext = {
-  ownerScope?: 'owner-created' | 'forge-imported-system';
+  ownerScope?: 'owner-created';
   displayName?: string | null;
   handle?: string | null;
   worldId?: string | null;
@@ -222,13 +222,6 @@ const RUNTIME_PROPOSAL_OUTPUT_KEYS = [
   ...RUNTIME_PROPOSAL_STRING_FIELDS,
   ...Object.keys(RUNTIME_PROPOSAL_ENUM_FIELDS),
   'rationale',
-] as const;
-
-const FORGE_IMPORTED_SOURCE_ENRICHMENT_LANES = [
-  'self-introduction -> description/greeting/personalitySummary/publicRole/worldview',
-  'accent/speech posture -> communication.contentStyle only',
-  'portrait/final look -> visual image or avatar package candidate outside owner settings',
-  'voice demo -> audio candidate outside owner settings',
 ] as const;
 
 function normalizeLineText(value: string): string {
@@ -394,7 +387,6 @@ export function buildRuntimeOwnerSettingsProposalPrompt(input: {
 }): { ok: true; errors: []; payload: StudioTextGeneratePayload } | { ok: false; errors: string[]; payload: null } {
   const normalizedDraft = normalizeOwnerAgentSettingsDraft(input.draft);
   const agentContext = input.agentContext;
-  const forgeImported = agentContext?.ownerScope === 'forge-imported-system';
   const callParams = resolveStudioTextCallParams('realm-agent-studio.settings-proposal', {
     maxTokens: 900,
     temperature: 0.2,
@@ -426,11 +418,6 @@ export function buildRuntimeOwnerSettingsProposalPrompt(input: {
             'Return one JSON object with admitted draft field names only.',
             'Allowed fields: displayName, description, greeting, naturalLanguageIntent, publicRole, worldview, personalitySummary, relationshipMode, interestsText, goalsText, contentStyle, formality, responseLength, sentiment, allowedThemesText, disallowedThemesText, targetAudience, positioning, rawRuleTextCandidate, rationale.',
             'Do not include provider, model, LocalAgent, lifecycle, state, worldId, handle, avatarUrl, profileCoverUrl, dna, agentRule, or agentRules.',
-            ...(forgeImported ? [
-              'This is a Forge-imported system-agent lane. Preserve source-backed historical facts; do not invent biography, timeline, relationships, dates, titles, or events.',
-              'Map self-introduction and greeting work into description, greeting, personalitySummary, publicRole, or worldview.',
-              'Map accent and speech posture into contentStyle only. Visual portrait, final look, and voice/audio are candidate-only asset work outside owner settings.',
-            ] : []),
             'The owner must review the result before any Realm save.',
           ].join('\n')),
           studioTextMessage('user', JSON.stringify({
@@ -443,10 +430,6 @@ export function buildRuntimeOwnerSettingsProposalPrompt(input: {
                 worldId: agentContext.worldId ?? null,
                 worldName: agentContext.worldName ?? null,
               },
-            } : {}),
-            ...(forgeImported ? {
-              forgeImportedEnrichmentLanes: FORGE_IMPORTED_SOURCE_ENRICHMENT_LANES,
-              sourcePolicy: 'source-backed historical facts only; unsupported portrait and voice details remain reviewed candidates outside settings',
             } : {}),
             ownerIntent: intent,
             currentSettings: input.current,

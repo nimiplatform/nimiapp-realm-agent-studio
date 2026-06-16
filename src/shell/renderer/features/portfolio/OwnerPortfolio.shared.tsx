@@ -45,7 +45,7 @@ export function detailFriendCountLabel(agent: OwnerPortfolioAgentDetail) {
 }
 
 export function ownerScopeLabel(scope: OwnerPortfolioAgent['ownerScope'] | OwnerPortfolioAgentDetail['ownerScope']): string {
-  return scope === 'forge-imported-system' ? 'Forge-imported system' : 'owner-created';
+  return scope;
 }
 
 export function settingFieldStatusLabel(field: SettingField): string {

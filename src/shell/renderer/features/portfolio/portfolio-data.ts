@@ -1,22 +1,14 @@
 import type {
-  RealmGetForgeImportedSystemAgentOperationResponse,
   RealmGetMyRealmAgentOperationResponse,
-  RealmListForgeImportedSystemAgentsOperationResponse,
   RealmListMyRealmAgentsOperationResponse,
 } from '@nimiplatform/sdk/realm/generated';
 
 export type MyRealmAgentDto = RealmListMyRealmAgentsOperationResponse[number];
 export type MyRealmAgentDetailDto = RealmGetMyRealmAgentOperationResponse;
-export type ForgeImportedSystemAgentDto = RealmListForgeImportedSystemAgentsOperationResponse[number];
-export type ForgeImportedSystemAgentDetailDto = RealmGetForgeImportedSystemAgentOperationResponse;
 
-export type PortfolioAgentOwnerScope = 'owner-created' | 'forge-imported-system';
-export type PortfolioAgentListSource =
-  | 'Realm MeService.listMyRealmAgents'
-  | 'Realm AgentCuratedSystemService.listForgeImportedSystemAgents';
-export type PortfolioAgentDetailSource =
-  | 'Realm MeService.getMyRealmAgent'
-  | 'Realm AgentCuratedSystemService.getForgeImportedSystemAgent';
+export type PortfolioAgentOwnerScope = 'owner-created';
+export type PortfolioAgentListSource = 'Realm MeService.listMyRealmAgents';
+export type PortfolioAgentDetailSource = 'Realm MeService.getMyRealmAgent';
 
 export type FriendCountMetric =
   | { status: 'available'; value: number }
@@ -169,7 +161,7 @@ function readUpdatedAt(agent: MyRealmAgentDto): string | null {
   return readString(profile?.updatedAt) || readString(metadata?.updatedAt) || readString(record.createdAt);
 }
 
-export function normalizeFriendCount(agent: MyRealmAgentDto | ForgeImportedSystemAgentDto): FriendCountMetric {
+export function normalizeFriendCount(agent: MyRealmAgentDto | MyRealmAgentDetailDto): FriendCountMetric {
   if (Object.prototype.hasOwnProperty.call(agent, 'friendCount') && typeof agent.friendCount === 'number') {
     return { status: 'available', value: agent.friendCount };
   }
@@ -177,13 +169,9 @@ export function normalizeFriendCount(agent: MyRealmAgentDto | ForgeImportedSyste
 }
 
 export function normalizeOwnerPortfolioAgent(
-  agent: MyRealmAgentDto | ForgeImportedSystemAgentDto,
-  scope: PortfolioAgentOwnerScope = 'owner-created',
+  agent: MyRealmAgentDto,
 ): OwnerPortfolioAgent {
   const profile = readOptionalRecord(agent.agentProfile);
-  const source: PortfolioAgentListSource = scope === 'forge-imported-system'
-    ? 'Realm AgentCuratedSystemService.listForgeImportedSystemAgents'
-    : 'Realm MeService.listMyRealmAgents';
 
   return {
     id: agent.id,
@@ -191,8 +179,8 @@ export function normalizeOwnerPortfolioAgent(
     handle: agent.handle,
     coverUrl: agent.profileCoverUrl || null,
     avatarUrl: agent.avatarUrl || null,
-    ownerScope: scope,
-    source,
+    ownerScope: 'owner-created',
+    source: 'Realm MeService.listMyRealmAgents',
     realmState: readString(profile?.state),
     worldName: readWorldName(profile),
     updatedAt: readUpdatedAt(agent),
@@ -202,10 +190,6 @@ export function normalizeOwnerPortfolioAgent(
 
 export function normalizeOwnerPortfolio(agents: readonly MyRealmAgentDto[]): OwnerPortfolioAgent[] {
   return agents.map((agent) => normalizeOwnerPortfolioAgent(agent));
-}
-
-export function normalizeForgeImportedSystemPortfolio(agents: readonly ForgeImportedSystemAgentDto[]): OwnerPortfolioAgent[] {
-  return agents.map((agent) => normalizeOwnerPortfolioAgent(agent, 'forge-imported-system'));
 }
 
 function compareText(left: string, right: string): number {
@@ -354,15 +338,12 @@ function readAgentVoiceConfig(profile: Record<string, unknown> | null): Portfoli
 }
 
 export function normalizeOwnerPortfolioAgentDetail(
-  agent: MyRealmAgentDetailDto | ForgeImportedSystemAgentDetailDto,
-  scope: PortfolioAgentOwnerScope = 'owner-created',
+  agent: MyRealmAgentDetailDto,
 ): OwnerPortfolioAgentDetail {
   const agentRecord = agent as unknown as Record<string, unknown>;
   const profile = readOptionalRecord(agent.agentProfile);
   const bio = readFirstStringField(agentRecord, ['bio', 'description']);
-  const source: PortfolioAgentDetailSource = scope === 'forge-imported-system'
-    ? 'Realm AgentCuratedSystemService.getForgeImportedSystemAgent'
-    : 'Realm MeService.getMyRealmAgent';
+  const source: PortfolioAgentDetailSource = 'Realm MeService.getMyRealmAgent';
   return {
     id: agent.id,
     displayName: settingField('displayName', 'Display name', readStringField(agentRecord, 'displayName'), source),
@@ -376,7 +357,7 @@ export function normalizeOwnerPortfolioAgentDetail(
     avatarUrl: agent.avatarUrl || null,
     voice: readAgentVoiceConfig(profile),
     friendCount: normalizeFriendCount(agent),
-    ownerScope: scope,
+    ownerScope: 'owner-created',
     source,
   };
 }

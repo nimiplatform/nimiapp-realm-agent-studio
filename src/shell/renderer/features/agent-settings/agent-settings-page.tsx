@@ -1,21 +1,17 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, InlineAlert, StatusBadge, Surface } from '@nimiplatform/kit/ui';
 import { AgentShell, WorkspaceIntro } from '@renderer/features/agent-detail/agent-shell.js';
-import {
-  type AgentDetailReadScope,
-  useRefreshAgentReads,
-} from '@renderer/features/agent-detail/use-agent-detail-query.js';
+import { useRefreshAgentReads } from '@renderer/features/agent-detail/use-agent-detail-query.js';
 import {
   RuntimeProjectionWorkspace,
   SettingProposalWorkspace,
   VisibilitySettingsWorkspace,
 } from '@renderer/features/portfolio/OwnerPortfolio.settings.js';
 
-function AgentSettingsPageForScope({ mode = 'owner' }: { mode?: AgentDetailReadScope }) {
+function AgentSettingsPageForScope() {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
-  const refreshAgentReads = useRefreshAgentReads(agentId ?? '', mode);
-  const isOwnerMode = mode === 'owner';
+  const refreshAgentReads = useRefreshAgentReads(agentId ?? '');
 
   if (!agentId) {
     return (
@@ -26,23 +22,21 @@ function AgentSettingsPageForScope({ mode = 'owner' }: { mode?: AgentDetailReadS
   }
 
   return (
-    <AgentShell agentId={agentId} current="settings" mode={mode}>
+    <AgentShell agentId={agentId} current="settings">
       {(agent) => (
         <>
           <WorkspaceIntro
             title="Agent settings"
             badges={<StatusBadge tone="info">workspace</StatusBadge>}
-            description="Edit identity, communication, and boundary fields. Save flows through the admitted settings ingress for this agent source."
-            actions={isOwnerMode ? (
+            description="Edit owner Realm Agent identity, communication, and boundary fields through the admitted owner settings ingress."
+            actions={(
               <Button tone="secondary" onClick={() => navigate(`/portfolio/${agentId}/settings/review`)}>
                 Open consistency review
               </Button>
-            ) : null}
+            )}
           />
 
-          {agent.ownerScope === 'owner-created' ? (
-            <VisibilitySettingsWorkspace agent={agent} onAgentWrite={refreshAgentReads} />
-          ) : null}
+          <VisibilitySettingsWorkspace agent={agent} onAgentWrite={refreshAgentReads} />
           <SettingProposalWorkspace agent={agent} onAgentWrite={refreshAgentReads} />
           <RuntimeProjectionWorkspace agent={agent} />
         </>
@@ -53,8 +47,4 @@ function AgentSettingsPageForScope({ mode = 'owner' }: { mode?: AgentDetailReadS
 
 export function AgentSettingsPage() {
   return <AgentSettingsPageForScope />;
-}
-
-export function CurationAgentSettingsPage() {
-  return <AgentSettingsPageForScope mode="forge-imported-system" />;
 }

@@ -32,12 +32,14 @@ describe('Studio shell kit boundary', () => {
     expect(source).not.toContain('onTransitionEnd');
   });
 
-  it('exposes a separate system curation navigation lane', () => {
+  it('does not expose creator or system curation navigation', () => {
     const source = shellLayoutSource();
 
-    expect(source).toContain("to: '/curation/forge-imported-system'");
-    expect(source).toContain("label: 'Curation'");
-    expect(source).toContain('ShieldCheck');
+    expect(source).toContain("to: '/portfolio'");
+    expect(source).toContain("to: '/portfolio/create'");
+    expect(source).not.toContain("to: '/curation/forge-imported-system'");
+    expect(source).not.toContain("to: '/worlds'");
+    expect(source).not.toContain('ShieldCheck');
   });
 
   it('does not polyfill kit button or Tailwind arbitrary-value utilities in app CSS', () => {

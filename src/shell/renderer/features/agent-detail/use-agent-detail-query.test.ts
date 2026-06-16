@@ -6,14 +6,13 @@ const detailQuerySource = () =>
   readFileSync(join(process.cwd(), 'src/shell/renderer/features/agent-detail/use-agent-detail-query.ts'), 'utf8');
 
 describe('agent detail query boundaries', () => {
-  it('uses distinct owner and Forge-imported system detail queries', () => {
+  it('uses owner-only detail queries', () => {
     const source = detailQuerySource();
 
     expect(source).toContain('getOwnerPortfolioAgentDetail');
-    expect(source).toContain('getForgeImportedSystemPortfolioAgentDetail');
     expect(source).toContain('ownerAgentDetailQueryKey');
-    expect(source).toContain('curationAgentDetailQueryKey');
-    expect(source).toContain('curationPortfolioListQueryKey');
-    expect(source).not.toContain('getRealmAgentStudioPortfolioAgentDetail');
+    expect(source).not.toContain('getForgeImportedSystemPortfolioAgentDetail');
+    expect(source).not.toContain('curationAgentDetailQueryKey');
+    expect(source).not.toContain('curationPortfolioListQueryKey');
   });
 });

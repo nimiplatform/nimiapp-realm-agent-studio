@@ -20,7 +20,7 @@ const STUDIO_TOKEN_PROXY_FORBIDDEN =
   'Realm Agent Studio does not own access/refresh token custody. Runtime is the sole owner; '
   + 'login through the desktop browser broker.';
 const STUDIO_ACCOUNT_CONTROL_FORBIDDEN =
-  'Realm Agent Studio is a developer-registered local app and cannot own Runtime account logout. '
+  'Realm Agent Studio is a first-party Studio app but cannot own Runtime account logout. '
   + 'Use the first-party Desktop account surface.';
 
 function unsupported<T>(): Promise<T> {

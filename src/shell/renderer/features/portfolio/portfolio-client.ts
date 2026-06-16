@@ -4,7 +4,6 @@ import type {
 } from '@nimiplatform/sdk/realm/generated';
 import { createStudioRealmClient, type StudioRealmSurface } from '@renderer/data/realm-client.js';
 import {
-  normalizeForgeImportedSystemPortfolio,
   normalizeOwnerPortfolio,
   normalizeOwnerPortfolioAgentDetail,
   type OwnerPortfolioAgent,
@@ -51,12 +50,12 @@ export type RealmAgentCreateResult =
     agent: RealmCreateAgentResponse;
     canonical: RealmAgentCreateCanonicalFields;
   }
-	  | {
-	    ok: false;
-	    source: typeof REALM_AGENT_CREATE_SOURCE;
-	    failure: 'realm-create-agent-failed' | 'realm-create-agent-missing-canonical-id';
-	    message: string;
-	  };
+  | {
+    ok: false;
+    source: typeof REALM_AGENT_CREATE_SOURCE;
+    failure: 'realm-create-agent-failed' | 'realm-create-agent-missing-canonical-id';
+    message: string;
+  };
 
 export type RealmAgentCreateProfileSettingsCompletion =
   | {
@@ -187,40 +186,12 @@ export async function listOwnerPortfolioAgents(realm: StudioRealmClient = create
   return normalizeOwnerPortfolio(agents);
 }
 
-export async function listForgeImportedSystemPortfolioAgents(
-  realm: StudioRealmClient = createStudioRealmClient(),
-): Promise<OwnerPortfolioAgent[]> {
-  const agents = await realm.listForgeImportedSystemAgents({ path: {} });
-  return normalizeForgeImportedSystemPortfolio(agents);
-}
-
-export async function listRealmAgentStudioPortfolioAgents(
-  realm: StudioRealmClient = createStudioRealmClient(),
-): Promise<OwnerPortfolioAgent[]> {
-  return listOwnerPortfolioAgents(realm);
-}
-
 export async function getOwnerPortfolioAgentDetail(
   agentId: string,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<OwnerPortfolioAgentDetail> {
   const agent = await realm.getMyRealmAgent({ path: { agentId } });
   return normalizeOwnerPortfolioAgentDetail(agent);
-}
-
-export async function getForgeImportedSystemPortfolioAgentDetail(
-  agentId: string,
-  realm: StudioRealmClient = createStudioRealmClient(),
-): Promise<OwnerPortfolioAgentDetail> {
-  const agent = await realm.getForgeImportedSystemAgent({ path: { agentId } });
-  return normalizeOwnerPortfolioAgentDetail(agent, 'forge-imported-system');
-}
-
-export async function getRealmAgentStudioPortfolioAgentDetail(
-  agentId: string,
-  realm: StudioRealmClient = createStudioRealmClient(),
-): Promise<OwnerPortfolioAgentDetail> {
-  return getOwnerPortfolioAgentDetail(agentId, realm);
 }
 
 export async function listCreateRealmAgentSelectableWorlds(

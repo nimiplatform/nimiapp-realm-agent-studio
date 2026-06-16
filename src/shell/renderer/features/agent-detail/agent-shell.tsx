@@ -34,26 +34,20 @@ const TABS: AgentTabDef[] = [
   {
     key: 'detail',
     label: 'Detail',
-    modes: ['owner', 'forge-imported-system'],
-    basePath: (agentId, mode) => mode === 'forge-imported-system'
-      ? `/curation/forge-imported-system/${agentId}`
-      : `/portfolio/${agentId}`,
+    modes: ['owner'],
+    basePath: (agentId) => `/portfolio/${agentId}`,
   },
   {
     key: 'settings',
     label: 'Settings',
-    modes: ['owner', 'forge-imported-system'],
-    basePath: (agentId, mode) => mode === 'forge-imported-system'
-      ? `/curation/forge-imported-system/${agentId}/settings`
-      : `/portfolio/${agentId}/settings`,
+    modes: ['owner'],
+    basePath: (agentId) => `/portfolio/${agentId}/settings`,
   },
   {
     key: 'assets',
     label: 'Assets',
-    modes: ['owner', 'forge-imported-system'],
-    basePath: (agentId, mode) => mode === 'forge-imported-system'
-      ? `/curation/forge-imported-system/${agentId}/assets`
-      : `/portfolio/${agentId}/assets`,
+    modes: ['owner'],
+    basePath: (agentId) => `/portfolio/${agentId}/assets`,
   },
   {
     key: 'posts',
@@ -64,10 +58,8 @@ const TABS: AgentTabDef[] = [
   {
     key: 'insights',
     label: 'Insights',
-    modes: ['owner', 'forge-imported-system'],
-    basePath: (agentId, mode) => mode === 'forge-imported-system'
-      ? `/curation/forge-imported-system/${agentId}/insights`
-      : `/portfolio/${agentId}/insights`,
+    modes: ['owner'],
+    basePath: (agentId) => `/portfolio/${agentId}/insights`,
   },
 ];
 
@@ -179,9 +171,6 @@ export function WorkspaceIntro({
 }
 
 function deriveCurrentTab(pathname: string, agentId: string): AgentShellTabKey {
-  if (pathname.startsWith(`/curation/forge-imported-system/${agentId}/settings`)) return 'settings';
-  if (pathname.startsWith(`/curation/forge-imported-system/${agentId}/assets`)) return 'assets';
-  if (pathname.startsWith(`/curation/forge-imported-system/${agentId}/insights`)) return 'insights';
   if (pathname.startsWith(`/portfolio/${agentId}/settings`)) return 'settings';
   if (pathname.startsWith(`/portfolio/${agentId}/assets`)) return 'assets';
   if (pathname.startsWith(`/portfolio/${agentId}/posts`)) return 'posts';
@@ -203,8 +192,6 @@ export function AgentShell({
   const location = useLocation();
   const activeTab = current ?? deriveCurrentTab(location.pathname, agentId);
   const detailQuery = useAgentDetailQuery(agentId, mode);
-  const back = mode === 'forge-imported-system' ? '/curation/forge-imported-system' : '/portfolio';
-  const backLabel = mode === 'forge-imported-system' ? 'Curation' : 'Portfolio';
 
   if (detailQuery.isLoading) {
     return (
@@ -252,7 +239,7 @@ export function AgentShell({
   return (
     <ScrollArea className="flex-1" viewportClassName="bg-transparent">
       <div className="ras-page">
-        <AgentHeader agent={agent} back={back} backLabel={backLabel} />
+        <AgentHeader agent={agent} />
         <AgentTabBar agentId={agentId} current={activeTab} mode={mode} />
         {children(agent)}
       </div>

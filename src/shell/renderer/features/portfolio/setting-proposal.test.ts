@@ -178,53 +178,6 @@ describe('owner settings proposal normalization', () => {
     expect(userText).not.toContain('LocalAgent');
   });
 
-  it('builds a Forge-imported Runtime proposal request with source-backed enrichment lanes', () => {
-    const draft = {
-      ...createOwnerAgentSettingsDraft(settings),
-      naturalLanguageIntent: 'Add a self-introduction, Song speech posture, and final portrait direction.',
-    };
-    const result = buildRuntimeOwnerSettingsProposalPrompt({
-      agentId: 'cbdb-agent-su-shi',
-      current: settings,
-      draft,
-      agentContext: {
-        ownerScope: 'forge-imported-system',
-        displayName: 'Su Shi',
-        handle: 'su-shi',
-        worldId: 'cbdb-song-slice-real-20260614-world',
-        worldName: 'CBDB Song Slice',
-      },
-    });
-
-    expect(result.ok).toBe(true);
-    const systemText = result.payload?.request.messages
-      .find((message) => message.role === 'system')
-      ?.content.find((part) => part.type === 'text')?.text || '';
-    const userText = result.payload?.request.messages
-      .find((message) => message.role === 'user')
-      ?.content.find((part) => part.type === 'text')?.text || '';
-    const userPayload = JSON.parse(userText) as Record<string, unknown>;
-
-    expect(systemText).toContain('Forge-imported system-agent lane');
-    expect(systemText).toContain('Preserve source-backed historical facts');
-    expect(systemText).toContain('contentStyle only');
-    expect(userPayload).toMatchObject({
-      agentContext: {
-        ownerScope: 'forge-imported-system',
-        handle: 'su-shi',
-        worldId: 'cbdb-song-slice-real-20260614-world',
-      },
-    });
-    expect(userPayload.forgeImportedEnrichmentLanes).toEqual([
-      'self-introduction -> description/greeting/personalitySummary/publicRole/worldview',
-      'accent/speech posture -> communication.contentStyle only',
-      'portrait/final look -> visual image or avatar package candidate outside owner settings',
-      'voice demo -> audio candidate outside owner settings',
-    ]);
-    expect(userText).not.toContain('avatarUrl');
-    expect(userText).not.toContain('LocalAgent');
-  });
-
   it('normalizes Runtime proposal JSON into admitted draft fields only', () => {
     const baseDraft = createOwnerAgentSettingsDraft(settings);
     const proposal = normalizeRuntimeOwnerSettingsProposal(JSON.stringify({

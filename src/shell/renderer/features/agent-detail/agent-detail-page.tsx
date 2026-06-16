@@ -3,7 +3,7 @@ import { InlineAlert, Surface } from '@nimiplatform/kit/ui';
 import { AgentProfileOverview } from './agent-profile-overview.js';
 import { AgentShell } from './agent-shell.js';
 
-function AgentDetailPageForScope({ mode = 'owner' }: { mode?: 'owner' | 'forge-imported-system' }) {
+function AgentDetailPageForScope() {
   const { agentId } = useParams<{ agentId: string }>();
 
   if (!agentId) {
@@ -15,7 +15,7 @@ function AgentDetailPageForScope({ mode = 'owner' }: { mode?: 'owner' | 'forge-i
   }
 
   return (
-    <AgentShell agentId={agentId} current="detail" mode={mode}>
+    <AgentShell agentId={agentId} current="detail">
       {(agent) => (
         <AgentProfileOverview agent={agent} />
       )}
@@ -25,8 +25,4 @@ function AgentDetailPageForScope({ mode = 'owner' }: { mode?: 'owner' | 'forge-i
 
 export function AgentDetailPage() {
   return <AgentDetailPageForScope />;
-}
-
-export function CurationAgentDetailPage() {
-  return <AgentDetailPageForScope mode="forge-imported-system" />;
 }
