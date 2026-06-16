@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { InlineAlert, Surface } from '@nimiplatform/kit/ui';
-import { AgentProfileOverview } from './agent-profile-overview.js';
+import { AgentCockpit } from './agent-cockpit.js';
 import { AgentShell } from './agent-shell.js';
 
 function AgentDetailPageForScope() {
@@ -17,7 +17,7 @@ function AgentDetailPageForScope() {
   return (
     <AgentShell agentId={agentId} current="detail">
       {(agent) => (
-        <AgentProfileOverview agent={agent} />
+        <AgentCockpit agent={agent} />
       )}
     </AgentShell>
   );

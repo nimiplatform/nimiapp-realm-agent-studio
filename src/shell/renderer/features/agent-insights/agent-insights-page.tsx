@@ -101,7 +101,7 @@ function InsightsBody({ agent }: { agent: OwnerPortfolioAgentDetail }) {
             </li>
             <li style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <StatusBadge tone="neutral" shape="dot">deferred</StatusBadge>
-              Portfolio operation suggestions
+              Portfolio health score
             </li>
           </ul>
         </Surface>
