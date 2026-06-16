@@ -197,11 +197,7 @@ export async function listForgeImportedSystemPortfolioAgents(
 export async function listRealmAgentStudioPortfolioAgents(
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<OwnerPortfolioAgent[]> {
-  const [ownerAgents, cbdbAgents] = await Promise.all([
-    listOwnerPortfolioAgents(realm),
-    listForgeImportedSystemPortfolioAgents(realm),
-  ]);
-  return [...ownerAgents, ...cbdbAgents];
+  return listOwnerPortfolioAgents(realm);
 }
 
 export async function getOwnerPortfolioAgentDetail(
@@ -224,15 +220,7 @@ export async function getRealmAgentStudioPortfolioAgentDetail(
   agentId: string,
   realm: StudioRealmClient = createStudioRealmClient(),
 ): Promise<OwnerPortfolioAgentDetail> {
-  try {
-    return await getOwnerPortfolioAgentDetail(agentId, realm);
-  } catch (ownerError) {
-    try {
-      return await getForgeImportedSystemPortfolioAgentDetail(agentId, realm);
-    } catch {
-      throw ownerError;
-    }
-  }
+  return getOwnerPortfolioAgentDetail(agentId, realm);
 }
 
 export async function listCreateRealmAgentSelectableWorlds(

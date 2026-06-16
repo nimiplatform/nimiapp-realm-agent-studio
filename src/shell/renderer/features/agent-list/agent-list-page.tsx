@@ -15,12 +15,19 @@ import {
 import {
   applyOwnerPortfolioView,
   classifyPortfolioFailure,
+  type OwnerPortfolioAgent,
   type OwnerPortfolioFilter,
   type OwnerPortfolioSort,
 } from '@renderer/features/portfolio/portfolio-data.js';
-import { listRealmAgentStudioPortfolioAgents } from '@renderer/features/portfolio/portfolio-client.js';
+import {
+  listForgeImportedSystemPortfolioAgents,
+  listOwnerPortfolioAgents,
+} from '@renderer/features/portfolio/portfolio-client.js';
 import { AgentCard } from '@renderer/features/portfolio/OwnerPortfolio.shared.js';
-import { ownerPortfolioListQueryKey } from '@renderer/features/agent-detail/use-agent-detail-query.js';
+import {
+  curationPortfolioListQueryKey,
+  ownerPortfolioListQueryKey,
+} from '@renderer/features/agent-detail/use-agent-detail-query.js';
 
 const PORTFOLIO_FILTER_OPTIONS: { value: OwnerPortfolioFilter; label: string }[] = [
   { value: 'all', label: 'All agents' },
@@ -139,15 +146,59 @@ function PortfolioFailureState({
   );
 }
 
-export function AgentListPage() {
+type AgentListMode = {
+  queryKey: readonly unknown[];
+  queryFn: () => Promise<OwnerPortfolioAgent[]>;
+  eyebrow: string;
+  title: string;
+  description: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  refreshLabel: string;
+  createEnabled: boolean;
+  detailPath: (agentId: string) => string;
+  classifyFailure?: (error: unknown) => {
+    title: string;
+    detail: string;
+  };
+};
+
+function readHttpStatus(error: unknown): number | null {
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  const match = /(?:HTTP_|HTTP\s+)(\d{3})/i.exec(message);
+  if (match?.[1]) return Number(match[1]);
+  if (!error || typeof error !== 'object') return null;
+  const record = error as Record<string, unknown>;
+  const direct = record.status ?? record.statusCode ?? record.httpStatus;
+  if (typeof direct === 'number') return direct;
+  const details = record.details;
+  if (details && typeof details === 'object') {
+    const nested = (details as Record<string, unknown>).httpStatus;
+    if (typeof nested === 'number') return nested;
+  }
+  return null;
+}
+
+function classifyCurationFailure(error: unknown) {
+  const status = readHttpStatus(error);
+  if (status === 401 || status === 403) {
+    return {
+      title: 'System curation unavailable',
+      detail: 'System curation unavailable for this Runtime account.',
+    };
+  }
+  return classifyPortfolioFailure(error);
+}
+
+function PortfolioListPage({ mode }: { mode: AgentListMode }) {
   const navigate = useNavigate();
   const [queryText, setQueryText] = useState('');
   const [filter, setFilter] = useState<OwnerPortfolioFilter>('all');
   const [sort, setSort] = useState<OwnerPortfolioSort>('realm-order');
 
   const portfolioQuery = useQuery({
-    queryKey: ownerPortfolioListQueryKey(),
-    queryFn: () => listRealmAgentStudioPortfolioAgents(),
+    queryKey: mode.queryKey,
+    queryFn: mode.queryFn,
   });
 
   const agents = portfolioQuery.data || [];
@@ -164,10 +215,10 @@ export function AgentListPage() {
       <div className="ras-page">
         <header className="ras-page-header">
           <div style={{ minWidth: 0 }}>
-            <p className="ras-page-header__eyebrow">Realm Agent Studio</p>
-            <h1 className="ras-page-header__title">Realm Agent portfolio</h1>
+            <p className="ras-page-header__eyebrow">{mode.eyebrow}</p>
+            <h1 className="ras-page-header__title">{mode.title}</h1>
             <p className="ras-page-header__description">
-              Owner-created agents and admitted Forge-imported system agents. Pick one to open its workspaces.
+              {mode.description}
             </p>
           </div>
           <div className="ras-page-header__actions">
@@ -178,15 +229,17 @@ export function AgentListPage() {
               onClick={() => void portfolioQuery.refetch()}
               aria-label="Refresh portfolio"
             >
-              Refresh
+              {mode.refreshLabel}
             </Button>
-            <Button
-              tone="primary"
-              leadingIcon={<Plus size={15} strokeWidth={2} />}
-              onClick={() => navigate('/portfolio/create')}
-            >
-              Create Realm Agent
-            </Button>
+            {mode.createEnabled ? (
+              <Button
+                tone="primary"
+                leadingIcon={<Plus size={15} strokeWidth={2} />}
+                onClick={() => navigate('/portfolio/create')}
+              >
+                Create Realm Agent
+              </Button>
+            ) : null}
           </div>
         </header>
 
@@ -194,7 +247,9 @@ export function AgentListPage() {
           <PortfolioLoadingState />
         ) : portfolioQuery.isError ? (
           (() => {
-            const failure = classifyPortfolioFailure(portfolioQuery.error);
+            const failure = mode.classifyFailure
+              ? mode.classifyFailure(portfolioQuery.error)
+              : classifyPortfolioFailure(portfolioQuery.error);
             return (
               <PortfolioFailureState
                 title={failure.title}
@@ -210,19 +265,21 @@ export function AgentListPage() {
               <LayoutGrid size={28} strokeWidth={1.8} />
             </div>
             <div className="ras-stack-tight">
-              <h2 className="ras-hero-empty__title">No Realm Agents available</h2>
+              <h2 className="ras-hero-empty__title">{mode.emptyTitle}</h2>
               <p className="ras-hero-empty__description">
-                Realm returned no owner-created agents or admitted Forge-imported system agents.
+                {mode.emptyDescription}
               </p>
             </div>
-            <Button
-              tone="primary"
-              size="lg"
-              leadingIcon={<Plus size={16} strokeWidth={2} />}
-              onClick={() => navigate('/portfolio/create')}
-            >
-              Create Realm Agent
-            </Button>
+            {mode.createEnabled ? (
+              <Button
+                tone="primary"
+                size="lg"
+                leadingIcon={<Plus size={16} strokeWidth={2} />}
+                onClick={() => navigate('/portfolio/create')}
+              >
+                Create Realm Agent
+              </Button>
+            ) : null}
           </div>
         ) : (
           <>
@@ -258,7 +315,7 @@ export function AgentListPage() {
                     key={agent.id}
                     agent={agent}
                     active={false}
-                    onSelect={() => navigate(`/portfolio/${agent.id}`)}
+                    onSelect={() => navigate(mode.detailPath(agent.id))}
                   />
                 ))}
               </div>
@@ -267,5 +324,44 @@ export function AgentListPage() {
         )}
       </div>
     </ScrollArea>
+  );
+}
+
+export function AgentListPage() {
+  return (
+    <PortfolioListPage
+      mode={{
+        queryKey: ownerPortfolioListQueryKey(),
+        queryFn: () => listOwnerPortfolioAgents(),
+        eyebrow: 'Realm Agent Studio',
+        title: 'Realm Agent portfolio',
+        description: 'Owner-created Realm Agents for the current Runtime account. Pick one to open its workspaces.',
+        emptyTitle: 'No owner-created Realm Agents',
+        emptyDescription: 'Realm returned no current-user owner-created Realm Agents.',
+        refreshLabel: 'Refresh',
+        createEnabled: true,
+        detailPath: (agentId) => `/portfolio/${agentId}`,
+      }}
+    />
+  );
+}
+
+export function CurationAgentListPage() {
+  return (
+    <PortfolioListPage
+      mode={{
+        queryKey: curationPortfolioListQueryKey(),
+        queryFn: () => listForgeImportedSystemPortfolioAgents(),
+        eyebrow: 'System curation',
+        title: 'Forge-imported system agents',
+        description: 'Halliday-owned Forge-imported system agents for admitted curation.',
+        emptyTitle: 'No Forge-imported system agents',
+        emptyDescription: 'Realm returned no Halliday-owned Forge-imported system agents for curation.',
+        refreshLabel: 'Refresh curation',
+        createEnabled: false,
+        detailPath: (agentId) => `/curation/forge-imported-system/${agentId}`,
+        classifyFailure: classifyCurationFailure,
+      }}
+    />
   );
 }

@@ -1,11 +1,15 @@
 import { useParams } from 'react-router-dom';
 import { InlineAlert, StatusBadge, Surface } from '@nimiplatform/kit/ui';
 import { AgentShell, WorkspaceIntro } from '@renderer/features/agent-detail/agent-shell.js';
-import { useRefreshOwnerAgentReads } from '@renderer/features/agent-detail/use-agent-detail-query.js';
+import {
+  type AgentDetailReadScope,
+  useRefreshAgentReads,
+} from '@renderer/features/agent-detail/use-agent-detail-query.js';
 import { MediaVoiceCandidateWorkspace } from '@renderer/features/portfolio/OwnerPortfolio.assets.js';
 
-export function AgentAssetsPage() {
+function AgentAssetsPageForScope({ mode = 'owner' }: { mode?: AgentDetailReadScope }) {
   const { agentId } = useParams<{ agentId: string }>();
+  const refreshAgentReads = useRefreshAgentReads(agentId ?? '', mode);
 
   if (!agentId) {
     return (
@@ -15,10 +19,8 @@ export function AgentAssetsPage() {
     );
   }
 
-  const refreshOwnerAgentReads = useRefreshOwnerAgentReads(agentId);
-
   return (
-    <AgentShell agentId={agentId} current="assets">
+    <AgentShell agentId={agentId} current="assets" mode={mode}>
       {(agent) => (
         <>
           <WorkspaceIntro
@@ -27,9 +29,17 @@ export function AgentAssetsPage() {
             description="Generate, upload, and review avatar, image, and voice candidates in one owner asset workflow."
           />
 
-          <MediaVoiceCandidateWorkspace agent={agent} onAgentWrite={refreshOwnerAgentReads} />
+          <MediaVoiceCandidateWorkspace agent={agent} onAgentWrite={refreshAgentReads} />
         </>
       )}
     </AgentShell>
   );
+}
+
+export function AgentAssetsPage() {
+  return <AgentAssetsPageForScope />;
+}
+
+export function CurationAgentAssetsPage() {
+  return <AgentAssetsPageForScope mode="forge-imported-system" />;
 }

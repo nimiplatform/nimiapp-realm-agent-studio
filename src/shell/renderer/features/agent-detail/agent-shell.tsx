@@ -18,42 +18,80 @@ import {
   detailFriendCountLabel,
   settingFieldDisplayValue,
 } from '@renderer/features/portfolio/OwnerPortfolio.shared.js';
-import { useOwnerAgentDetailQuery } from './use-agent-detail-query.js';
+import { type AgentDetailReadScope, useAgentDetailQuery } from './use-agent-detail-query.js';
 
 export type AgentShellTabKey = 'detail' | 'settings' | 'assets' | 'posts' | 'insights';
+export type AgentShellMode = AgentDetailReadScope;
 
 type AgentTabDef = {
   key: AgentShellTabKey;
   label: string;
-  basePath: (agentId: string) => string;
+  basePath: (agentId: string, mode: AgentShellMode) => string;
+  modes: readonly AgentShellMode[];
 };
 
 const TABS: AgentTabDef[] = [
-  { key: 'detail', label: 'Detail', basePath: (agentId) => `/portfolio/${agentId}` },
-  { key: 'settings', label: 'Settings', basePath: (agentId) => `/portfolio/${agentId}/settings` },
-  { key: 'assets', label: 'Assets', basePath: (agentId) => `/portfolio/${agentId}/assets` },
-  { key: 'posts', label: 'Posts', basePath: (agentId) => `/portfolio/${agentId}/posts` },
-  { key: 'insights', label: 'Insights', basePath: (agentId) => `/portfolio/${agentId}/insights` },
+  {
+    key: 'detail',
+    label: 'Detail',
+    modes: ['owner', 'forge-imported-system'],
+    basePath: (agentId, mode) => mode === 'forge-imported-system'
+      ? `/curation/forge-imported-system/${agentId}`
+      : `/portfolio/${agentId}`,
+  },
+  {
+    key: 'settings',
+    label: 'Settings',
+    modes: ['owner', 'forge-imported-system'],
+    basePath: (agentId, mode) => mode === 'forge-imported-system'
+      ? `/curation/forge-imported-system/${agentId}/settings`
+      : `/portfolio/${agentId}/settings`,
+  },
+  {
+    key: 'assets',
+    label: 'Assets',
+    modes: ['owner', 'forge-imported-system'],
+    basePath: (agentId, mode) => mode === 'forge-imported-system'
+      ? `/curation/forge-imported-system/${agentId}/assets`
+      : `/portfolio/${agentId}/assets`,
+  },
+  {
+    key: 'posts',
+    label: 'Posts',
+    modes: ['owner'],
+    basePath: (agentId) => `/portfolio/${agentId}/posts`,
+  },
+  {
+    key: 'insights',
+    label: 'Insights',
+    modes: ['owner', 'forge-imported-system'],
+    basePath: (agentId, mode) => mode === 'forge-imported-system'
+      ? `/curation/forge-imported-system/${agentId}/insights`
+      : `/portfolio/${agentId}/insights`,
+  },
 ];
 
 export function AgentTabBar({
   agentId,
   current,
+  mode = 'owner',
 }: {
   agentId: string;
   current: AgentShellTabKey;
+  mode?: AgentShellMode;
 }) {
   const navigate = useNavigate();
+  const tabs = TABS.filter((tab) => tab.modes.includes(mode));
   return (
     <PillTabs
       ariaLabel="Agent workspace tabs"
       size="md"
       value={current}
       onValueChange={(value) => {
-        const next = TABS.find((tab) => tab.key === value);
-        if (next) navigate(next.basePath(agentId));
+        const next = tabs.find((tab) => tab.key === value);
+        if (next) navigate(next.basePath(agentId, mode));
       }}
-      items={TABS.map((tab) => ({ value: tab.key, label: tab.label }))}
+      items={tabs.map((tab) => ({ value: tab.key, label: tab.label }))}
     />
   );
 }
@@ -61,17 +99,19 @@ export function AgentTabBar({
 export function AgentHeader({
   agent,
   back = '/portfolio',
+  backLabel = 'Portfolio',
 }: {
   agent: OwnerPortfolioAgentDetail;
   back?: string;
+  backLabel?: string;
 }) {
   return (
     <section className="ras-card">
       <div className="ras-agent-header">
         <BackLink asChild>
-          <NavLink to={back} aria-label="Back to portfolio">
+          <NavLink to={back} aria-label={`Back to ${backLabel}`}>
             <ArrowLeft size={15} strokeWidth={1.8} style={{ marginRight: 4 }} />
-            Portfolio
+            {backLabel}
           </NavLink>
         </BackLink>
         <div className="ras-agent-header__identity">
@@ -139,6 +179,9 @@ export function WorkspaceIntro({
 }
 
 function deriveCurrentTab(pathname: string, agentId: string): AgentShellTabKey {
+  if (pathname.startsWith(`/curation/forge-imported-system/${agentId}/settings`)) return 'settings';
+  if (pathname.startsWith(`/curation/forge-imported-system/${agentId}/assets`)) return 'assets';
+  if (pathname.startsWith(`/curation/forge-imported-system/${agentId}/insights`)) return 'insights';
   if (pathname.startsWith(`/portfolio/${agentId}/settings`)) return 'settings';
   if (pathname.startsWith(`/portfolio/${agentId}/assets`)) return 'assets';
   if (pathname.startsWith(`/portfolio/${agentId}/posts`)) return 'posts';
@@ -149,15 +192,19 @@ function deriveCurrentTab(pathname: string, agentId: string): AgentShellTabKey {
 export function AgentShell({
   agentId,
   current,
+  mode = 'owner',
   children,
 }: {
   agentId: string;
   current?: AgentShellTabKey;
+  mode?: AgentShellMode;
   children: (agent: OwnerPortfolioAgentDetail) => ReactNode;
 }) {
   const location = useLocation();
   const activeTab = current ?? deriveCurrentTab(location.pathname, agentId);
-  const detailQuery = useOwnerAgentDetailQuery(agentId);
+  const detailQuery = useAgentDetailQuery(agentId, mode);
+  const back = mode === 'forge-imported-system' ? '/curation/forge-imported-system' : '/portfolio';
+  const backLabel = mode === 'forge-imported-system' ? 'Curation' : 'Portfolio';
 
   if (detailQuery.isLoading) {
     return (
@@ -205,8 +252,8 @@ export function AgentShell({
   return (
     <ScrollArea className="flex-1" viewportClassName="bg-transparent">
       <div className="ras-page">
-        <AgentHeader agent={agent} />
-        <AgentTabBar agentId={agentId} current={activeTab} />
+        <AgentHeader agent={agent} back={back} backLabel={backLabel} />
+        <AgentTabBar agentId={agentId} current={activeTab} mode={mode} />
         {children(agent)}
       </div>
     </ScrollArea>

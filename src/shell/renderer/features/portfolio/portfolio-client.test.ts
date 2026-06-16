@@ -74,15 +74,14 @@ describe('owner portfolio core client', () => {
       expect(agents[0]?.source).toBe('Realm MeService.listMyRealmAgents');
     });
 
-    it('lists owner-created and Forge-imported system agents through admitted portfolio lanes', async () => {
+    it('keeps Realm Agent Studio portfolio aggregation owner-only', async () => {
       const realm = mockRealm();
       const agents = await listRealmAgentStudioPortfolioAgents(realm);
 
       expect(realm.listMyRealmAgents).toHaveBeenCalledTimes(1);
-      expect(realm.listForgeImportedSystemAgents).toHaveBeenCalledTimes(1);
+      expect(realm.listForgeImportedSystemAgents).not.toHaveBeenCalled();
       expect(agents.map((item) => [item.id, item.ownerScope, item.source])).toEqual([
         ['agent-1', 'owner-created', 'Realm MeService.listMyRealmAgents'],
-        ['cbdb-agent-su-shi', 'forge-imported-system', 'Realm AgentCuratedSystemService.listForgeImportedSystemAgents'],
       ]);
     });
 
@@ -96,15 +95,16 @@ describe('owner portfolio core client', () => {
       expect(detail.world.value).toBe('cbdb-song-slice-real-20260614-world');
     });
 
-    it('falls through to Forge-imported system detail when owner authority does not contain the agent', async () => {
+    it('does not fall through to Forge-imported system detail from owner detail reads', async () => {
       const realm = mockRealm();
       vi.mocked(realm.getMyRealmAgent).mockRejectedValueOnce(new Error('owner authority missing'));
 
-      const detail = await getRealmAgentStudioPortfolioAgentDetail('cbdb-agent-su-shi', realm);
+      await expect(getRealmAgentStudioPortfolioAgentDetail('cbdb-agent-su-shi', realm)).rejects.toThrow(
+        'owner authority missing',
+      );
 
       expect(realm.getMyRealmAgent).toHaveBeenCalledWith({ path: { agentId: 'cbdb-agent-su-shi' } });
-      expect(realm.getForgeImportedSystemAgent).toHaveBeenCalledWith({ path: { agentId: 'cbdb-agent-su-shi' } });
-      expect(detail.ownerScope).toBe('forge-imported-system');
+      expect(realm.getForgeImportedSystemAgent).not.toHaveBeenCalled();
     });
 
     it('fetches selected detail through getMyRealmAgent', async () => {

@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom';
 import { InlineAlert, StatusBadge, Surface } from '@nimiplatform/kit/ui';
 import { AgentShell, WorkspaceIntro } from '@renderer/features/agent-detail/agent-shell.js';
+import type { AgentDetailReadScope } from '@renderer/features/agent-detail/use-agent-detail-query.js';
 import type { OwnerPortfolioAgentDetail } from '@renderer/features/portfolio/portfolio-data.js';
 import {
   settingFieldStatusLabel,
@@ -110,7 +111,7 @@ function InsightsBody({ agent }: { agent: OwnerPortfolioAgentDetail }) {
   );
 }
 
-export function AgentInsightsPage() {
+function AgentInsightsPageForScope({ mode = 'owner' }: { mode?: AgentDetailReadScope }) {
   const { agentId } = useParams<{ agentId: string }>();
 
   if (!agentId) {
@@ -122,8 +123,16 @@ export function AgentInsightsPage() {
   }
 
   return (
-    <AgentShell agentId={agentId} current="insights">
+    <AgentShell agentId={agentId} current="insights" mode={mode}>
       {(agent) => <InsightsBody agent={agent} />}
     </AgentShell>
   );
+}
+
+export function AgentInsightsPage() {
+  return <AgentInsightsPageForScope />;
+}
+
+export function CurationAgentInsightsPage() {
+  return <AgentInsightsPageForScope mode="forge-imported-system" />;
 }
