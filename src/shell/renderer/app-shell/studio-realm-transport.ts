@@ -1,33 +1,61 @@
 import type { CoreTransport, RealmOptions } from '@nimiplatform/sdk/realm';
-import { createNimiError, ReasonCode, type CoreUnaryRequest } from '@nimiplatform/sdk/types';
-import { invokeChecked, type JsonObject, type JsonValue } from '../bridge/index.js';
+import { withNimiRuntimeIdempotencyMetadata, type NimiRuntimeAccountCaller, type Runtime } from '@nimiplatform/sdk/runtime';
+import { createNimiClientId, createNimiError, ReasonCode, type CoreUnaryRequest } from '@nimiplatform/sdk/types';
 
-type StudioRealmUnaryResult = {
-  readonly response: unknown;
-};
-
-export function createStudioRealmBridgeOptions(realmBaseUrl: string): RealmOptions {
+export function createStudioRealmBridgeOptions(
+  realmBaseUrl: string,
+  runtime: Runtime,
+  caller: NimiRuntimeAccountCaller,
+): RealmOptions {
   return {
-    transport: createStudioRealmBridgeTransport(realmBaseUrl),
+    transport: createStudioRealmBridgeTransport(realmBaseUrl, runtime, caller),
   };
 }
 
-export function createStudioRealmBridgeTransport(realmBaseUrl: string): CoreTransport {
+export function createStudioRealmBridgeTransport(
+  realmBaseUrl: string,
+  runtime: Runtime,
+  caller: NimiRuntimeAccountCaller,
+): CoreTransport {
   return {
     async unary<Response = unknown, Body = unknown>(request: CoreUnaryRequest<Body>): Promise<Response> {
-      const payload: JsonObject = {
+      const requestJson = JSON.stringify(request.body ?? {});
+      if (typeof requestJson !== 'string') {
+        throw createNimiError({
+          message: `Realm Agent Studio Realm request is not JSON-serializable: ${request.methodId}`,
+          reasonCode: ReasonCode.SDK_REALM_OPERATION_UNKNOWN,
+          actionHint: 'provide_json_realm_request',
+          source: 'sdk',
+        });
+      }
+      const result = await runtime.account.invokeRealmUnary({
+        caller,
         methodId: request.methodId,
         realmBaseUrl,
-        request: request.body as JsonValue,
-      };
-      if (typeof request.timeoutMs === 'number') {
-        payload.timeoutMs = request.timeoutMs;
+        requestJson,
+        timeoutMs: typeof request.timeoutMs === 'number' ? request.timeoutMs : 0,
+      }, withNimiRuntimeIdempotencyMetadata({
+        timeoutMs: request.timeoutMs,
+        signal: request.signal,
+      }, createNimiClientId(`realm-agent-studio-realm-${sanitizeMethodId(request.methodId)}`)));
+      request.responseMetadataObserver?.({
+        ...(result.httpStatus ? { status: String(result.httpStatus) } : {}),
+      });
+      if (!result.accepted) {
+        throw createNimiError({
+          message: result.errorMessage || `Realm operation ${request.methodId} failed through Runtime mediation.`,
+          reasonCode: ReasonCode.SDK_REALM_HTTP_REQUEST_FAILED,
+          actionHint: 'inspect_runtime_realm_mediation',
+          source: 'runtime',
+          details: {
+            methodId: request.methodId,
+            reasonCode: result.reasonCode,
+            accountReasonCode: result.accountReasonCode,
+            httpStatus: result.httpStatus,
+          },
+        });
       }
-      const result = await invokeChecked('realm_agent_studio_realm_unary', {
-        payload,
-      }, parseStudioRealmUnaryResult);
-      request.responseMetadataObserver?.({});
-      return result.response as Response;
+      return JSON.parse(result.responseJson || '{}') as Response;
     },
     serverStream() {
       throw createNimiError({
@@ -40,18 +68,6 @@ export function createStudioRealmBridgeTransport(realmBaseUrl: string): CoreTran
   };
 }
 
-function parseStudioRealmUnaryResult(value: unknown): StudioRealmUnaryResult {
-  const record = asRecord(value);
-  if (!record || !('response' in record)) {
-    throw new Error('Realm Agent Studio Realm bridge returned an invalid response envelope.');
-  }
-  return {
-    response: record.response,
-  };
-}
-
-function asRecord(value: unknown): JsonObject | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as JsonObject
-    : null;
+function sanitizeMethodId(methodId: string): string {
+  return methodId.replace(/[^a-zA-Z0-9._:-]/g, '_').slice(0, 80) || 'unknown';
 }

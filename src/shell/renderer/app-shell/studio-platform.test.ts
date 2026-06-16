@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('studio platform runtime auth boundary', () => {
-  it('uses developer-registered Runtime auth without raw Realm token transport', () => {
+  it('uses first-party Runtime auth without renderer-owned token custody', () => {
     const studioPlatformSource = readFileSync(
       join(process.cwd(), 'src/shell/renderer/app-shell/studio-platform.ts'),
       'utf8',
@@ -22,18 +22,18 @@ describe('studio platform runtime auth boundary', () => {
     );
     const combined = `${studioPlatformSource}\n${bootstrapSource}`;
 
-    expect(studioPlatformSource).toContain('createNimiDeveloperRegisteredRuntimeAccountCaller');
+    expect(studioPlatformSource).toContain('createNimiLocalFirstPartyRuntimeAccountCaller');
     expect(studioPlatformSource).toContain('createNimiRuntimeAppSessionMetadataProvider');
     expect(studioPlatformSource).toContain('createNimiRuntimeFullAppRegistration');
     expect(studioPlatformSource).toContain('createStudioRealmBridgeOptions');
     expect(studioPlatformSource).toContain('realmBaseUrl');
     expect(studioPlatformSource).toContain("'nimi.realm-agent-studio'");
-    expect(studioPlatformSource).toContain('.local-developer');
-    expect(studioPlatformSource).not.toContain('createNimiLocalFirstPartyRuntimeAccountCaller');
+    expect(studioPlatformSource).toContain('.local-first-party');
+    expect(studioPlatformSource).not.toContain('createNimiDeveloperRegisteredRuntimeAccountCaller');
     expect(studioPlatformSource).not.toContain('getAccessToken');
     expect(studioPlatformSource).not.toContain('createRealmFetchTransport');
     expect(studioPlatformSource).not.toContain('authorization: `Bearer');
-    expect(studioPlatformSource).not.toContain('local-first-party');
+    expect(studioPlatformSource).not.toContain('local-developer');
     expect(combined).not.toContain('DEFAULT_REALM_BASE_URL');
     expect(combined).not.toContain('localhost:3002');
     expect(combined).not.toContain('VITE_NIMI_REALM_BASE_URL');

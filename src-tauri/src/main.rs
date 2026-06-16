@@ -4,8 +4,6 @@ use nimi_shell_tauri::oauth_commands;
 use nimi_shell_tauri::runtime_bridge;
 use nimi_shell_tauri::session_logging;
 
-mod studio_realm_bridge;
-
 #[tauri::command]
 fn realm_agent_studio_start_window_drag(window: tauri::WebviewWindow) -> Result<(), String> {
     #[cfg(target_os = "macos")]
@@ -72,7 +70,6 @@ fn main() {
             runtime_bridge::runtime_bridge_stream_open,
             runtime_bridge::runtime_bridge_stream_close,
             runtime_bridge::runtime_bridge_status,
-            studio_realm_bridge::realm_agent_studio_realm_unary,
             session_logging::log_renderer_event,
         ])
         .run(tauri::generate_context!())

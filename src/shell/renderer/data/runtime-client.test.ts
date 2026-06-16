@@ -44,10 +44,11 @@ describe('studio runtime client gate', () => {
     expect(combinedDataSource).not.toMatch(/createRealmClient|createPlatformClient/);
     expect(studioPlatformSource).toContain('createNimiClient');
     expect(studioPlatformSource).toContain("type: 'tauri-ipc'");
-    expect(studioPlatformSource).toContain('createNimiDeveloperRegisteredRuntimeAccountCaller');
+    expect(studioPlatformSource).toContain('createNimiLocalFirstPartyRuntimeAccountCaller');
     expect(studioPlatformSource).toContain('createNimiRuntimeAppSessionMetadataProvider');
     expect(studioPlatformSource).toContain('createStudioRealmBridgeOptions');
-    expect(realmTransportSource).toContain('realm_agent_studio_realm_unary');
+    expect(realmTransportSource).toContain('invokeRealmUnary');
+    expect(realmTransportSource).not.toContain('realm_agent_studio_realm_unary');
     expect(realmTransportSource).not.toContain('getAccessToken');
     expect(studioPlatformSource).not.toContain('getAccessToken');
     expect(studioPlatformSource).not.toContain('createRealmFetchTransport');

@@ -12,7 +12,7 @@ import {
 } from '@nimiplatform/sdk/runtime/generated';
 import {
   Runtime,
-  createNimiDeveloperRegisteredRuntimeAccountCaller,
+  createNimiLocalFirstPartyRuntimeAccountCaller,
   createNimiRuntimeAppSessionMetadataProvider,
   createNimiRuntimeFullAppRegistration,
   toNimiRuntimeTimestamp,
@@ -24,12 +24,12 @@ import { createNimiClientId, createNimiError, ReasonCode, type CoreMetadata } fr
 import { createStudioRealmBridgeOptions } from './studio-realm-transport.js';
 import { getStudioNimiClient, setStudioNimiClient } from '../infra/studio-nimi-client.js';
 
-// Studio is a non-first-party developer-registered local Runtime
-// account/session consumer. Runtime owns login custody, app sessions, and
-// protected access metadata. Raw Realm account tokens are not exposed here.
+// Studio is a Nimi first-party local Runtime account/session consumer. Runtime
+// owns login custody, app sessions, and protected access metadata. Raw Realm
+// account tokens are not exposed here.
 export const STUDIO_RUNTIME_APP_ID = 'nimi.realm-agent-studio';
-export const STUDIO_RUNTIME_APP_INSTANCE_ID = `${STUDIO_RUNTIME_APP_ID}.local-developer`;
-export const STUDIO_RUNTIME_DEVICE_ID = 'realm-agent-studio-local-developer-device';
+export const STUDIO_RUNTIME_APP_INSTANCE_ID = `${STUDIO_RUNTIME_APP_ID}.local-first-party`;
+export const STUDIO_RUNTIME_DEVICE_ID = 'local-first-party-device';
 
 const STUDIO_RUNTIME_APP_SESSION_INSTANCE_ID = `${STUDIO_RUNTIME_APP_ID}.platform-runtime-session`;
 const STUDIO_RUNTIME_APP_SESSION_DEVICE_ID = 'platform-runtime-session';
@@ -40,10 +40,10 @@ const STUDIO_RUNTIME_PROTECTED_SCOPE_CATALOG_VERSION = 'sdk-v2';
 const STUDIO_RUNTIME_PROTECTED_TOKEN_TTL_SECONDS = 3600;
 const STUDIO_RUNTIME_PROTECTED_TOKEN_REFRESH_SKEW_MS = 60_000;
 const STUDIO_RUNTIME_PROTECTED_CONSENT_ID = 'realm-agent-studio-runtime-account';
-const STUDIO_RUNTIME_DEVELOPER_REGISTRATION = import.meta.env.DEV === true;
+const STUDIO_RUNTIME_DEVELOPER_REGISTRATION = false;
 
 export const studioRuntimeAccountCaller: NimiRuntimeAccountCaller =
-  createNimiDeveloperRegisteredRuntimeAccountCaller({
+  createNimiLocalFirstPartyRuntimeAccountCaller({
     appId: STUDIO_RUNTIME_APP_ID,
     appInstanceId: STUDIO_RUNTIME_APP_INSTANCE_ID,
     deviceId: STUDIO_RUNTIME_DEVICE_ID,
@@ -262,7 +262,7 @@ export async function buildStudioNimiClient(options: { realmBaseUrl?: string | n
   const client = createNimiClient({
     appId: STUDIO_RUNTIME_APP_ID,
     runtime,
-    realm: createStudioRealmBridgeOptions(realmBaseUrl),
+    realm: createStudioRealmBridgeOptions(realmBaseUrl, accountRuntime, studioRuntimeAccountCaller),
     app: false,
     permissions: false,
   });
