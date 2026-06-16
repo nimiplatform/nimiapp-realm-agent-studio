@@ -34,6 +34,7 @@ describe('studio runtime client gate', () => {
   it('does not construct app-owned Realm or Runtime clients in renderer data modules', () => {
     const runtimeClientSource = readFileSync(resolve(dataDir, 'runtime-client.ts'), 'utf8');
     const realmClientSource = readFileSync(resolve(dataDir, 'realm-client.ts'), 'utf8');
+    const realmTransportSource = readFileSync(resolve(rendererRoot, 'app-shell', 'studio-realm-transport.ts'), 'utf8');
     const bridgeSource = readFileSync(resolve(rendererRoot, 'bridge', 'index.ts'), 'utf8');
     const appStoreSource = readFileSync(resolve(rendererRoot, 'app-shell', 'app-store.ts'), 'utf8');
     const studioPlatformSource = readFileSync(resolve(rendererRoot, 'app-shell', 'studio-platform.ts'), 'utf8');
@@ -45,7 +46,9 @@ describe('studio runtime client gate', () => {
     expect(studioPlatformSource).toContain("type: 'tauri-ipc'");
     expect(studioPlatformSource).toContain('createNimiDeveloperRegisteredRuntimeAccountCaller');
     expect(studioPlatformSource).toContain('createNimiRuntimeAppSessionMetadataProvider');
-    expect(studioPlatformSource).toContain('realm: false');
+    expect(studioPlatformSource).toContain('createStudioRealmBridgeOptions');
+    expect(realmTransportSource).toContain('realm_agent_studio_realm_unary');
+    expect(realmTransportSource).not.toContain('getAccessToken');
     expect(studioPlatformSource).not.toContain('getAccessToken');
     expect(studioPlatformSource).not.toContain('createRealmFetchTransport');
     expect(studioPlatformSource).not.toMatch(/VITE_REALM_ACCESS_TOKEN|refreshToken|sessionStore|subjectUserIdProvider/);

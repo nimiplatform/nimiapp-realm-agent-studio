@@ -25,7 +25,8 @@ describe('studio platform runtime auth boundary', () => {
     expect(studioPlatformSource).toContain('createNimiDeveloperRegisteredRuntimeAccountCaller');
     expect(studioPlatformSource).toContain('createNimiRuntimeAppSessionMetadataProvider');
     expect(studioPlatformSource).toContain('createNimiRuntimeFullAppRegistration');
-    expect(studioPlatformSource).toContain("realm: false");
+    expect(studioPlatformSource).toContain('createStudioRealmBridgeOptions');
+    expect(studioPlatformSource).toContain('realmBaseUrl');
     expect(studioPlatformSource).toContain("'nimi.realm-agent-studio'");
     expect(studioPlatformSource).toContain('.local-developer');
     expect(studioPlatformSource).not.toContain('createNimiLocalFirstPartyRuntimeAccountCaller');
@@ -39,6 +40,7 @@ describe('studio platform runtime auth boundary', () => {
     expect(combined).not.toContain('VITE_REALM_BASE_URL');
     expect(combined).not.toContain('NIMI_REALM_URL');
     expect(combined).not.toContain('resolveStudioRealmBaseUrl');
+    expect(combined).toContain('runtimeDefaults.realm?.realmBaseUrl');
     expect(viteConfigSource).toContain("find: /^@nimiplatform\\/sdk\\/runtime$/");
     expect(viteConfigSource).toContain("replacement: path.resolve(nimiSdkSourceRoot, 'runtime/index.ts')");
     expect(viteConfigSource).toContain("find: /^@nimiplatform\\/kit\\/shell\\/renderer\\/bootstrap$/");

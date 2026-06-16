@@ -4,6 +4,8 @@ use nimi_shell_tauri::oauth_commands;
 use nimi_shell_tauri::runtime_bridge;
 use nimi_shell_tauri::session_logging;
 
+mod studio_realm_bridge;
+
 #[tauri::command]
 fn realm_agent_studio_start_window_drag(window: tauri::WebviewWindow) -> Result<(), String> {
     #[cfg(target_os = "macos")]
@@ -34,7 +36,10 @@ fn load_dotenv_files() {
                     std::env::set_var(&key, &value);
                 }
             }
-            eprintln!("[realm-agent-studio] dotenv loaded path={}", root_env_path.display());
+            eprintln!(
+                "[realm-agent-studio] dotenv loaded path={}",
+                root_env_path.display()
+            );
         }
         Err(error) => {
             eprintln!(
@@ -67,6 +72,7 @@ fn main() {
             runtime_bridge::runtime_bridge_stream_open,
             runtime_bridge::runtime_bridge_stream_close,
             runtime_bridge::runtime_bridge_status,
+            studio_realm_bridge::realm_agent_studio_realm_unary,
             session_logging::log_renderer_event,
         ])
         .run(tauri::generate_context!())

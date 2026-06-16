@@ -69,7 +69,7 @@ export function createStudioRealmClient(): StudioRealmSurface {
   const realm = getCurrentStudioNimiClient().realm;
   if (!realm) {
     throw new Error(
-      'Realm Agent Studio Realm client is unavailable for developer-registered local apps until a Runtime/Realm owner-operation proxy is admitted.',
+      'Realm Agent Studio Realm client is unavailable. Reopen Studio after Runtime account bootstrap completes.',
     );
   }
   return createStudioRealmSurface(realm);

@@ -61,7 +61,9 @@ async function doRunStudioBootstrap(): Promise<void> {
     const runtimeDefaults = await getStudioRuntimeDefaults();
     store.setRuntimeDefaults(runtimeDefaults);
 
-    const client = await buildStudioNimiClient();
+    const client = await buildStudioNimiClient({
+      realmBaseUrl: runtimeDefaults.realm?.realmBaseUrl ?? null,
+    });
     setStudioNimiClient(client);
     const runtime = client.runtime;
 

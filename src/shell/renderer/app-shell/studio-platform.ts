@@ -21,6 +21,7 @@ import {
   type RuntimeOptions,
 } from '@nimiplatform/sdk/runtime';
 import { createNimiClientId, createNimiError, ReasonCode, type CoreMetadata } from '@nimiplatform/sdk/types';
+import { createStudioRealmBridgeOptions } from './studio-realm-transport.js';
 import { getStudioNimiClient, setStudioNimiClient } from '../infra/studio-nimi-client.js';
 
 // Studio is a non-first-party developer-registered local Runtime
@@ -242,7 +243,16 @@ function normalizeStudioText(value: unknown): string {
   return String(value || '').trim();
 }
 
-export async function buildStudioNimiClient(): Promise<NimiClient> {
+export async function buildStudioNimiClient(options: { realmBaseUrl?: string | null } = {}): Promise<NimiClient> {
+  const realmBaseUrl = normalizeStudioText(options.realmBaseUrl);
+  if (!realmBaseUrl) {
+    throw createNimiError({
+      message: 'Realm Agent Studio Realm base URL is unavailable from Runtime defaults.',
+      reasonCode: ReasonCode.SDK_REALM_BASE_URL_REQUIRED,
+      actionHint: 'provide_studio_runtime_realm_defaults',
+      source: 'sdk',
+    });
+  }
   const accountRuntime = new Runtime(studioRuntimeOptions());
   await accountRuntime.ready();
   await registerStudioRuntimeAccountCaller(accountRuntime);
@@ -252,7 +262,7 @@ export async function buildStudioNimiClient(): Promise<NimiClient> {
   const client = createNimiClient({
     appId: STUDIO_RUNTIME_APP_ID,
     runtime,
-    realm: false,
+    realm: createStudioRealmBridgeOptions(realmBaseUrl),
     app: false,
     permissions: false,
   });
