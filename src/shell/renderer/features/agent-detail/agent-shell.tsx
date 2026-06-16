@@ -18,6 +18,8 @@ import {
   detailFriendCountLabel,
   settingFieldDisplayValue,
 } from '@renderer/features/portfolio/OwnerPortfolio.shared.js';
+import { useStudioI18n } from '@renderer/i18n/use-studio-i18n.js';
+import type { StudioCopyKey } from '@renderer/i18n/studio-copy.js';
 import { type AgentDetailReadScope, useAgentDetailQuery } from './use-agent-detail-query.js';
 
 export type AgentShellTabKey = 'detail' | 'settings' | 'assets' | 'posts' | 'insights';
@@ -25,7 +27,7 @@ export type AgentShellMode = AgentDetailReadScope;
 
 type AgentTabDef = {
   key: AgentShellTabKey;
-  label: string;
+  labelKey: StudioCopyKey;
   basePath: (agentId: string, mode: AgentShellMode) => string;
   modes: readonly AgentShellMode[];
 };
@@ -33,31 +35,31 @@ type AgentTabDef = {
 const TABS: AgentTabDef[] = [
   {
     key: 'detail',
-    label: 'Detail',
+    labelKey: 'agent.tabs.detail',
     modes: ['owner'],
     basePath: (agentId) => `/portfolio/${agentId}`,
   },
   {
     key: 'settings',
-    label: 'Settings',
+    labelKey: 'agent.tabs.settings',
     modes: ['owner'],
     basePath: (agentId) => `/portfolio/${agentId}/settings`,
   },
   {
     key: 'assets',
-    label: 'Assets',
+    labelKey: 'agent.tabs.assets',
     modes: ['owner'],
     basePath: (agentId) => `/portfolio/${agentId}/assets`,
   },
   {
     key: 'posts',
-    label: 'Posts',
+    labelKey: 'agent.tabs.posts',
     modes: ['owner'],
     basePath: (agentId) => `/portfolio/${agentId}/posts`,
   },
   {
     key: 'insights',
-    label: 'Insights',
+    labelKey: 'agent.tabs.insights',
     modes: ['owner'],
     basePath: (agentId) => `/portfolio/${agentId}/insights`,
   },
@@ -72,18 +74,19 @@ export function AgentTabBar({
   current: AgentShellTabKey;
   mode?: AgentShellMode;
 }) {
+  const { t } = useStudioI18n();
   const navigate = useNavigate();
   const tabs = TABS.filter((tab) => tab.modes.includes(mode));
   return (
     <PillTabs
-      ariaLabel="Agent workspace tabs"
+      ariaLabel={t('agent.tabs.ariaLabel')}
       size="md"
       value={current}
       onValueChange={(value) => {
         const next = tabs.find((tab) => tab.key === value);
         if (next) navigate(next.basePath(agentId, mode));
       }}
-      items={tabs.map((tab) => ({ value: tab.key, label: tab.label }))}
+      items={tabs.map((tab) => ({ value: tab.key, label: t(tab.labelKey) }))}
     />
   );
 }
@@ -91,25 +94,27 @@ export function AgentTabBar({
 export function AgentHeader({
   agent,
   back = '/portfolio',
-  backLabel = 'Portfolio',
+  backLabel,
 }: {
   agent: OwnerPortfolioAgentDetail;
   back?: string;
   backLabel?: string;
 }) {
+  const { t } = useStudioI18n();
+  const resolvedBackLabel = backLabel ?? t('agent.header.portfolio');
   return (
     <section className="ras-card">
       <div className="ras-agent-header">
         <BackLink asChild>
-          <NavLink to={back} aria-label={`Back to ${backLabel}`}>
+          <NavLink to={back} aria-label={t('agent.header.backTo', { label: resolvedBackLabel })}>
             <ArrowLeft size={15} strokeWidth={1.8} style={{ marginRight: 4 }} />
-            {backLabel}
+            {resolvedBackLabel}
           </NavLink>
         </BackLink>
         <div className="ras-agent-header__identity">
           <Avatar
             src={agent.avatarUrl ?? null}
-            alt={agent.displayName.value || 'Realm Agent'}
+            alt={agent.displayName.value || t('agent.header.realmAgentAlt')}
             size="md"
             shape="circle"
             fallback={
@@ -120,18 +125,18 @@ export function AgentHeader({
           />
           <div style={{ minWidth: 0, flex: 1 }}>
             <h2 className="ras-agent-header__name">
-              {settingFieldDisplayValue(agent.displayName, 'Display name not set')}
+              {settingFieldDisplayValue(agent.displayName, t('shared.displayNameNotSet'), t)}
             </h2>
             <span className="ras-agent-header__handle">
-              {agent.handle.value ? `@${agent.handle.value}` : settingFieldDisplayValue(agent.handle, 'handle not set')}
+              {agent.handle.value ? `@${agent.handle.value}` : settingFieldDisplayValue(agent.handle, t('shared.handleNotSet'), t)}
             </span>
           </div>
         </div>
         <div className="ras-agent-header__meta">
           <StatusBadge tone={agent.friendCount.status === 'available' ? 'success' : 'warning'}>
-            {detailFriendCountLabel(agent)}
+            {detailFriendCountLabel(agent, t)}
           </StatusBadge>
-          <StatusBadge tone="neutral">{settingFieldDisplayValue(agent.world, 'world not set')}</StatusBadge>
+          <StatusBadge tone="neutral">{settingFieldDisplayValue(agent.world, t('shared.worldNotSet'), t)}</StatusBadge>
         </div>
       </div>
     </section>
@@ -189,6 +194,7 @@ export function AgentShell({
   mode?: AgentShellMode;
   children: (agent: OwnerPortfolioAgentDetail) => ReactNode;
 }) {
+  const { t } = useStudioI18n();
   const location = useLocation();
   const activeTab = current ?? deriveCurrentTab(location.pathname, agentId);
   const detailQuery = useAgentDetailQuery(agentId, mode);
@@ -199,8 +205,8 @@ export function AgentShell({
         <div className="ras-page">
           <Surface tone="panel" material="glass-regular" padding="lg" className="ras-radius-xl">
             <EmptyState
-              title="Loading Realm Agent"
-              description="Loading the current profile and settings for this agent."
+              title={t('agent.loading.title')}
+              description={t('agent.loading.description')}
             />
           </Surface>
         </div>
@@ -210,13 +216,27 @@ export function AgentShell({
 
   if (detailQuery.isError) {
     const failure = classifyAgentDetailFailure(detailQuery.error);
+    const titleKeyByKind = {
+      'realm-unavailable': 'portfolio.failure.realmUnavailable.title',
+      'permission-missing': 'portfolio.failure.permissionMissing.title',
+      'owner-authority-missing': 'portfolio.failure.ownerAuthorityMissing.title',
+      'setting-read-unavailable': 'portfolio.failure.settingReadUnavailable.title',
+      unknown: 'portfolio.failure.portfolioUnavailable.title',
+    } as const satisfies Record<typeof failure.kind, StudioCopyKey>;
+    const detailKeyByKind = {
+      'realm-unavailable': 'portfolio.failure.detail.realm',
+      'permission-missing': 'portfolio.failure.detail.permission',
+      'owner-authority-missing': 'portfolio.failure.detail.owner',
+      'setting-read-unavailable': 'portfolio.failure.detail.setting',
+      unknown: 'portfolio.failure.detail.unknown',
+    } as const satisfies Record<typeof failure.kind, StudioCopyKey>;
     return (
       <ScrollArea className="flex-1" viewportClassName="bg-transparent">
         <div className="ras-page">
           <section className="ras-card">
             <InlineAlert tone="danger">
-              <strong>{failure.title}</strong>
-              <div>{failure.detail}</div>
+              <strong>{t(titleKeyByKind[failure.kind])}</strong>
+              <div>{t(detailKeyByKind[failure.kind])}</div>
             </InlineAlert>
             <div>
               <Button
@@ -224,7 +244,7 @@ export function AgentShell({
                 onClick={() => void detailQuery.refetch()}
                 loading={detailQuery.isFetching}
               >
-                Retry
+                {t('common.retry')}
               </Button>
             </div>
           </section>

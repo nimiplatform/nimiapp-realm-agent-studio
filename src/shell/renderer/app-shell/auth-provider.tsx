@@ -3,8 +3,10 @@ import { AmbientBackground, Button, InlineAlert, LoadingSkeleton, Surface } from
 import { useAppStore } from './app-store.js';
 import { runStudioBootstrap } from '../infra/studio-bootstrap.js';
 import { StudioLoginPage } from '../features/auth/studio-login-page.js';
+import { useStudioI18n } from '../i18n/use-studio-i18n.js';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const { t } = useStudioI18n();
   const authStatus = useAppStore((s) => s.auth.status);
   const bootstrapReady = useAppStore((s) => s.bootstrapReady);
   const bootstrapError = useAppStore((s) => s.bootstrapError);
@@ -22,10 +24,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       <BootstrapFrame>
         <InlineAlert
           tone="danger"
-          action={<Button tone="secondary" size="sm" onClick={retryBootstrap}>Retry</Button>}
+          action={<Button tone="secondary" size="sm" onClick={retryBootstrap}>{t('common.retry')}</Button>}
         >
           <div className="ras-bootstrap-copy">
-            <strong>Runtime bootstrap failed</strong>
+            <strong>{t('shell.bootstrap.failed')}</strong>
             <span>{bootstrapError}</span>
           </div>
         </InlineAlert>
@@ -36,8 +38,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   if (!bootstrapReady || authStatus === 'bootstrapping') {
     return (
       <BootstrapFrame>
-        <div className="ras-entry-fallback__title">Realm Agent Studio</div>
-        <LoadingSkeleton lines={2} aria-label="Opening Realm Agent Studio" />
+        <div className="ras-entry-fallback__title">{t('app.name')}</div>
+        <LoadingSkeleton lines={2} aria-label={t('shell.entry.opening')} />
       </BootstrapFrame>
     );
   }

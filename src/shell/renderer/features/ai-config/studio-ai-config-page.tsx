@@ -23,12 +23,17 @@ import {
   createStudioAIScopeRef,
 } from './studio-ai-config-store.js';
 import { translateStudioModelConfigCopy } from './studio-ai-config-copy.js';
+import { useStudioI18n } from '@renderer/i18n/use-studio-i18n.js';
+import type { StudioCopyKey } from '@renderer/i18n/studio-copy.js';
+import type { StudioTranslateOptions } from '@renderer/i18n/studio-i18n.js';
 
 const STUDIO_ENABLED_AI_CAPABILITIES = [
   'text.generate',
   'image.generate',
   'audio.synthesize',
 ] as const;
+
+type StudioTranslator = (key: StudioCopyKey, options?: StudioTranslateOptions) => string;
 
 function createRequirementDeclaration(scopeRef: NimiAIScopeRef): NimiAICapabilityRequirementDeclaration {
   return {
@@ -61,14 +66,15 @@ function bindingStatus(
   capabilityId: string,
   runtimeReady: boolean,
   runtimeDetail: string | null,
+  t: StudioTranslator,
 ): ModelConfigProjectionStatus {
   if (!runtimeReady) {
     return {
       supported: false,
       tone: 'attention',
-      badgeLabel: 'Runtime unavailable',
-      title: 'Runtime unavailable',
-      detail: runtimeDetail || 'Runtime readiness has not succeeded.',
+      badgeLabel: t('aiConfig.runtimeUnavailable'),
+      title: t('aiConfig.runtimeUnavailable'),
+      detail: runtimeDetail || t('aiConfig.runtimePending'),
     };
   }
   const targetRef = config.capabilities.targetRefs[capabilityId] || null;
@@ -76,16 +82,16 @@ function bindingStatus(
     return {
       supported: false,
       tone: 'attention',
-      badgeLabel: 'Needs target',
-      title: 'Target required',
-      detail: 'Runtime calls fail closed until this capability has an AIConfig target.',
+      badgeLabel: t('aiConfig.needsTarget'),
+      title: t('aiConfig.targetRequired'),
+      detail: t('aiConfig.targetRequiredDetail'),
     };
   }
   return {
     supported: true,
     tone: 'ready',
-    badgeLabel: 'Bound',
-    title: 'Target configured',
+    badgeLabel: t('aiConfig.bound'),
+    title: t('aiConfig.targetConfigured'),
     detail: targetRefDetail(targetRef),
   };
 }
@@ -99,10 +105,10 @@ function useLiveAIConfig(service: ReturnType<typeof createStudioAIConfigService>
   return config;
 }
 
-function useStudioRuntimeReadiness(): { ready: boolean; detail: string | null } {
+function useStudioRuntimeReadiness(t: StudioTranslator): { ready: boolean; detail: string | null } {
   const [state, setState] = useState<{ ready: boolean; detail: string | null }>({
     ready: false,
-    detail: 'Runtime readiness pending.',
+    detail: t('aiConfig.runtimePending'),
   });
 
   useEffect(() => {
@@ -113,7 +119,7 @@ function useStudioRuntimeReadiness(): { ready: boolean; detail: string | null } 
         if (cancelled) return;
         setState(runtime
           ? { ready: true, detail: null }
-          : { ready: false, detail: 'Runtime client unavailable.' });
+          : { ready: false, detail: t('aiConfig.runtimeClientUnavailable') });
       })
       .catch((error) => {
         if (!cancelled) {
@@ -126,7 +132,7 @@ function useStudioRuntimeReadiness(): { ready: boolean; detail: string | null } 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   return state;
 }
@@ -187,10 +193,11 @@ function useStudioRuntimeLocalAssetSource(runtimeReady: boolean): AppModelConfig
 }
 
 export function StudioAIConfigPage() {
+  const { locale, t } = useStudioI18n();
   const scopeRef = useMemo(() => createStudioAIScopeRef(), []);
   const service = useMemo(() => createStudioAIConfigService(), []);
   const config = useLiveAIConfig(service, scopeRef);
-  const runtime = useStudioRuntimeReadiness();
+  const runtime = useStudioRuntimeReadiness(t);
   const localAssetSource = useStudioRuntimeLocalAssetSource(runtime.ready);
   const providerResolver = useMemo(() => createStudioRuntimeModelPickerProviderCache(), []);
 
@@ -199,13 +206,13 @@ export function StudioAIConfigPage() {
     aiConfigService: service,
     requirementDeclaration: createRequirementDeclaration(scopeRef),
     providerResolver: (capabilityId: string) => (runtime.ready ? providerResolver(capabilityId) : null),
-    projectionResolver: (capabilityId: string) => bindingStatus(config, capabilityId, runtime.ready, runtime.detail),
+    projectionResolver: (capabilityId: string) => bindingStatus(config, capabilityId, runtime.ready, runtime.detail, t),
     localAssetSource,
-    runtimeNotReadyLabel: runtime.detail || 'Runtime unavailable',
+    runtimeNotReadyLabel: runtime.detail || t('aiConfig.runtimeUnavailable'),
     i18n: { t: translateStudioModelConfigCopy },
-  }), [config, localAssetSource, providerResolver, runtime.detail, runtime.ready, scopeRef, service]);
+  }), [config, localAssetSource, locale, providerResolver, runtime.detail, runtime.ready, scopeRef, service, t]);
 
-  const profileCopy = useMemo(() => defaultModelConfigProfileCopy(translateStudioModelConfigCopy), []);
+  const profileCopy = useMemo(() => defaultModelConfigProfileCopy(translateStudioModelConfigCopy), [locale]);
   const currentOrigin = useMemo(
     () => (config.profileOrigin
       ? { profileId: config.profileOrigin.profileId, title: config.profileOrigin.title }
@@ -225,18 +232,18 @@ export function StudioAIConfigPage() {
       <Surface tone="panel" material="glass-regular" padding="lg" className="ras-radius-xl">
         <div className="mb-5 flex min-w-0 flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="m-0 text-2xl font-semibold">AI model config</h2>
+            <h2 className="m-0 text-2xl font-semibold">{t('aiConfig.title')}</h2>
             <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-              Bind Runtime targets for Studio text, image, and voice generation.
+              {t('aiConfig.description')}
             </p>
           </div>
           <StatusBadge tone={runtime.ready ? 'success' : 'warning'} shape="dot">
-            {runtime.ready ? 'Runtime ready' : 'Runtime unavailable'}
+            {runtime.ready ? t('aiConfig.runtimeReady') : t('aiConfig.runtimeUnavailable')}
           </StatusBadge>
         </div>
         {runtime.ready ? null : (
           <InlineAlert tone="warning" className="mb-4">
-            {runtime.detail || 'Runtime unavailable.'}
+            {runtime.detail || t('aiConfig.runtimeUnavailable')}
           </InlineAlert>
         )}
         <ModelConfigAiModelHub surface={surface} profile={profile} />

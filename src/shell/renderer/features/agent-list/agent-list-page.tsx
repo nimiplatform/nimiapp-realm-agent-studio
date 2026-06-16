@@ -18,24 +18,43 @@ import {
   type OwnerPortfolioAgent,
   type OwnerPortfolioFilter,
   type OwnerPortfolioSort,
+  type PortfolioFailureKind,
 } from '@renderer/features/portfolio/portfolio-data.js';
 import { listOwnerPortfolioAgents } from '@renderer/features/portfolio/portfolio-client.js';
 import { AgentCard } from '@renderer/features/portfolio/OwnerPortfolio.shared.js';
 import { ownerPortfolioListQueryKey } from '@renderer/features/agent-detail/use-agent-detail-query.js';
+import { useStudioI18n } from '@renderer/i18n/use-studio-i18n.js';
+import type { StudioCopyKey } from '@renderer/i18n/studio-copy.js';
 
-const PORTFOLIO_FILTER_OPTIONS: { value: OwnerPortfolioFilter; label: string }[] = [
-  { value: 'all', label: 'All agents' },
-  { value: 'friend-count-available', label: 'friendCount available' },
-  { value: 'friend-count-unavailable', label: 'friendCount unavailable' },
+const PORTFOLIO_FILTER_OPTIONS: { value: OwnerPortfolioFilter; labelKey: StudioCopyKey }[] = [
+  { value: 'all', labelKey: 'portfolio.filter.allAgents' },
+  { value: 'friend-count-available', labelKey: 'portfolio.filter.friendCountAvailable' },
+  { value: 'friend-count-unavailable', labelKey: 'portfolio.filter.friendCountUnavailable' },
 ];
 
-const PORTFOLIO_SORT_OPTIONS: { value: OwnerPortfolioSort; label: string }[] = [
-  { value: 'realm-order', label: 'Realm order' },
-  { value: 'display-name-asc', label: 'Name A–Z' },
-  { value: 'updated-desc', label: 'Recently updated' },
-  { value: 'friend-count-desc', label: 'friendCount high–low' },
-  { value: 'friend-count-asc', label: 'friendCount low–high' },
+const PORTFOLIO_SORT_OPTIONS: { value: OwnerPortfolioSort; labelKey: StudioCopyKey }[] = [
+  { value: 'realm-order', labelKey: 'portfolio.sort.realmOrder' },
+  { value: 'display-name-asc', labelKey: 'portfolio.sort.nameAsc' },
+  { value: 'updated-desc', labelKey: 'portfolio.sort.updatedDesc' },
+  { value: 'friend-count-desc', labelKey: 'portfolio.sort.friendCountDesc' },
+  { value: 'friend-count-asc', labelKey: 'portfolio.sort.friendCountAsc' },
 ];
+
+const PORTFOLIO_FAILURE_TITLE_KEYS: Record<PortfolioFailureKind, StudioCopyKey> = {
+  'realm-unavailable': 'portfolio.failure.realmUnavailable.title',
+  'permission-missing': 'portfolio.failure.permissionMissing.title',
+  'owner-authority-missing': 'portfolio.failure.ownerAuthorityMissing.title',
+  'setting-read-unavailable': 'portfolio.failure.settingReadUnavailable.title',
+  unknown: 'portfolio.failure.portfolioUnavailable.title',
+};
+
+const PORTFOLIO_FAILURE_DETAIL_KEYS: Record<PortfolioFailureKind, StudioCopyKey> = {
+  'realm-unavailable': 'portfolio.failure.portfolio.realm',
+  'permission-missing': 'portfolio.failure.portfolio.permission',
+  'owner-authority-missing': 'portfolio.failure.portfolio.owner',
+  'setting-read-unavailable': 'portfolio.failure.portfolio.setting',
+  unknown: 'portfolio.failure.portfolio.unknown',
+};
 
 function FilterCard({
   queryText,
@@ -56,32 +75,42 @@ function FilterCard({
   onFilterChange: (next: OwnerPortfolioFilter) => void;
   onSortChange: (next: OwnerPortfolioSort) => void;
 }) {
+  const { t } = useStudioI18n();
+  const filterOptions = PORTFOLIO_FILTER_OPTIONS.map((option) => ({
+    value: option.value,
+    label: t(option.labelKey),
+  }));
+  const sortOptions = PORTFOLIO_SORT_OPTIONS.map((option) => ({
+    value: option.value,
+    label: t(option.labelKey),
+  }));
+
   return (
     <section className="ras-card">
       <SearchField
         value={queryText}
-        placeholder="Search name, handle, world, or state"
-        aria-label="Search portfolio"
+        placeholder={t('portfolio.search.placeholder')}
+        aria-label={t('portfolio.search.ariaLabel')}
         onChange={(event) => onQueryChange(event.currentTarget.value)}
       />
       <div className="ras-filter-grid">
-        <FieldShell label="Filter">
+        <FieldShell label={t('portfolio.filter.label')}>
           <SelectField
             value={filter}
-            options={PORTFOLIO_FILTER_OPTIONS}
+            options={filterOptions}
             onValueChange={(value) => onFilterChange(value as OwnerPortfolioFilter)}
           />
         </FieldShell>
-        <FieldShell label="Sort">
+        <FieldShell label={t('portfolio.sort.label')}>
           <SelectField
             value={sort}
-            options={PORTFOLIO_SORT_OPTIONS}
+            options={sortOptions}
             onValueChange={(value) => onSortChange(value as OwnerPortfolioSort)}
           />
         </FieldShell>
         <div className="ras-filter-status">
           <StatusBadge tone="neutral">{visibleCount} / {totalCount}</StatusBadge>
-          <StatusBadge tone="info">app-local view</StatusBadge>
+          <StatusBadge tone="info">{t('portfolio.localView')}</StatusBadge>
         </div>
       </div>
     </section>
@@ -111,6 +140,7 @@ function PortfolioFailureState({
   loading: boolean;
   onRetry: () => void;
 }) {
+  const { t } = useStudioI18n();
   return (
     <section className="ras-card">
       <div style={{ display: 'grid', gridTemplateColumns: '64px 1fr auto', gap: 16, alignItems: 'center' }}>
@@ -133,7 +163,7 @@ function PortfolioFailureState({
           <p style={{ margin: '6px 0 0', color: 'var(--nimi-text-muted)', fontSize: 14, lineHeight: 1.55 }}>{detail}</p>
         </div>
         <Button tone="primary" loading={loading} onClick={onRetry}>
-          Retry
+          {t('common.retry')}
         </Button>
       </div>
     </section>
@@ -154,6 +184,7 @@ type AgentListMode = {
 };
 
 function PortfolioListPage({ mode }: { mode: AgentListMode }) {
+  const { t } = useStudioI18n();
   const navigate = useNavigate();
   const [queryText, setQueryText] = useState('');
   const [filter, setFilter] = useState<OwnerPortfolioFilter>('all');
@@ -190,7 +221,7 @@ function PortfolioListPage({ mode }: { mode: AgentListMode }) {
               loading={portfolioQuery.isFetching}
               leadingIcon={<RefreshCw size={15} strokeWidth={1.8} />}
               onClick={() => void portfolioQuery.refetch()}
-              aria-label="Refresh portfolio"
+              aria-label={t('portfolio.refreshAria')}
             >
               {mode.refreshLabel}
             </Button>
@@ -200,7 +231,7 @@ function PortfolioListPage({ mode }: { mode: AgentListMode }) {
                 leadingIcon={<Plus size={15} strokeWidth={2} />}
                 onClick={() => navigate('/portfolio/create')}
               >
-                Create Realm Agent
+                {t('portfolio.createButton')}
               </Button>
             ) : null}
           </div>
@@ -213,8 +244,8 @@ function PortfolioListPage({ mode }: { mode: AgentListMode }) {
             const failure = classifyPortfolioFailure(portfolioQuery.error);
             return (
               <PortfolioFailureState
-                title={failure.title}
-                detail={failure.detail}
+                title={t(PORTFOLIO_FAILURE_TITLE_KEYS[failure.kind])}
+                detail={t(PORTFOLIO_FAILURE_DETAIL_KEYS[failure.kind])}
                 loading={portfolioQuery.isFetching}
                 onRetry={() => void portfolioQuery.refetch()}
               />
@@ -238,7 +269,7 @@ function PortfolioListPage({ mode }: { mode: AgentListMode }) {
                 leadingIcon={<Plus size={16} strokeWidth={2} />}
                 onClick={() => navigate('/portfolio/create')}
               >
-                Create Realm Agent
+                {t('portfolio.createButton')}
               </Button>
             ) : null}
           </div>
@@ -257,16 +288,18 @@ function PortfolioListPage({ mode }: { mode: AgentListMode }) {
 
             {sourceWarnings.length > 0 ? (
               <InlineAlert tone="warning">
-                friendCount source unavailable for {sourceWarnings.length} Realm Agent
-                {sourceWarnings.length === 1 ? '' : 's'}. The list still renders; metric values are not invented.
+                {t('portfolio.friendCountWarning', {
+                  count: sourceWarnings.length,
+                  plural: sourceWarnings.length === 1 ? '' : 's',
+                })}
               </InlineAlert>
             ) : null}
 
             {visibleAgents.length === 0 ? (
               <div className="ras-hero-empty">
-                <h2 className="ras-hero-empty__title">No agents match this local view</h2>
+                <h2 className="ras-hero-empty__title">{t('portfolio.noLocalMatchTitle')}</h2>
                 <p className="ras-hero-empty__description">
-                  Adjust search, filter, or sort controls. No Realm write or queue state is created.
+                  {t('portfolio.noLocalMatchDescription')}
                 </p>
               </div>
             ) : (
@@ -289,17 +322,18 @@ function PortfolioListPage({ mode }: { mode: AgentListMode }) {
 }
 
 export function AgentListPage() {
+  const { t } = useStudioI18n();
   return (
     <PortfolioListPage
       mode={{
         queryKey: ownerPortfolioListQueryKey(),
         queryFn: () => listOwnerPortfolioAgents(),
-        eyebrow: 'Realm Agent Studio',
-        title: 'Realm Agent portfolio',
-        description: 'Owner-created Realm Agents for the current Runtime account. Pick one to open its workspaces.',
-        emptyTitle: 'No owner-created Realm Agents',
-        emptyDescription: 'Realm returned no current-user owner-created Realm Agents.',
-        refreshLabel: 'Refresh',
+        eyebrow: t('portfolio.eyebrow'),
+        title: t('portfolio.title'),
+        description: t('portfolio.description'),
+        emptyTitle: t('portfolio.emptyTitle'),
+        emptyDescription: t('portfolio.emptyDescription'),
+        refreshLabel: t('common.refresh'),
         createEnabled: true,
         detailPath: (agentId) => `/portfolio/${agentId}`,
       }}

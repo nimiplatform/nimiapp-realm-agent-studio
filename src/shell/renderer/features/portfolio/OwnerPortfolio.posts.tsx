@@ -38,6 +38,9 @@ import {
   type ContentVariantBuildResult,
 } from './content-variant.js';
 import { TechnicalReviewDetails } from './OwnerPortfolio.shared.js';
+import { useStudioI18n } from '../../i18n/use-studio-i18n.js';
+import type { StudioCopyKey } from '../../i18n/studio-copy.js';
+import type { StudioTranslateOptions } from '../../i18n/studio-i18n.js';
 
 type LocalCreativeAssetCandidate = {
   sequence: number;
@@ -45,6 +48,66 @@ type LocalCreativeAssetCandidate = {
   captionSnapshot: string;
   tagsSnapshot: string;
 };
+
+type StudioTranslator = (key: StudioCopyKey, options?: StudioTranslateOptions) => string;
+
+const CONTENT_VARIANT_TITLE_KEYS: Record<ContentVariant['key'], StudioCopyKey> = {
+  announcement: 'posts.variant.announcement',
+  'process-note': 'posts.variant.processNote',
+  'conversation-starter': 'posts.variant.conversationStarter',
+};
+
+const CONTENT_VARIANT_ATTACHMENT_PLAN_KEYS: Record<ContentVariant['attachmentPlan'], StudioCopyKey> = {
+  none: 'posts.attachmentPlan.none',
+  'optional-ready-resource': 'posts.attachmentPlan.optionalReadyResource',
+};
+
+const POST_REVIEW_ITEM_KEYS: Record<string, StudioCopyKey> = {
+  'caption reviewed': 'posts.reviewItem.captionReviewed',
+  'tags reviewed': 'posts.reviewItem.tagsReviewed',
+  'optional READY Resource selected before publish': 'posts.reviewItem.optionalReadyResource',
+  'source-backed voice checked': 'posts.reviewItem.sourceBackedVoice',
+  'no private state included': 'posts.reviewItem.noPrivateState',
+  'human review required': 'posts.reviewItem.humanReviewRequired',
+  'question tone reviewed': 'posts.reviewItem.questionToneReviewed',
+  'publish result must return Realm post id': 'posts.reviewItem.publishResultPostId',
+};
+
+const POST_FIXED_MESSAGE_KEYS: Record<string, StudioCopyKey> = {
+  'agent identity source unavailable or empty': 'posts.error.agentIdentityMissing',
+  'owner intent, draft caption, profile description, or greeting required': 'posts.error.variantAnchorMissing',
+  'caption missing': 'posts.error.captionMissing',
+  'candidate not publishable: human review missing': 'posts.error.humanReviewMissing',
+  'attachment validation failed: attachment target missing': 'posts.error.attachmentTargetMissing',
+  'app-local schedule unavailable: reviewed publishable local post draft required': 'posts.error.scheduleDraftRequired',
+  'app-local schedule unavailable: local run date and time required': 'posts.error.scheduleDateTimeRequired',
+  'app-local schedule unavailable: local run time must be in the future': 'posts.error.scheduleFutureRequired',
+  'post copy intent missing': 'posts.error.postCopyIntentMissing',
+  'Reviewed media upload requires a selected file.': 'posts.error.mediaUploadFileMissing',
+  'Reviewed media Resource upload requires a matching non-empty image, video, or audio file.': 'posts.error.mediaUploadMatchingFileMissing',
+  'Reviewed post text resource requires caption content.': 'posts.error.textResourceCaptionMissing',
+  'Realm Create Text Resource returned no resource object.': 'posts.error.textResourceNoObject',
+  'Realm Create Text Resource returned no canonical resource id.': 'posts.error.textResourceNoId',
+  'Realm Create Post returned no post object.': 'posts.error.createPostNoObject',
+  'Realm Create Post returned no canonical post id.': 'posts.error.createPostNoId',
+  'Realm direct upload session did not return a PENDING resource id and upload URL.': 'posts.error.directUploadSessionMissing',
+  'Realm finalizeResource did not return a READY media Resource.': 'posts.error.finalizeResourceNotReady',
+  'Runtime runtime.ai.text.generate runtime transport unavailable: Tauri IPC runtime transport is required.': 'posts.error.postCopyTransportUnavailable',
+};
+
+function translatePostFixedMessage(message: string, t: StudioTranslator): string {
+  const key = POST_FIXED_MESSAGE_KEYS[message];
+  return key ? t(key) : message;
+}
+
+function translatePostFixedMessages(messages: string[], t: StudioTranslator): string {
+  return messages.map((message) => translatePostFixedMessage(message, t)).join('; ');
+}
+
+function translateContentVariantReviewItem(item: string, t: StudioTranslator): string {
+  const key = POST_REVIEW_ITEM_KEYS[item];
+  return key ? t(key) : item;
+}
 
 export function createEmptyPostDraft(): LocalPostDraftInput {
   return {
@@ -65,6 +128,7 @@ export function createEmptyLocalPostScheduleInput(): LocalPostScheduleInput {
 }
 
 export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAgentDetail; mode: 'posts' | 'schedule' }) {
+  const { t } = useStudioI18n();
   const [draft, setDraft] = useState<LocalPostDraftInput>(() => createEmptyPostDraft());
   const [contentVariantIntent, setContentVariantIntent] = useState('');
   const [contentVariants, setContentVariants] = useState<ContentVariantBuildResult | null>(null);
@@ -209,9 +273,9 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
     setAssetCandidates((current) => [
       {
         sequence: current.length + 1,
-        label: `Local creative candidate ${current.length + 1}`,
-        captionSnapshot: draft.caption.trim() || 'caption not drafted',
-        tagsSnapshot: draft.tagsText.trim() || 'tags not drafted',
+        label: t('posts.localAssetCandidateLabel', { sequence: current.length + 1 }),
+        captionSnapshot: draft.caption.trim() || t('posts.captionNotDrafted'),
+        tagsSnapshot: draft.tagsText.trim() || t('posts.tagsNotDrafted'),
       },
       ...current,
     ]);
@@ -260,13 +324,19 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
       const resources = await listReadyPostAttachmentResources();
       setResourceOptions(resources);
       setResourceListStatus(resources.length > 0
-        ? { tone: 'success', message: `Loaded ${resources.length} ready media attachment option${resources.length === 1 ? '' : 's'}.` }
-        : { tone: 'warning', message: 'No ready media attachment options were returned.' });
+        ? {
+          tone: 'success',
+          message: t('posts.attachment.loaded', {
+            count: resources.length,
+            plural: resources.length === 1 ? '' : 's',
+          }),
+        }
+        : { tone: 'warning', message: t('posts.attachment.noneReturned') });
     } catch (error) {
       setResourceOptions([]);
       setResourceListStatus({
         tone: 'danger',
-        message: error instanceof Error ? error.message : 'Ready media list failed.',
+        message: error instanceof Error ? error.message : t('posts.attachment.listFailed'),
       });
     } finally {
       setIsLoadingResources(false);
@@ -285,7 +355,7 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
     });
     setResourceListStatus({
       tone: 'info',
-      message: `Selected ${resource.resourceType.toLowerCase()} media ${resource.id}.`,
+      message: t('posts.attachment.selected', { type: resource.resourceType.toLowerCase(), id: resource.id }),
     });
   }
 
@@ -333,16 +403,20 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
       <div className="grid min-w-0 gap-5 xl:grid-cols-[1fr_360px]">
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <h3 className="m-0 text-xl font-semibold">{isScheduleWorkspace ? 'Local schedule candidate' : 'Creative post candidate'}</h3>
-            <StatusBadge tone={isScheduleWorkspace ? 'warning' : 'info'}>{isScheduleWorkspace ? 'local schedule' : 'local draft'}</StatusBadge>
+            <h3 className="m-0 text-xl font-semibold">
+              {isScheduleWorkspace ? t('posts.title.localScheduleCandidate') : t('posts.title.creativePostCandidate')}
+            </h3>
+            <StatusBadge tone={isScheduleWorkspace ? 'warning' : 'info'}>
+              {isScheduleWorkspace ? t('posts.badge.localSchedule') : t('posts.badge.localDraft')}
+            </StatusBadge>
             <StatusBadge tone={validation.publishable ? 'success' : 'neutral'}>
-              {validation.publishable ? 'ready to publish' : 'not ready'}
+              {validation.publishable ? t('posts.readyToPublish') : t('posts.notReady')}
             </StatusBadge>
           </div>
           <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
             {isScheduleWorkspace
-              ? 'Prepare one reviewed local scheduled publish candidate. This workspace does not create recurring queue state.'
-              : `Integrated with selected canonical detail agent: ${agent.handle.value ? `@${agent.handle.value}` : agent.displayName.value || agent.id}.`}
+              ? t('posts.scheduleDescription')
+              : t('posts.agentIntegrated', { agent: agent.handle.value ? `@${agent.handle.value}` : agent.displayName.value || agent.id })}
           </p>
 
           <div className="mt-4 grid gap-4">
@@ -350,22 +424,22 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
               <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="font-medium">Content Studio variants</div>
-                    <StatusBadge tone="info">review board</StatusBadge>
-                    <StatusBadge tone="warning">candidate only</StatusBadge>
+                    <div className="font-medium">{t('posts.contentVariants.title')}</div>
+                    <StatusBadge tone="info">{t('common.reviewBoard')}</StatusBadge>
+                    <StatusBadge tone="warning">{t('common.candidateOnly')}</StatusBadge>
                   </div>
                   <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                    Build multiple caption/tag/image-prompt variants from current agent state and owner intent. Applying a variant never publishes.
+                    {t('posts.contentVariants.description')}
                   </div>
                 </div>
                 <Button tone="secondary" onClick={buildContentVariantBoard}>
-                  Build variants
+                  {t('posts.contentVariants.build')}
                 </Button>
               </div>
-              <FieldShell label="Owner intent" message="What should this agent post about?">
+              <FieldShell label={t('posts.ownerIntent.label')} message={t('posts.ownerIntent.message')}>
                 <TextareaField
                   value={contentVariantIntent}
-                  placeholder="Announce a new artifact review pass"
+                  placeholder={t('posts.ownerIntent.placeholder')}
                   onChange={(event) => {
                     setContentVariantIntent(event.currentTarget.value);
                     setContentVariants(null);
@@ -374,7 +448,7 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
               </FieldShell>
               {contentVariants && !contentVariants.changed ? (
                 <InlineAlert tone="warning" className="mt-3">
-                  {contentVariants.errors.join('; ')}
+                  {translatePostFixedMessages(contentVariants.errors, t)}
                 </InlineAlert>
               ) : null}
               {contentVariants?.changed ? (
@@ -382,24 +456,24 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
                   {contentVariants.variants.map((variant) => (
                     <Surface key={variant.key} tone="panel" padding="md">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="font-medium">{variant.title}</div>
-                        <StatusBadge tone="neutral">{variant.attachmentPlan}</StatusBadge>
+                        <div className="font-medium">{t(CONTENT_VARIANT_TITLE_KEYS[variant.key])}</div>
+                        <StatusBadge tone="neutral">{t(CONTENT_VARIANT_ATTACHMENT_PLAN_KEYS[variant.attachmentPlan])}</StatusBadge>
                       </div>
                       <p className="ras-break-anywhere m-0 mt-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-primary)]">
                         {variant.caption}
                       </p>
                       <div className="ras-break-anywhere mt-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                        Tags: {variant.tagsText || 'none'}
+                        {t('posts.tagsPrefix')} {variant.tagsText || t('common.none')}
                       </div>
                       <div className="ras-break-anywhere mt-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                        Image prompt: {variant.imagePrompt}
+                        {t('posts.imagePromptPrefix')} {variant.imagePrompt}
                       </div>
                       <ul className="m-0 mt-3 grid list-none gap-1 p-0 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-secondary)]">
-                        {variant.reviewChecklist.map((item) => <li key={item}>{item}</li>)}
+                        {variant.reviewChecklist.map((item) => <li key={item}>{translateContentVariantReviewItem(item, t)}</li>)}
                       </ul>
                       <div className="mt-3">
                         <Button tone="secondary" size="sm" onClick={() => useContentVariant(variant)}>
-                          Use variant
+                          {t('posts.useVariant')}
                         </Button>
                       </div>
                     </Surface>
@@ -410,17 +484,17 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
             {!isScheduleWorkspace ? <Surface tone="card" padding="md">
               <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="font-medium">Runtime post copy</div>
+                  <div className="font-medium">{t('posts.runtimeCopy.title')}</div>
                   <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                    Draft caption and tags as editable candidate text. Human review is still required before publish.
+                    {t('posts.runtimeCopy.description')}
                   </div>
                 </div>
-                <StatusBadge tone="info">AI candidate</StatusBadge>
+                <StatusBadge tone="info">{t('common.aiCandidate')}</StatusBadge>
               </div>
-              <FieldShell label="Post copy intent" message="Describe the agent-authored post you want.">
+              <FieldShell label={t('posts.copyIntent.label')} message={t('posts.copyIntent.message')}>
                 <TextareaField
                   value={postCopyIntent}
-                  placeholder="Describe the post copy you want"
+                  placeholder={t('posts.copyIntent.placeholder')}
                   onChange={(event) => {
                     setPostCopyIntent(event.currentTarget.value);
                     setPostCopyResult(null);
@@ -434,20 +508,20 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
                   loading={isProposingPostCopy}
                   onClick={() => void requestPostCopyProposal()}
                 >
-                  Ask Runtime for post copy
+                  {t('posts.askRuntime')}
                 </Button>
               </div>
               {postCopyResult ? (
                 <Surface tone="panel" padding="md" className="mt-3">
                   <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-medium">Post copy proposal</div>
+                      <div className="font-medium">{t('posts.copyProposal.title')}</div>
                       <div className="ras-break-anywhere mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                        {postCopyResult.ok ? postCopyResult.proposal.rationale : postCopyResult.message}
+                        {postCopyResult.ok ? postCopyResult.proposal.rationale : translatePostFixedMessage(postCopyResult.message, t)}
                       </div>
                     </div>
                     <StatusBadge tone={postCopyResult.ok ? 'info' : 'danger'}>
-                      {postCopyResult.ok ? 'candidate' : 'unavailable'}
+                      {postCopyResult.ok ? t('common.candidate') : t('common.sourceUnavailable')}
                     </StatusBadge>
                   </div>
                   {postCopyResult.ok ? (
@@ -458,50 +532,50 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
                         ))}
                       </div>
                       <InlineAlert tone="info" className="mt-3">
-                        Runtime copy is candidate material only. Apply it, review the post, then publish through Realm.
+                        {t('posts.copyProposal.boundary')}
                       </InlineAlert>
                       <div className="mt-3">
-                        <Button onClick={applyPostCopyProposal}>Apply post copy</Button>
+                        <Button onClick={applyPostCopyProposal}>{t('posts.copyProposal.apply')}</Button>
                       </div>
                     </>
                   ) : (
                     <InlineAlert tone="danger" className="mt-3">
-                      Draft fields were preserved. Edit manually or retry after Runtime text generation is available.
+                      {t('posts.copyProposal.unavailableDetail')}
                     </InlineAlert>
                   )}
                 </Surface>
               ) : null}
             </Surface> : null}
-            <FieldShell label="Caption" message="Post text written from the agent's voice.">
+            <FieldShell label={t('posts.caption.label')} message={t('posts.caption.message')}>
               <TextareaField
                 value={draft.caption}
-                placeholder="Draft caption for human review"
+                placeholder={t('posts.caption.placeholder')}
                 onChange={(event) => updateDraft({ caption: event.currentTarget.value })}
               />
             </FieldShell>
-            <FieldShell label="Tags" message="Comma-separated tags for the post.">
+            <FieldShell label={t('posts.tags.label')} message={t('posts.tags.message')}>
               <TextField
                 value={draft.tagsText}
-                placeholder="artifact, studio, release-note"
+                placeholder={t('posts.tags.placeholder')}
                 onChange={(event) => updateDraft({ tagsText: event.currentTarget.value })}
               />
             </FieldShell>
             {!isScheduleWorkspace ? <Surface tone="card" padding="md">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="font-medium">Optional media attachment</div>
+                  <div className="font-medium">{t('posts.attachment.title')}</div>
                   <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                    Attach an existing ready resource or upload reviewed media for this post.
+                    {t('posts.attachment.description')}
                   </div>
                 </div>
                 <Checkbox
                   checked={draft.attachmentEnabled}
                   onChange={(event) => updateDraft({ attachmentEnabled: event.currentTarget.checked })}
-                  label="Attach target"
+                  label={t('posts.attachment.attachTarget')}
                 />
               </div>
               <div className="mt-3 grid gap-3 md:grid-cols-[180px_1fr]">
-                <FieldShell label="Attachment type">
+                <FieldShell label={t('posts.attachment.type')}>
                   <SelectField
                     disabled={!draft.attachmentEnabled}
                     value={draft.attachmentTargetType}
@@ -509,11 +583,15 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
                     onValueChange={(value) => updateDraft({ attachmentTargetType: value as AttachmentTargetType })}
                   />
                 </FieldShell>
-                <FieldShell label="Attachment id" message={draft.attachmentEnabled && !draft.attachmentTargetId.trim() ? 'Select or enter an attachment id.' : undefined} messageTone="danger">
+                <FieldShell
+                  label={t('posts.attachment.id')}
+                  message={draft.attachmentEnabled && !draft.attachmentTargetId.trim() ? t('posts.attachment.idMessage') : undefined}
+                  messageTone="danger"
+                >
                   <TextField
                     disabled={!draft.attachmentEnabled}
                     value={draft.attachmentTargetId}
-                    placeholder="Attachment id"
+                    placeholder={t('posts.attachment.id')}
                     tone={draft.attachmentEnabled && !draft.attachmentTargetId.trim() ? 'danger' : 'default'}
                     onChange={(event) => updateDraft({ attachmentTargetId: event.currentTarget.value })}
                   />
@@ -522,15 +600,20 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
               <div className="mt-3 grid gap-3 md:grid-cols-[220px_1fr]">
                 <div className="flex items-end">
                   <Button disabled={isLoadingResources} loading={isLoadingResources} onClick={() => void loadReadyResources()}>
-                    Load ready media
+                    {t('posts.attachment.loadReadyMedia')}
                   </Button>
                 </div>
-                <FieldShell label="Ready media picker" message="Choose an existing ready media item for this post.">
+                <FieldShell label={t('posts.attachment.readyPicker')} message={t('posts.attachment.readyPickerMessage')}>
                   <SelectField
                     disabled={resourceOptions.length === 0}
                     value={draft.attachmentTargetType === 'RESOURCE' ? draft.attachmentTargetId : ''}
                     options={[
-                      { value: '', label: resourceOptions.length === 0 ? 'No ready media loaded' : 'Select ready media' },
+                      {
+                        value: '',
+                        label: resourceOptions.length === 0
+                          ? t('posts.attachment.noReadyMedia')
+                          : t('posts.attachment.selectReadyMedia'),
+                      },
                       ...resourceOptions.map((resource) => ({
                         value: resource.id,
                         label: `${resource.resourceType} · ${resource.label}`,
@@ -549,21 +632,21 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
             {!isScheduleWorkspace ? <Surface tone="card" padding="md">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="font-medium">Upload media</div>
+                  <div className="font-medium">{t('posts.upload.title')}</div>
                   <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                    Upload reviewed image, video, or audio and attach it to this post.
+                    {t('posts.upload.description')}
                   </div>
                 </div>
-                <StatusBadge tone="info">upload</StatusBadge>
+                <StatusBadge tone="info">{t('posts.upload.badge')}</StatusBadge>
               </div>
               <div className="mt-3 grid gap-3 md:grid-cols-[180px_1fr]">
-                <FieldShell label="Media type">
+                <FieldShell label={t('posts.upload.mediaType')}>
                   <SelectField
                     value={mediaResourceType}
                     options={[
-                      { value: 'IMAGE', label: 'Image' },
-                      { value: 'VIDEO', label: 'Video' },
-                      { value: 'AUDIO', label: 'Audio' },
+                      { value: 'IMAGE', label: t('posts.upload.image') },
+                      { value: 'VIDEO', label: t('posts.upload.video') },
+                      { value: 'AUDIO', label: t('posts.upload.audio') },
                     ]}
                     onValueChange={(value) => {
                       setMediaResourceType(value as DirectMediaResourceType);
@@ -572,7 +655,11 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
                     }}
                   />
                 </FieldShell>
-                <FieldShell label="File" message={draft.humanReviewed ? 'Owner-reviewed media only.' : 'Human review complete is required before upload.'} messageTone={draft.humanReviewed ? 'neutral' : 'danger'}>
+                <FieldShell
+                  label={t('posts.upload.file')}
+                  message={draft.humanReviewed ? t('common.ownerReviewedMediaOnly') : t('common.humanReviewRequiredBeforeUpload')}
+                  messageTone={draft.humanReviewed ? 'neutral' : 'danger'}
+                >
                   <TextField
                     type="file"
                     accept={mediaResourceType === 'IMAGE' ? 'image/*' : mediaResourceType === 'VIDEO' ? 'video/*' : 'audio/*'}
@@ -589,18 +676,18 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
                   loading={isUploadingMediaResource}
                   onClick={() => void uploadMediaResourceAttachment()}
                 >
-                  Upload media attachment
+                  {t('posts.upload.button')}
                 </Button>
               </div>
               {mediaUploadResult ? (
                 <InlineAlert tone={mediaUploadResult.ok ? 'success' : 'danger'} className="mt-3">
                   {mediaUploadResult.ok
-                    ? `Media uploaded and attached as ${mediaUploadResult.canonical.id}. Publishing still requires review.`
-                    : mediaUploadResult.message}
+                    ? t('posts.upload.attached', { id: mediaUploadResult.canonical.id })
+                    : translatePostFixedMessage(mediaUploadResult.message, t)}
                 </InlineAlert>
               ) : null}
               {mediaUploadResult ? (
-                <TechnicalReviewDetails title="Media upload response">
+                <TechnicalReviewDetails title={t('posts.upload.response')}>
                   <pre className="ras-json-preview m-0 min-h-24 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-panel)] p-3 text-xs">
                     {JSON.stringify(mediaUploadResult, null, 2)}
                   </pre>
@@ -610,16 +697,16 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
             {!isScheduleWorkspace ? <Surface tone="card" padding="md">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="font-medium">Create text attachment</div>
+                  <div className="font-medium">{t('posts.textAttachment.title')}</div>
                   <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                    Turn the reviewed caption into a reusable text attachment for this post.
+                    {t('posts.textAttachment.description')}
                   </div>
                 </div>
-                <StatusBadge tone="info">text</StatusBadge>
+                <StatusBadge tone="info">{t('posts.textAttachment.badge')}</StatusBadge>
               </div>
               {postTextResourceDraft.publishable ? null : (
                 <InlineAlert tone="warning">
-                  {postTextResourceDraft.errors.join('; ')}
+                  {translatePostFixedMessages(postTextResourceDraft.errors, t)}
                 </InlineAlert>
               )}
               <div className="mt-3 flex flex-wrap gap-3">
@@ -628,18 +715,18 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
                   loading={isCreatingTextResource}
                   onClick={() => void createTextResourceAttachment()}
                 >
-                  Create text attachment
+                  {t('posts.textAttachment.button')}
                 </Button>
               </div>
               {textResourceResult ? (
                 <InlineAlert tone={textResourceResult.ok ? 'success' : 'danger'} className="mt-3">
                   {textResourceResult.ok
-                    ? `Text attachment created and selected: ${textResourceResult.canonical.id}.`
-                    : textResourceResult.message}
+                    ? t('posts.textAttachment.created', { id: textResourceResult.canonical.id })
+                    : translatePostFixedMessage(textResourceResult.message, t)}
                 </InlineAlert>
               ) : null}
               {textResourceResult ? (
-                <TechnicalReviewDetails title="Text attachment response">
+                <TechnicalReviewDetails title={t('posts.textAttachment.response')}>
                   <pre className="ras-json-preview m-0 min-h-24 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-panel)] p-3 text-xs">
                     {JSON.stringify(textResourceResult, null, 2)}
                   </pre>
@@ -649,15 +736,15 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
             <Checkbox
               checked={draft.humanReviewed}
               onChange={(event) => updateDraft({ humanReviewed: event.currentTarget.checked })}
-              label="Human review complete"
+              label={t('common.humanReviewComplete')}
             />
             {!validation.publishable ? (
               <InlineAlert tone="warning">
-                {validation.errors.join('; ')}
+                {translatePostFixedMessages(validation.errors, t)}
               </InlineAlert>
             ) : null}
             {!isScheduleWorkspace ? <div className="flex flex-wrap gap-3">
-              <Button onClick={addLocalAssetCandidate}>Add local asset candidate</Button>
+              <Button onClick={addLocalAssetCandidate}>{t('posts.addLocalAssetCandidate')}</Button>
               <Button
                 disabled={!validation.publishable}
                 onClick={() => {
@@ -666,7 +753,7 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
                   }
                 }}
               >
-                Preview reviewed post
+                {t('posts.previewReviewedPost')}
               </Button>
               <Button
                 disabled={!validation.publishable || isPublishing}
@@ -685,13 +772,13 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
                   }
                 }}
               >
-                {isPublishing ? 'Publishing...' : 'Publish to Realm'}
+                {isPublishing ? t('posts.publishing') : t('posts.publish')}
               </Button>
             </div> : null}
             {!isScheduleWorkspace ? (
-              <TechnicalReviewDetails title="Reviewed post payload">
+              <TechnicalReviewDetails title={t('posts.reviewedPayload')}>
                 <pre className="ras-json-preview m-0 min-h-32 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-card)] p-3 text-xs">
-                  {payloadPreview ? JSON.stringify(payloadPreview, null, 2) : 'No reviewed post preview yet.'}
+                  {payloadPreview ? JSON.stringify(payloadPreview, null, 2) : t('posts.noReviewedPreview')}
                 </pre>
               </TechnicalReviewDetails>
             ) : null}
@@ -699,13 +786,13 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
               <Surface tone="card" padding="md">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <div className="font-medium">Publish result</div>
+                    <div className="font-medium">{t('posts.publishResult.title')}</div>
                     <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                      {publishResult.ok ? 'Post returned from Realm.' : 'Publish failed.'}
+                      {publishResult.ok ? t('posts.publishResult.returned') : t('posts.publishResult.failed')}
                     </div>
                   </div>
                   <StatusBadge tone={publishResult.ok ? 'success' : 'danger'}>
-                    {publishResult.ok ? 'published' : 'failed'}
+                    {publishResult.ok ? t('posts.publishResult.published') : t('posts.publishResult.failedBadge')}
                   </StatusBadge>
                 </div>
                 {publishResult.ok ? (
@@ -719,7 +806,7 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
                   </dl>
                 ) : (
                   <InlineAlert tone="danger">
-                    {publishResult.message}
+                    {translatePostFixedMessage(publishResult.message, t)}
                   </InlineAlert>
                 )}
               </Surface>
@@ -727,15 +814,15 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
             {isScheduleWorkspace ? <Surface tone="card" padding="md">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="font-medium">Single local schedule</div>
+                  <div className="font-medium">{t('posts.schedule.title')}</div>
                   <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                    Hold a reviewed draft for one local scheduled publish action.
+                    {t('posts.schedule.description')}
                   </div>
                 </div>
-                <StatusBadge tone="warning">local only</StatusBadge>
+                <StatusBadge tone="warning">{t('common.localOnly')}</StatusBadge>
               </div>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <FieldShell label="Local date">
+                <FieldShell label={t('posts.schedule.localDate')}>
                   <TextField
                     type="date"
                     value={scheduleInput.localDate}
@@ -743,7 +830,7 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
                     onChange={(event) => updateScheduleInput({ localDate: event.currentTarget.value })}
                   />
                 </FieldShell>
-                <FieldShell label="Local time">
+                <FieldShell label={t('posts.schedule.localTime')}>
                   <TextField
                     type="time"
                     value={scheduleInput.localTime}
@@ -754,12 +841,12 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
               </div>
               {!validation.publishable ? (
                 <InlineAlert tone="warning">
-                  Local schedule unavailable: reviewed publishable post draft required.
+                  {t('posts.schedule.unavailable')}
                 </InlineAlert>
               ) : null}
               {scheduleErrors.length > 0 ? (
                 <InlineAlert tone="warning">
-                  {scheduleErrors.join('; ')}
+                  {translatePostFixedMessages(scheduleErrors, t)}
                 </InlineAlert>
               ) : null}
               <div className="mt-3">
@@ -776,38 +863,38 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
                     }
                   }}
                 >
-                  Preview local schedule
+                  {t('posts.schedule.preview')}
                 </Button>
               </div>
               <div className="mt-3 flex flex-wrap gap-3">
                 <Button disabled={!schedulePreview} onClick={saveScheduleCandidate}>
-                  Save local schedule
+                  {t('posts.schedule.save')}
                 </Button>
                 <Button
                   disabled={!savedSchedule || !isLocalPostScheduleDue(savedSchedule) || isPublishingSchedule}
                   loading={isPublishingSchedule}
                   onClick={() => void publishSavedSchedule()}
                 >
-                  Publish due schedule
+                  {t('posts.schedule.publishDue')}
                 </Button>
               </div>
               {savedSchedule ? (
                 <InlineAlert tone={isLocalPostScheduleDue(savedSchedule) ? 'info' : 'success'} className="mt-3">
                   {isLocalPostScheduleDue(savedSchedule)
-                    ? 'Saved local schedule is due. Publish due schedule will call Realm Create Post now.'
-                    : `Saved local schedule for ${savedSchedule.localRunAt}. It will be executable here when due.`}
+                    ? t('posts.schedule.due')
+                    : t('posts.schedule.savedFor', { time: savedSchedule.localRunAt })}
                 </InlineAlert>
               ) : null}
               {schedulePublishResult ? (
                 <InlineAlert tone={schedulePublishResult.ok ? 'success' : 'danger'} className="mt-3">
                   {schedulePublishResult.ok
-                    ? 'Due local schedule published through Realm and cleared from local storage.'
-                    : schedulePublishResult.message}
+                    ? t('posts.schedule.published')
+                    : translatePostFixedMessage(schedulePublishResult.message, t)}
                 </InlineAlert>
               ) : null}
-              <TechnicalReviewDetails title="Local schedule payload">
+              <TechnicalReviewDetails title={t('posts.schedule.payload')}>
                 <pre className="ras-json-preview m-0 min-h-28 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-panel)] p-3 text-xs">
-                  {schedulePreview ? JSON.stringify(schedulePreview, null, 2) : savedSchedule ? JSON.stringify(savedSchedule, null, 2) : 'No local schedule preview yet.'}
+                  {schedulePreview ? JSON.stringify(schedulePreview, null, 2) : savedSchedule ? JSON.stringify(savedSchedule, null, 2) : t('posts.schedule.noPreview')}
                 </pre>
               </TechnicalReviewDetails>
             </Surface> : null}
@@ -815,25 +902,29 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
         </div>
         <div className="min-w-0">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h4 className="m-0 text-base font-semibold">{isScheduleWorkspace ? 'Schedule status' : 'Local preview history'}</h4>
-            <StatusBadge tone="neutral">{isScheduleWorkspace ? 'single candidate' : 'candidate only'}</StatusBadge>
+            <h4 className="m-0 text-base font-semibold">
+              {isScheduleWorkspace ? t('posts.side.scheduleStatus') : t('posts.side.localPreviewHistory')}
+            </h4>
+            <StatusBadge tone="neutral">
+              {isScheduleWorkspace ? t('posts.side.singleCandidate') : t('common.candidateOnly')}
+            </StatusBadge>
           </div>
           {isScheduleWorkspace ? (
             <Surface tone="card" padding="md">
-              <div className="font-medium">No automated queue is created</div>
+              <div className="font-medium">{t('posts.side.noQueueTitle')}</div>
               <p className="m-0 mt-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                This workspace stores one reviewed local scheduled candidate on this device. It executes only in the foreground when due, and Realm publish is the only public success state.
+                {t('posts.side.noQueueDescription')}
               </p>
             </Surface>
           ) : assetCandidates.length === 0 ? (
-            <EmptyState title="No local candidates" description="Creative asset candidates created here are local preview/history only." />
+            <EmptyState title={t('posts.side.noLocalCandidatesTitle')} description={t('posts.side.noLocalCandidatesDescription')} />
           ) : (
             <div className="grid gap-3">
               {assetCandidates.map((candidate) => (
                 <Surface key={candidate.sequence} tone="card" padding="md">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="font-medium">{candidate.label}</div>
-                    <StatusBadge tone="warning">local only</StatusBadge>
+                    <div className="font-medium">{t('posts.localAssetCandidateLabel', { sequence: candidate.sequence })}</div>
+                    <StatusBadge tone="warning">{t('common.localOnly')}</StatusBadge>
                   </div>
                   <div className="ras-break-anywhere mt-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-secondary)]">
                     {candidate.captionSnapshot}

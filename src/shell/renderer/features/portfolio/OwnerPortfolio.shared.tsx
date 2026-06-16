@@ -1,6 +1,22 @@
 import { type ReactNode } from 'react';
 import { FieldShell, StatusBadge, Surface, TextareaField, TextField } from '@nimiplatform/kit/ui';
-import type { OwnerPortfolioAgent, OwnerPortfolioAgentDetail, SettingField } from './portfolio-data.js';
+import { translateStudioCopy, type StudioTranslateOptions } from '../../i18n/studio-i18n.js';
+import { useStudioI18n } from '../../i18n/use-studio-i18n.js';
+import type { StudioCopyKey } from '../../i18n/studio-copy.js';
+import type { OwnerPortfolioAgent, OwnerPortfolioAgentDetail, SettingField, SettingFieldKey } from './portfolio-data.js';
+
+type StudioTranslator = (key: StudioCopyKey, options?: StudioTranslateOptions) => string;
+
+const SETTING_FIELD_LABEL_KEYS: Record<SettingFieldKey, StudioCopyKey> = {
+  displayName: 'settingField.displayName',
+  handle: 'settingField.handle',
+  bio: 'settingField.bio',
+  greeting: 'settingField.greeting',
+  profileCoverUrl: 'settingField.profileCoverUrl',
+  ownership: 'settingField.ownership',
+  world: 'settingField.world',
+  state: 'settingField.state',
+};
 
 export function TechnicalReviewDetails({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -30,34 +46,46 @@ export function CandidateFactGrid({
   );
 }
 
-export function friendCountLabel(agent: OwnerPortfolioAgent) {
+export function friendCountLabel(agent: OwnerPortfolioAgent, t: StudioTranslator = translateStudioCopy) {
   if (agent.friendCount.status === 'available') {
-    return `${agent.friendCount.value} friends`;
+    return t('shared.friendCount.available', { count: agent.friendCount.value });
   }
-  return agent.friendCount.label;
+  return t('shared.friendCount.unavailable');
 }
 
-export function detailFriendCountLabel(agent: OwnerPortfolioAgentDetail) {
+export function detailFriendCountLabel(agent: OwnerPortfolioAgentDetail, t: StudioTranslator = translateStudioCopy) {
   if (agent.friendCount.status === 'available') {
-    return `${agent.friendCount.value} friends`;
+    return t('shared.friendCount.available', { count: agent.friendCount.value });
   }
-  return agent.friendCount.label;
+  return t('shared.friendCount.unavailable');
 }
 
-export function ownerScopeLabel(scope: OwnerPortfolioAgent['ownerScope'] | OwnerPortfolioAgentDetail['ownerScope']): string {
+export function ownerScopeLabel(
+  scope: OwnerPortfolioAgent['ownerScope'] | OwnerPortfolioAgentDetail['ownerScope'],
+  t: StudioTranslator = translateStudioCopy,
+): string {
+  if (scope === 'owner-created') return t('shared.ownerScope.ownerCreated');
   return scope;
 }
 
-export function settingFieldStatusLabel(field: SettingField): string {
-  if (field.status === 'available') return 'available';
-  if (field.status === 'available-empty') return field.emptyLabel || 'not set';
-  return field.unavailableLabel || 'source unavailable';
+export function settingFieldLabel(field: SettingField, t: StudioTranslator = translateStudioCopy): string {
+  return t(SETTING_FIELD_LABEL_KEYS[field.key]);
 }
 
-export function settingFieldDisplayValue(field: SettingField, emptyLabel = 'not set'): string {
+export function settingFieldStatusLabel(field: SettingField, t: StudioTranslator = translateStudioCopy): string {
+  if (field.status === 'available') return t('shared.fieldStatus.available');
+  if (field.status === 'available-empty') return t('shared.fieldStatus.notSet');
+  return t('shared.fieldStatus.sourceUnavailable');
+}
+
+export function settingFieldDisplayValue(
+  field: SettingField,
+  emptyLabel = translateStudioCopy('common.notSet'),
+  t: StudioTranslator = translateStudioCopy,
+): string {
   if (field.value) return field.value;
-  if (field.status === 'available-empty') return field.emptyLabel || emptyLabel;
-  return field.unavailableLabel || 'source unavailable';
+  if (field.status === 'available-empty') return emptyLabel;
+  return t('shared.fieldStatus.sourceUnavailable');
 }
 
 function settingFieldStatusTone(field: SettingField): 'success' | 'neutral' | 'warning' {
@@ -67,6 +95,7 @@ function settingFieldStatusTone(field: SettingField): 'success' | 'neutral' | 'w
 }
 
 export function AgentCard({ agent, active, onSelect }: { agent: OwnerPortfolioAgent; active: boolean; onSelect: () => void }) {
+  const { t } = useStudioI18n();
   return (
     <Surface
       as="button"
@@ -87,15 +116,15 @@ export function AgentCard({ agent, active, onSelect }: { agent: OwnerPortfolioAg
             {agent.displayName}
           </div>
           <StatusBadge tone={agent.friendCount.status === 'available' ? 'success' : 'warning'} shape="dot">
-            {friendCountLabel(agent)}
+            {friendCountLabel(agent, t)}
           </StatusBadge>
         </div>
         <div className="ras-break-anywhere mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
           @{agent.handle}
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
-          <StatusBadge tone="info">{ownerScopeLabel(agent.ownerScope)}</StatusBadge>
-          <StatusBadge tone="neutral">{agent.worldName || 'world source unavailable'}</StatusBadge>
+          <StatusBadge tone="info">{ownerScopeLabel(agent.ownerScope, t)}</StatusBadge>
+          <StatusBadge tone="neutral">{agent.worldName || t('shared.worldUnavailable')}</StatusBadge>
         </div>
       </div>
     </Surface>
@@ -103,30 +132,32 @@ export function AgentCard({ agent, active, onSelect }: { agent: OwnerPortfolioAg
 }
 
 export function FieldStatus({ field }: { field: SettingField }) {
+  const { t } = useStudioI18n();
   return (
     <div className="mt-1 flex flex-wrap gap-2">
       <StatusBadge tone={settingFieldStatusTone(field)} shape="dot">
-        {settingFieldStatusLabel(field)}
+        {settingFieldStatusLabel(field, t)}
       </StatusBadge>
-      <StatusBadge tone="neutral">read-only</StatusBadge>
+      <StatusBadge tone="neutral">{t('common.readOnly')}</StatusBadge>
     </div>
   );
 }
 
 export function ReadOnlySettingField({ field, multiline = false }: { field: SettingField; multiline?: boolean }) {
+  const { t } = useStudioI18n();
   const sourceUnavailable = field.status === 'source-unavailable';
   const message = field.status === 'available'
-    ? 'Current public profile value.'
+    ? t('shared.field.currentPublicValue')
     : field.status === 'available-empty'
-      ? 'Realm returned this field with no value set.'
-      : 'Realm did not return this field source.';
+      ? t('shared.field.emptyFromRealm')
+      : t('shared.field.sourceMissingFromRealm');
 
   const placeholder = field.status === 'available-empty'
-    ? field.emptyLabel || 'not set'
-    : field.unavailableLabel || 'source unavailable';
+    ? t('shared.fieldStatus.notSet')
+    : t('shared.fieldStatus.sourceUnavailable');
 
   return (
-    <FieldShell label={field.label} message={message} messageTone={sourceUnavailable ? 'danger' : 'neutral'}>
+    <FieldShell label={settingFieldLabel(field, t)} message={message} messageTone={sourceUnavailable ? 'danger' : 'neutral'}>
       {multiline ? (
         <TextareaField readOnly value={field.value} placeholder={placeholder} />
       ) : (
@@ -137,10 +168,11 @@ export function ReadOnlySettingField({ field, multiline = false }: { field: Sett
 }
 
 export function EvidenceCard({ field }: { field: SettingField }) {
+  const { t } = useStudioI18n();
   return (
     <Surface tone="card" padding="md">
-      <div className="text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">{field.label}</div>
-      <div className="ras-break-anywhere mt-1 font-medium">{settingFieldDisplayValue(field)}</div>
+      <div className="text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">{settingFieldLabel(field, t)}</div>
+      <div className="ras-break-anywhere mt-1 font-medium">{settingFieldDisplayValue(field, t('common.notSet'), t)}</div>
       <FieldStatus field={field} />
     </Surface>
   );

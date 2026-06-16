@@ -8,6 +8,7 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
+  SegmentedControl,
   Tooltip,
 } from '@nimiplatform/kit/ui';
 import { useAppStore } from './app-store.js';
@@ -15,6 +16,9 @@ import { startStudioWindowDrag } from '../bridge/window-drag.js';
 import { logoutStudioRuntimeAccount } from '../features/auth/studio-auth-adapter.js';
 import { clearStudioNimiClient } from './studio-platform.js';
 import { studioQueryClient } from '../infra/query-client.js';
+import { useStudioI18n } from '../i18n/use-studio-i18n.js';
+import type { StudioCopyKey } from '../i18n/studio-copy.js';
+import type { StudioLocale } from '../i18n/studio-i18n.js';
 
 const MACOS_TRAFFIC_LIGHT_SAFE_ZONE_PX = 84;
 const TITLEBAR_INTERACTIVE_SELECTOR = [
@@ -29,9 +33,9 @@ const TITLEBAR_INTERACTIVE_SELECTOR = [
 ].join(',');
 
 const navItems = [
-  { to: '/portfolio', label: 'Portfolio', Icon: LayoutGrid, end: true },
-  { to: '/portfolio/create', label: 'Create', Icon: Plus, end: true },
-  { to: '/ai-config', label: 'AI models', Icon: SlidersHorizontal, end: true },
+  { to: '/portfolio', labelKey: 'shell.nav.portfolio', Icon: LayoutGrid, end: true },
+  { to: '/portfolio/create', labelKey: 'shell.nav.create', Icon: Plus, end: true },
+  { to: '/ai-config', labelKey: 'shell.nav.aiModels', Icon: SlidersHorizontal, end: true },
 ] as const;
 
 function SidebarItem({
@@ -63,6 +67,7 @@ function SidebarItem({
 }
 
 function AccountMenu() {
+  const { t } = useStudioI18n();
   const authUser = useAppStore((s) => s.auth.user);
   const clearAuth = useAppStore((s) => s.clearAuthSession);
   const navigate = useNavigate();
@@ -82,15 +87,15 @@ function AccountMenu() {
       navigate('/portfolio');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setLogoutError(message || 'Runtime logout failed.');
+      setLogoutError(message || t('shell.account.logoutFailed'));
     } finally {
       setLogoutPending(false);
     }
   };
 
-  const displayName = authUser?.displayName || 'Owner';
+  const displayName = authUser?.displayName || t('shell.account.ownerFallback');
   const avatarUrl = authUser?.avatarUrl ?? null;
-  const initial = displayName.charAt(0).toUpperCase() || 'O';
+  const initial = displayName.charAt(0).toUpperCase() || t('shell.account.ownerFallback').charAt(0).toUpperCase();
 
   return (
     <Popover
@@ -106,7 +111,7 @@ function AccountMenu() {
           data-titlebar-interactive="true"
           aria-expanded={open}
           aria-haspopup="dialog"
-          aria-label="Open account menu"
+          aria-label={t('shell.account.openMenu')}
           className="ras-avatar-trigger"
         >
           <Avatar
@@ -125,7 +130,7 @@ function AccountMenu() {
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={10} className="ras-avatar-popover">
-        <div role="menu" aria-label="Account menu">
+        <div role="menu" aria-label={t('shell.account.menu')}>
           <div className="ras-avatar-menu__header">
             <Avatar
               src={avatarUrl}
@@ -136,7 +141,7 @@ function AccountMenu() {
             />
             <div style={{ minWidth: 0, flex: 1 }}>
               <p className="ras-avatar-menu__name">{displayName}</p>
-              <p className="ras-avatar-menu__email">{authUser?.email || 'Runtime account'}</p>
+              <p className="ras-avatar-menu__email">{authUser?.email || t('shell.account.runtimeAccount')}</p>
             </div>
           </div>
           <div className="ras-avatar-menu__actions">
@@ -152,7 +157,7 @@ function AccountMenu() {
                 navigate('/portfolio');
               }}
             >
-              Owner portfolio
+              {t('shell.account.ownerPortfolio')}
             </Button>
             <Button
               tone="danger"
@@ -164,7 +169,7 @@ function AccountMenu() {
               leadingIcon={<LogOut size={16} strokeWidth={1.8} />}
               onClick={() => void handleLogout()}
             >
-              Sign out
+              {t('shell.account.signOut')}
             </Button>
           </div>
           {logoutError ? (
@@ -178,7 +183,25 @@ function AccountMenu() {
   );
 }
 
+function LanguageSwitcher() {
+  const { locale, setLocale, t } = useStudioI18n();
+  return (
+    <SegmentedControl
+      size="sm"
+      className="ras-language-switcher"
+      ariaLabel={t('locale.ariaLabel')}
+      value={locale}
+      onValueChange={(value) => void setLocale(value as StudioLocale)}
+      items={[
+        { value: 'en', label: t('locale.english') },
+        { value: 'zh', label: t('locale.chinese') },
+      ]}
+    />
+  );
+}
+
 export function ShellLayout({ children }: { children: ReactNode }) {
+  const { t } = useStudioI18n();
   const isTitlebarInteractiveTarget = (target: EventTarget | null) =>
     target instanceof Element && target.closest(TITLEBAR_INTERACTIVE_SELECTOR) !== null;
 
@@ -194,9 +217,10 @@ export function ShellLayout({ children }: { children: ReactNode }) {
     <AmbientBackground variant="mesh" className="ras-shell">
       <div className="ras-topbar" onMouseDown={handleTitlebarMouseDown}>
         <div className="ras-topbar__inner">
-          <h1 className="ras-topbar__title">Realm Agent Studio</h1>
-          <span className="ras-topbar__chip">Owner</span>
+          <h1 className="ras-topbar__title">{t('app.name')}</h1>
+          <span className="ras-topbar__chip">{t('app.owner')}</span>
           <div className="ras-topbar__right">
+            <LanguageSwitcher />
             <AccountMenu />
           </div>
         </div>
@@ -205,13 +229,13 @@ export function ShellLayout({ children }: { children: ReactNode }) {
       <div className="ras-shell__body">
         <aside className="ras-sidebar">
           <div className="ras-sidebar__logo">
-            <div className="ras-sidebar__logo-mark" aria-label="Realm Agent Studio">
-              RAS
+            <div className="ras-sidebar__logo-mark" aria-label={t('app.name')}>
+              {t('app.logoMark')}
             </div>
           </div>
-          <nav className="ras-sidebar__nav" aria-label="App navigation">
+          <nav className="ras-sidebar__nav" aria-label={t('shell.nav.appNavigation')}>
             {navItems.map((item) => (
-              <SidebarItem key={item.to} to={item.to} label={item.label} end={item.end}>
+              <SidebarItem key={item.to} to={item.to} label={t(item.labelKey as StudioCopyKey)} end={item.end}>
                 <item.Icon size={19} strokeWidth={1.8} />
               </SidebarItem>
             ))}

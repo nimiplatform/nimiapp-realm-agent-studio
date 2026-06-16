@@ -15,12 +15,9 @@ import {
   type DirectMediaResourceUploadResult,
 } from './portfolio-client.js';
 import {
-  AVATAR_PACKAGE_CANDIDATE_NOTICE,
   AVATAR_PACKAGE_TARGETS,
   MEDIA_CANDIDATE_BINDING_POINTS,
   MEDIA_CANDIDATE_RESOURCE_TYPES,
-  VISUAL_IMAGE_CANDIDATE_NOTICE,
-  VOICE_DEMO_CANDIDATE_NOTICE,
   buildReviewedAvatarPackageCandidatePayload,
   buildReviewedVisualImageCandidatePayload,
   buildReviewedVoiceDemoCandidatePayload,
@@ -33,6 +30,7 @@ import {
 import {
   appendLocalCreativeAssetHistory,
   loadLocalCreativeAssetHistory,
+  type CreativeAssetHistoryKind,
   type CreativeAssetHistoryRecord,
 } from './creative-asset-history.js';
 import {
@@ -41,6 +39,9 @@ import {
   type IdentityPackCandidate,
 } from './identity-pack.js';
 import { CandidateFactGrid, TechnicalReviewDetails } from './OwnerPortfolio.shared.js';
+import { useStudioI18n } from '../../i18n/use-studio-i18n.js';
+import type { StudioCopyKey } from '../../i18n/studio-copy.js';
+import type { StudioTranslateOptions } from '../../i18n/studio-i18n.js';
 
 export function createVisualMediaCandidateInput(): VisualMediaCandidateInput {
   return {
@@ -80,7 +81,87 @@ export function createVoiceDemoCandidateInput(agent: OwnerPortfolioAgentDetail):
   };
 }
 
+type StudioTranslator = (key: StudioCopyKey, options?: StudioTranslateOptions) => string;
+
+const IDENTITY_PACK_CANDIDATE_TITLE_KEYS: Record<IdentityPackCandidate['key'], StudioCopyKey> = {
+  avatar: 'assets.identityPack.candidate.avatar',
+  'profile-cover': 'assets.identityPack.candidate.profileCover',
+  'portrait-reference': 'assets.identityPack.candidate.portraitReference',
+  'post-image-style': 'assets.identityPack.candidate.postImageStyle',
+  'voice-demo': 'assets.identityPack.candidate.voiceDemo',
+};
+
+const IDENTITY_PACK_PUBLIC_WRITE_KEYS: Record<IdentityPackCandidate['publicWrite'], StudioCopyKey> = {
+  'avatar-url-selection-admitted-after-owner-url-review': 'assets.identityPack.publicWrite.avatarUrlSelection',
+  'profile-cover-publication-blocked': 'assets.identityPack.publicWrite.profileCoverBlocked',
+  'resource-agent-binding-blocked': 'assets.identityPack.publicWrite.resourceBindingBlocked',
+  'voice-publication-blocked': 'assets.identityPack.publicWrite.voicePublicationBlocked',
+  'post-attachment-candidate-only': 'assets.identityPack.publicWrite.postAttachmentCandidateOnly',
+};
+
+const FIXED_ASSET_MESSAGE_KEYS: Record<string, StudioCopyKey> = {
+  'Owner-scoped profile cover write path is not admitted.': 'assets.identityPack.blocked.profileCover',
+  'Resource-to-Agent Binding publication is not admitted for this app.': 'assets.identityPack.blocked.resourceBinding',
+  'Voice sample publication as public profile asset is not admitted.': 'assets.identityPack.blocked.voicePublication',
+  'display name source unavailable or empty': 'assets.identityPack.error.displayNameMissing',
+  'profile description or greeting required for identity pack': 'assets.identityPack.error.profileVoiceMissing',
+  'visual prompt missing for image candidate generation': 'assets.error.visualPromptMissing',
+  'visual prompt missing for avatar package candidate generation': 'assets.error.avatarPackagePromptMissing',
+  'voice demo script missing for voice candidate generation': 'assets.error.voiceDemoScriptMissing',
+  'Reviewed identity Resource upload requires a selected image file.': 'assets.error.identityUploadFileMissing',
+  'Avatar URL selection requires a valid http(s) URL.': 'assets.error.avatarUrlInvalid',
+  'Realm avatar selection did not confirm success.': 'assets.error.avatarSelectUnconfirmed',
+  'Runtime imageGenerate scenario output missing readable artifact.': 'assets.error.runtimeImageMissingArtifact',
+  'Runtime speechSynthesize scenario output missing artifact id.': 'assets.error.runtimeVoiceMissingArtifact',
+  'image artifact generated': 'assets.history.detail.imageArtifactGenerated',
+  'avatar package design sheet generated': 'assets.history.detail.avatarPackageGenerated',
+  'voice artifact generated': 'assets.history.detail.voiceArtifactGenerated',
+};
+
+const IDENTITY_PACK_SOURCE_FIELD_KEYS: Record<string, StudioCopyKey> = {
+  displayName: 'assets.identityPack.sourceField.displayName',
+  handle: 'assets.identityPack.sourceField.handle',
+  bio: 'assets.identityPack.sourceField.bio',
+  greeting: 'assets.identityPack.sourceField.greeting',
+  world: 'assets.identityPack.sourceField.world',
+  avatarUrl: 'assets.identityPack.sourceField.avatarUrl',
+};
+
+const CREATIVE_HISTORY_LABEL_KEYS: Record<CreativeAssetHistoryKind, StudioCopyKey> = {
+  'runtime-image-candidate': 'assets.history.runtimeImageCandidate',
+  'avatar-package-candidate': 'assets.history.avatarPackageCandidate',
+  'identity-resource-upload': 'assets.history.identityResourceUpload',
+  'voice-demo-candidate': 'assets.history.voiceDemoCandidate',
+};
+
+function translateFixedAssetMessage(message: string, t: StudioTranslator): string {
+  const key = FIXED_ASSET_MESSAGE_KEYS[message];
+  return key ? t(key) : message;
+}
+
+function translateFixedAssetMessages(messages: string[], t: StudioTranslator): string {
+  return messages.map((message) => translateFixedAssetMessage(message, t)).join('; ');
+}
+
+function translateIdentityPackCandidateTitle(candidate: IdentityPackCandidate, t: StudioTranslator): string {
+  return t(IDENTITY_PACK_CANDIDATE_TITLE_KEYS[candidate.key]);
+}
+
+function translateIdentityPackPublicWrite(candidate: IdentityPackCandidate, t: StudioTranslator): string {
+  return t(IDENTITY_PACK_PUBLIC_WRITE_KEYS[candidate.publicWrite]);
+}
+
+function translateIdentityPackSourceFields(fields: string[], t: StudioTranslator): string {
+  return fields
+    .map((field) => {
+      const key = IDENTITY_PACK_SOURCE_FIELD_KEYS[field];
+      return key ? t(key) : field;
+    })
+    .join(', ');
+}
+
 export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: OwnerPortfolioAgentDetail; onAgentWrite: () => Promise<void> }) {
+  const { t } = useStudioI18n();
   const [identityPack, setIdentityPack] = useState<IdentityPackBuildResult | null>(null);
   const [visualImageDraft, setVisualImageDraft] = useState(() => createVisualImageGenerationDraft());
   const [visualImageResult, setVisualImageResult] = useState<RuntimeVisualImageGenerationResult | null>(null);
@@ -138,13 +219,15 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
   }
 
   function useIdentityCandidate(candidate: IdentityPackCandidate) {
+    const candidateTitle = translateIdentityPackCandidateTitle(candidate, t);
+    const publicWrite = translateIdentityPackPublicWrite(candidate, t);
     if (candidate.key === 'voice-demo') {
       updateVoiceDraft({ scriptText: candidate.prompt });
       return;
     }
     updateVisualImageDraft({
       prompt: candidate.prompt,
-      notes: `${candidate.title} from identity pack. Public write: ${candidate.publicWrite}.`,
+      notes: t('assets.identityPack.notesFromPack', { title: candidateTitle, publicWrite }),
       bindingPoint: candidate.key === 'avatar'
         ? 'AGENT_AVATAR'
         : candidate.key === 'portrait-reference'
@@ -303,57 +386,61 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="m-0 text-xl font-semibold">Identity Pack</h3>
-                <StatusBadge tone="info">source-backed</StatusBadge>
-                <StatusBadge tone="warning">candidate only</StatusBadge>
+                <h3 className="m-0 text-xl font-semibold">{t('assets.identityPack.title')}</h3>
+                <StatusBadge tone="info">{t('common.sourceBacked')}</StatusBadge>
+                <StatusBadge tone="warning">{t('common.candidateOnly')}</StatusBadge>
               </div>
               <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                Build avatar, cover, portrait, post image style, and voice demo candidates from the current Realm Agent profile. Only avatar URL selection has an admitted public profile write.
+                {t('assets.identityPack.description')}
               </p>
             </div>
             <Button tone="secondary" onClick={buildIdentityPack}>
-              Build identity pack
+              {t('assets.identityPack.build')}
             </Button>
           </div>
           {identityPack && !identityPack.changed ? (
             <InlineAlert tone="warning" className="mt-3">
-              {identityPack.errors.join('; ')}
+              {translateFixedAssetMessages(identityPack.errors, t)}
             </InlineAlert>
           ) : null}
           {identityPack?.changed ? (
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-              {identityPack.candidates.map((candidate) => (
-                <Surface key={candidate.key} tone="panel" padding="md">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="font-medium">{candidate.title}</div>
-                    <StatusBadge tone={candidate.blockedReason ? 'warning' : 'neutral'}>
-                      {candidate.blockedReason ? 'blocked public write' : 'candidate'}
-                    </StatusBadge>
-                  </div>
-                  <p className="ras-break-anywhere m-0 mt-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                    {candidate.prompt}
-                  </p>
-                  {candidate.blockedReason ? (
-                    <InlineAlert tone="warning" className="mt-3">
-                      {candidate.blockedReason}
-                    </InlineAlert>
-                  ) : null}
-                  <CandidateFactGrid
-                    facts={[{
-                      label: 'Public write',
-                      value: candidate.publicWrite,
-                    }, {
-                      label: 'Source fields',
-                      value: candidate.sourceFields.join(', ') || 'source unavailable',
-                    }]}
-                  />
-                  <div className="mt-3">
-                    <Button tone="secondary" size="sm" onClick={() => useIdentityCandidate(candidate)}>
-                      Use candidate
-                    </Button>
-                  </div>
-                </Surface>
-              ))}
+              {identityPack.candidates.map((candidate) => {
+                const candidateTitle = translateIdentityPackCandidateTitle(candidate, t);
+                const sourceFields = translateIdentityPackSourceFields(candidate.sourceFields, t);
+                return (
+                  <Surface key={candidate.key} tone="panel" padding="md">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-medium">{candidateTitle}</div>
+                      <StatusBadge tone={candidate.blockedReason ? 'warning' : 'neutral'}>
+                        {candidate.blockedReason ? t('assets.identityPack.blockedPublicWrite') : t('common.candidate')}
+                      </StatusBadge>
+                    </div>
+                    <p className="ras-break-anywhere m-0 mt-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
+                      {candidate.prompt}
+                    </p>
+                    {candidate.blockedReason ? (
+                      <InlineAlert tone="warning" className="mt-3">
+                        {translateFixedAssetMessage(candidate.blockedReason, t)}
+                      </InlineAlert>
+                    ) : null}
+                    <CandidateFactGrid
+                      facts={[{
+                        label: t('assets.identityPack.publicWrite'),
+                        value: translateIdentityPackPublicWrite(candidate, t),
+                      }, {
+                        label: t('assets.identityPack.sourceFields'),
+                        value: sourceFields || t('common.sourceUnavailable'),
+                      }]}
+                    />
+                    <div className="mt-3">
+                      <Button tone="secondary" size="sm" onClick={() => useIdentityCandidate(candidate)}>
+                        {t('assets.identityPack.useCandidate')}
+                      </Button>
+                    </div>
+                  </Surface>
+                );
+              })}
             </div>
           ) : null}
         </Surface>
@@ -361,32 +448,32 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
         <div className="grid min-w-0 gap-5 xl:grid-cols-[1fr_1fr]">
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <h3 className="m-0 text-xl font-semibold">Visual identity candidate</h3>
-            <StatusBadge tone="warning">local preview</StatusBadge>
-            <StatusBadge tone="neutral">not published</StatusBadge>
+            <h3 className="m-0 text-xl font-semibold">{t('assets.visual.title')}</h3>
+            <StatusBadge tone="warning">{t('assets.localPreview')}</StatusBadge>
+            <StatusBadge tone="neutral">{t('assets.notPublished')}</StatusBadge>
           </div>
           <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-            Update the public avatar URL now. Generated and uploaded identity assets remain local previews until the owner asset publishing path is admitted.
+            {t('assets.visual.description')}
           </p>
           <div className="mt-4 grid gap-4">
             <Surface tone="card" padding="md">
               <div className="flex min-w-0 flex-wrap items-center gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="font-medium">
-                    Avatar URL selection
+                    {t('assets.avatarUrl.title')}
                   </div>
                   <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                    Saves the reviewed avatar URL on the public profile. It does not publish generated asset candidates.
+                    {t('assets.avatarUrl.description')}
                   </div>
                 </div>
-                <StatusBadge tone="info">Realm save</StatusBadge>
+                <StatusBadge tone="info">{t('common.realmSave')}</StatusBadge>
               </div>
               <div className="mt-3 grid gap-3 md:grid-cols-[80px_1fr]">
                 <div className="h-20 w-20 overflow-hidden rounded-[var(--nimi-radius-md)] bg-[var(--nimi-surface-active)]">
                   {avatarUrlDraft.trim() ? <img src={avatarUrlDraft.trim()} alt="" className="h-full w-full object-cover" /> : null}
                 </div>
                 <div className="grid gap-3">
-                  <FieldShell label="Avatar URL" message="Owner-reviewed http(s) URL only.">
+                  <FieldShell label={t('assets.avatarUrl.label')} message={t('assets.avatarUrl.message')}>
                     <TextField
                       value={avatarUrlDraft}
                       placeholder="https://..."
@@ -396,7 +483,7 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                   <Checkbox
                     checked={avatarReviewed}
                     onChange={(event) => setAvatarReviewed(event.currentTarget.checked)}
-                    label="Human review complete"
+                    label={t('common.humanReviewComplete')}
                   />
                   <div className="flex flex-wrap gap-3">
                     <Button
@@ -404,7 +491,7 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                       loading={isSelectingAvatar}
                       onClick={() => void selectAvatarUrl()}
                     >
-                      Select avatar URL
+                      {t('assets.avatarUrl.select')}
                     </Button>
                   </div>
                 </div>
@@ -412,12 +499,12 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
               {avatarResult ? (
                 <InlineAlert tone={avatarResult.ok ? 'success' : 'danger'} className="mt-3">
                   {avatarResult.ok
-                    ? 'Reviewed profile media saved. The profile has been refreshed.'
-                    : avatarResult.message}
+                    ? t('assets.avatarUrl.saved')
+                    : translateFixedAssetMessage(avatarResult.message, t)}
                 </InlineAlert>
               ) : null}
               {avatarResult ? (
-                <TechnicalReviewDetails title="Profile media save response">
+                <TechnicalReviewDetails title={t('assets.avatarUrl.response')}>
                   <pre className="ras-json-preview m-0 min-h-24 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-panel)] p-3 text-xs">
                     {JSON.stringify(avatarResult, null, 2)}
                   </pre>
@@ -425,14 +512,14 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
               ) : null}
             </Surface>
             <div className="grid gap-3 md:grid-cols-[160px_1fr]">
-              <FieldShell label="Asset type" message="Local preview category.">
+              <FieldShell label={t('assets.assetType.label')} message={t('assets.assetType.message')}>
                 <SelectField
                   value={visualImageDraft.resourceType}
                   options={visualResourceTypes.map((resourceType) => ({ value: resourceType, label: resourceType }))}
                   onValueChange={(value) => updateVisualImageDraft({ resourceType: value as VisualCandidateResourceType })}
                 />
               </FieldShell>
-              <FieldShell label="Profile slot" message="Where this candidate would be used after review.">
+              <FieldShell label={t('assets.profileSlot.label')} message={t('assets.profileSlot.message')}>
                 <SelectField
                   value={visualImageDraft.bindingPoint}
                   options={visualBindingPoints.map((bindingPoint) => ({ value: bindingPoint, label: bindingPoint }))}
@@ -440,32 +527,32 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                 />
               </FieldShell>
             </div>
-            <FieldShell label="Visual prompt" message="Describe the avatar, portrait, or visual direction.">
+            <FieldShell label={t('assets.visualPrompt.label')} message={t('assets.visualPrompt.message')}>
               <TextareaField
                 value={visualImageDraft.prompt}
-                placeholder="Describe the avatar, portrait, or candidate visual"
+                placeholder={t('assets.visualPrompt.placeholder')}
                 onChange={(event) => updateVisualImageDraft({ prompt: event.currentTarget.value })}
               />
             </FieldShell>
-            <FieldShell label="Notes" message="Composition, references, and review notes.">
+            <FieldShell label={t('assets.notes.label')} message={t('assets.notes.message')}>
               <TextareaField
                 value={visualImageDraft.notes}
-                placeholder="Composition, reference, or review notes"
+                placeholder={t('assets.notes.placeholder')}
                 onChange={(event) => updateVisualImageDraft({ notes: event.currentTarget.value })}
               />
             </FieldShell>
             <Surface tone="card" padding="md">
               <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="font-medium">Runtime image candidate</div>
+                  <div className="font-medium">{t('assets.runtimeImage.title')}</div>
                   <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                    Generate one reviewed visual candidate for local history. Public profile binding remains separate.
+                    {t('assets.runtimeImage.description')}
                   </div>
                 </div>
-                <StatusBadge tone="info">AI candidate</StatusBadge>
+                <StatusBadge tone="info">{t('common.aiCandidate')}</StatusBadge>
               </div>
               <div className="mt-3 grid gap-3 md:grid-cols-[150px_1fr]">
-                <FieldShell label="Aspect ratio">
+                <FieldShell label={t('assets.aspectRatio')}>
                   <SelectField
                     value={visualImageDraft.aspectRatio}
                     options={[
@@ -477,9 +564,9 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                   />
                 </FieldShell>
                 <CandidateFactGrid
-                  facts={[{
-                    label: 'Model source',
-                    value: 'AI model config / image.generate',
+                    facts={[{
+                    label: t('assets.modelSource'),
+                    value: t('assets.imageModelSource'),
                   }]}
                 />
               </div>
@@ -489,43 +576,46 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                   loading={isGeneratingVisualImage}
                   onClick={() => void generateVisualImageCandidate()}
                 >
-                  Generate image candidate
+                  {t('assets.generateImage')}
                 </Button>
               </div>
               <InlineAlert tone={visualImagePayload.changed ? 'info' : 'warning'} className="mt-3">
-                {visualImagePayload.changed ? VISUAL_IMAGE_CANDIDATE_NOTICE : visualImagePayload.errors.join('; ')}
+                {visualImagePayload.changed ? t('assets.visualNotice') : translateFixedAssetMessages(visualImagePayload.errors, t)}
               </InlineAlert>
               {visualImageResult ? (
                 <InlineAlert tone={visualImageResult.ok ? 'success' : 'danger'} className="mt-3">
                   {visualImageResult.ok
-                    ? 'Image candidate generated for local review. It has not been published to the profile.'
-                    : visualImageResult.message}
+                    ? t('assets.imageGenerated')
+                    : translateFixedAssetMessage(visualImageResult.message, t)}
                 </InlineAlert>
               ) : null}
               {visualImageResult?.ok ? (
                 <div className="mt-3 grid gap-3">
                   {visualPreviewUrl ? (
                     <Surface tone="panel" padding="md">
-                      <div className="mb-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">Preview</div>
+                      <div className="mb-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">{t('create.preview')}</div>
                       <div className="overflow-hidden rounded-[var(--nimi-radius-panel)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-panel)]">
-                        <img src={visualPreviewUrl} alt="Generated visual identity candidate" className="block h-auto max-h-80 w-full object-contain" />
+                        <img src={visualPreviewUrl} alt={t('assets.generatedVisualAlt')} className="block h-auto max-h-80 w-full object-contain" />
                       </div>
                     </Surface>
                   ) : null}
                   <CandidateFactGrid
                     facts={[{
-                      label: 'Candidate output',
+                      label: t('assets.candidateOutput'),
                       value: visualImageResult.runtime.artifacts.length > 0
-                        ? `${visualImageResult.runtime.artifacts.length} generated artifact${visualImageResult.runtime.artifacts.length === 1 ? '' : 's'}`
-                        : 'Runtime output recorded',
+                        ? t('assets.generatedArtifacts', {
+                          count: visualImageResult.runtime.artifacts.length,
+                          plural: visualImageResult.runtime.artifacts.length === 1 ? '' : 's',
+                        })
+                        : t('assets.runtimeOutputRecorded'),
                     }, {
-                      label: 'Public state',
-                      value: 'Candidate only',
+                      label: t('assets.publicState'),
+                      value: t('assets.candidateOnlyValue'),
                     }]}
                   />
                 </div>
               ) : null}
-              <TechnicalReviewDetails title="Image generation technical details">
+              <TechnicalReviewDetails title={t('assets.imageTechnicalDetails')}>
                 <pre className="ras-json-preview m-0 min-h-32 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-panel)] p-3 text-xs">
                   {visualImagePayload.payload ? JSON.stringify({
                     request: visualImagePayload.payload.runtime.request,
@@ -537,22 +627,22 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
             <Surface tone="card" padding="md">
               <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="font-medium">Avatar package candidate</div>
+                  <div className="font-medium">{t('assets.avatarPackage.title')}</div>
                   <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                    Generate a reviewed design sheet and rigging brief for a future Sprite2D, Live2D, or VRM package.
+                    {t('assets.avatarPackage.description')}
                   </div>
                 </div>
-                <StatusBadge tone="warning">candidate only</StatusBadge>
+                <StatusBadge tone="warning">{t('common.candidateOnly')}</StatusBadge>
               </div>
               <div className="mt-3 grid gap-3 md:grid-cols-[150px_1fr]">
-                <FieldShell label="Target">
+                <FieldShell label={t('assets.target')}>
                   <SelectField
                     value={avatarPackageDraft.packageTarget}
                     options={AVATAR_PACKAGE_TARGETS.map((target) => ({ value: target, label: target }))}
                     onValueChange={(value) => updateAvatarPackageDraft({ packageTarget: value as AvatarPackageTarget })}
                   />
                 </FieldShell>
-                <FieldShell label="Aspect ratio">
+                <FieldShell label={t('assets.aspectRatio')}>
                   <SelectField
                     value={avatarPackageDraft.aspectRatio}
                     options={[
@@ -565,17 +655,17 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                 </FieldShell>
               </div>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <FieldShell label="Motion notes" message="Idle, speaking, listening, and expression posture.">
+                <FieldShell label={t('assets.motionNotes.label')} message={t('assets.motionNotes.message')}>
                   <TextareaField
                     value={avatarPackageDraft.motionNotes}
-                    placeholder="Idle and speaking posture for review"
+                    placeholder={t('assets.motionNotes.placeholder')}
                     onChange={(event) => updateAvatarPackageDraft({ motionNotes: event.currentTarget.value })}
                   />
                 </FieldShell>
-                <FieldShell label="Interaction notes" message="Allowed avatar reactions and presentation boundaries.">
+                <FieldShell label={t('assets.interactionNotes.label')} message={t('assets.interactionNotes.message')}>
                   <TextareaField
                     value={avatarPackageDraft.interactionNotes}
-                    placeholder="Interaction boundaries for future rigging"
+                    placeholder={t('assets.interactionNotes.placeholder')}
                     onChange={(event) => updateAvatarPackageDraft({ interactionNotes: event.currentTarget.value })}
                   />
                 </FieldShell>
@@ -586,46 +676,46 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                   loading={isGeneratingAvatarPackage}
                   onClick={() => void generateAvatarPackageCandidate()}
                 >
-                  Generate avatar package candidate
+                  {t('assets.generateAvatarPackage')}
                 </Button>
               </div>
               <InlineAlert tone={avatarPackagePayload.changed ? 'info' : 'warning'} className="mt-3">
-                {avatarPackagePayload.changed ? AVATAR_PACKAGE_CANDIDATE_NOTICE : avatarPackagePayload.errors.join('; ')}
+                {avatarPackagePayload.changed ? t('assets.avatarPackageNotice') : translateFixedAssetMessages(avatarPackagePayload.errors, t)}
               </InlineAlert>
               {avatarPackageResult ? (
                 <InlineAlert tone={avatarPackageResult.ok ? 'success' : 'danger'} className="mt-3">
                   {avatarPackageResult.ok
-                    ? 'Avatar package candidate generated for local review. It is not a published Live2D/VRM asset.'
-                    : avatarPackageResult.message}
+                    ? t('assets.avatarPackageGenerated')
+                    : translateFixedAssetMessage(avatarPackageResult.message, t)}
                 </InlineAlert>
               ) : null}
               {avatarPackageResult?.ok ? (
                 <div className="mt-3 grid gap-3">
                   {avatarPackagePreviewUrl ? (
                     <Surface tone="panel" padding="md">
-                      <div className="mb-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">Design sheet preview</div>
+                      <div className="mb-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">{t('assets.designSheetPreview')}</div>
                       <div className="overflow-hidden rounded-[var(--nimi-radius-panel)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-panel)]">
-                        <img src={avatarPackagePreviewUrl} alt="Generated avatar package design sheet" className="block h-auto max-h-80 w-full object-contain" />
+                        <img src={avatarPackagePreviewUrl} alt={t('assets.generatedAvatarPackageAlt')} className="block h-auto max-h-80 w-full object-contain" />
                       </div>
                     </Surface>
                   ) : null}
                   <CandidateFactGrid
                     facts={[{
-                      label: 'Package target',
+                      label: t('assets.packageTarget'),
                       value: avatarPackageResult.draft.source === 'realm-agent-studio.reviewed-avatar-package-candidate'
                         ? avatarPackageResult.draft.avatarPackage.target
                         : avatarPackageDraft.packageTarget,
                     }, {
-                      label: 'Generated output',
-                      value: 'Design sheet and rigging brief',
+                      label: t('assets.generatedOutput'),
+                      value: t('assets.designSheetAndBrief'),
                     }, {
-                      label: 'Public state',
-                      value: 'Candidate only',
+                      label: t('assets.publicState'),
+                      value: t('assets.candidateOnlyValue'),
                     }]}
                   />
                 </div>
               ) : null}
-              <TechnicalReviewDetails title="Avatar package technical details">
+              <TechnicalReviewDetails title={t('assets.avatarPackageTechnicalDetails')}>
                 <pre className="ras-json-preview m-0 min-h-32 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-panel)] p-3 text-xs">
                   {avatarPackagePayload.payload ? JSON.stringify({
                     candidate: avatarPackagePayload.payload,
@@ -637,15 +727,19 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
             <Surface tone="card" padding="md">
               <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="font-medium">Upload identity Resource</div>
+                  <div className="font-medium">{t('assets.uploadIdentity.title')}</div>
                   <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                    Upload an owner-reviewed image as a READY Resource for local identity review. It is not a profile binding.
+                    {t('assets.uploadIdentity.description')}
                   </div>
                 </div>
-                <StatusBadge tone="info">Resource upload</StatusBadge>
+                <StatusBadge tone="info">{t('assets.resourceUpload')}</StatusBadge>
               </div>
               <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto]">
-                <FieldShell label="Identity image" message={identityUploadReviewed ? 'Owner-reviewed image only.' : 'Human review complete is required before upload.'} messageTone={identityUploadReviewed ? 'neutral' : 'danger'}>
+                <FieldShell
+                  label={t('assets.identityImage')}
+                  message={identityUploadReviewed ? t('common.ownerReviewedMediaOnly') : t('common.humanReviewRequiredBeforeUpload')}
+                  messageTone={identityUploadReviewed ? 'neutral' : 'danger'}
+                >
                   <TextField
                     type="file"
                     accept="image/*"
@@ -659,7 +753,7 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                   <Checkbox
                     checked={identityUploadReviewed}
                     onChange={(event) => setIdentityUploadReviewed(event.currentTarget.checked)}
-                    label="Human review complete"
+                    label={t('common.humanReviewComplete')}
                   />
                 </div>
               </div>
@@ -669,18 +763,18 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
                   loading={isUploadingIdentityResource}
                   onClick={() => void uploadIdentityResource()}
                 >
-                  Upload identity Resource
+                  {t('assets.uploadIdentity.button')}
                 </Button>
               </div>
               {identityUploadResult ? (
                 <InlineAlert tone={identityUploadResult.ok ? 'success' : 'danger'} className="mt-3">
                   {identityUploadResult.ok
-                    ? `Identity Resource uploaded for local review as ${identityUploadResult.canonical.id}. Public profile binding remains deferred.`
-                    : identityUploadResult.message}
+                    ? t('assets.identityUploaded', { id: identityUploadResult.canonical.id })
+                    : translateFixedAssetMessage(identityUploadResult.message, t)}
                 </InlineAlert>
               ) : null}
               {identityUploadResult ? (
-                <TechnicalReviewDetails title="Identity upload response">
+                <TechnicalReviewDetails title={t('assets.identityUploadResponse')}>
                   <pre className="ras-json-preview m-0 min-h-24 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-panel)] p-3 text-xs">
                     {JSON.stringify(identityUploadResult, null, 2)}
                   </pre>
@@ -690,95 +784,98 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
             <Surface tone="card" padding="md">
               <div className="flex min-w-0 flex-wrap items-center gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium">Public asset publishing is not enabled yet</div>
+                  <div className="font-medium">{t('assets.publicPublishingDisabled.title')}</div>
                   <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                    Generated portraits and voice samples stay in local preview until Realm exposes a reviewed owner publishing path.
+                    {t('assets.publicPublishingDisabled.description')}
                   </div>
                 </div>
-                <StatusBadge tone="warning">local only</StatusBadge>
+                <StatusBadge tone="warning">{t('common.localOnly')}</StatusBadge>
               </div>
               <InlineAlert tone="warning" className="mt-3">
-                You can review candidates here, but this workflow will not publish them as profile assets yet.
+                {t('assets.publicPublishingDisabled.alert')}
               </InlineAlert>
             </Surface>
           </div>
         </div>
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <h3 className="m-0 text-xl font-semibold">Voice demo candidate</h3>
-            <StatusBadge tone="info">AI assisted</StatusBadge>
-            <StatusBadge tone="neutral">sample only</StatusBadge>
-            <StatusBadge tone="warning">not published</StatusBadge>
+            <h3 className="m-0 text-xl font-semibold">{t('assets.voice.title')}</h3>
+            <StatusBadge tone="info">{t('assets.aiAssisted')}</StatusBadge>
+            <StatusBadge tone="neutral">{t('assets.sampleOnly')}</StatusBadge>
+            <StatusBadge tone="warning">{t('assets.notPublished')}</StatusBadge>
           </div>
           <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-            Generate a voice sample for review. Publishing the sample as a public profile asset is deferred until the owner asset path is available.
+            {t('assets.voice.description')}
           </p>
           <div className="mt-4 grid gap-4">
             <Surface tone="card" padding="md">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <div className="text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">Sample type</div>
-                  <div className="mt-1 font-medium">Audio</div>
+                  <div className="text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">{t('assets.sampleType')}</div>
+                  <div className="mt-1 font-medium">{t('assets.audio')}</div>
                 </div>
                 <div>
-                  <div className="text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">Review state</div>
-                  <div className="mt-1 font-medium">Local sample</div>
+                  <div className="text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">{t('assets.reviewState')}</div>
+                  <div className="mt-1 font-medium">{t('assets.localSample')}</div>
                 </div>
               </div>
             </Surface>
-            <FieldShell label="Demo script" message="Short text the agent will speak for the sample.">
+            <FieldShell label={t('assets.demoScript.label')} message={t('assets.demoScript.message')}>
               <TextareaField
                 value={voiceDraft.scriptText}
-                placeholder="Short public voice demo script"
+                placeholder={t('assets.demoScript.placeholder')}
                 onChange={(event) => updateVoiceDraft({ scriptText: event.currentTarget.value })}
               />
             </FieldShell>
             <CandidateFactGrid
               facts={[{
-                label: 'Model source',
-                value: 'AI model config / audio.synthesize',
+                label: t('assets.modelSource'),
+                value: t('assets.audioModelSource'),
               }]}
             />
             <InlineAlert tone={voicePayload.changed ? 'info' : 'warning'}>
-              {voicePayload.changed ? VOICE_DEMO_CANDIDATE_NOTICE : voicePayload.errors.join('; ')}
+              {voicePayload.changed ? t('assets.voiceNotice') : translateFixedAssetMessages(voicePayload.errors, t)}
             </InlineAlert>
             <div className="flex flex-wrap gap-3">
               <Button disabled={!voicePayload.changed || isSynthesizingVoice} loading={isSynthesizingVoice} onClick={() => void synthesizeVoiceDemo()}>
-                Synthesize voice demo
+                {t('assets.synthesizeVoice')}
               </Button>
             </div>
             {voiceResult ? (
               <InlineAlert tone={voiceResult.ok ? 'info' : 'danger'}>
                   {voiceResult.ok
-                  ? 'Voice sample generated for local review. It has not been published to the profile.'
-                  : voiceResult.message}
+                  ? t('assets.voiceGenerated')
+                  : translateFixedAssetMessage(voiceResult.message, t)}
               </InlineAlert>
             ) : null}
             {voiceResult?.ok ? (
               <div className="grid gap-3">
                 {voicePreviewUrl ? (
                   <div>
-                    <div className="mb-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">Playback</div>
+                    <div className="mb-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">{t('assets.playback')}</div>
                     <audio src={voicePreviewUrl} controls className="w-full" />
                   </div>
                 ) : null}
                 <CandidateFactGrid
                   facts={[{
-                    label: 'Candidate output',
+                    label: t('assets.candidateOutput'),
                     value: voiceResult.runtime.artifacts.length > 0
-                      ? `${voiceResult.runtime.artifacts.length} generated artifact${voiceResult.runtime.artifacts.length === 1 ? '' : 's'}`
-                      : 'Runtime output recorded',
+                      ? t('assets.generatedArtifacts', {
+                        count: voiceResult.runtime.artifacts.length,
+                        plural: voiceResult.runtime.artifacts.length === 1 ? '' : 's',
+                      })
+                      : t('assets.runtimeOutputRecorded'),
                   }, {
-                    label: 'Review state',
-                    value: 'Local review',
+                    label: t('assets.reviewState'),
+                    value: t('assets.localReview'),
                   }, {
-                    label: 'Trace',
-                    value: voiceResult.runtime.traceId ? 'Captured in technical details' : 'Not provided by Runtime',
+                    label: t('assets.trace'),
+                    value: voiceResult.runtime.traceId ? t('assets.traceCaptured') : t('assets.traceMissing'),
                   }]}
                 />
               </div>
             ) : null}
-            <TechnicalReviewDetails title="Voice generation technical details">
+            <TechnicalReviewDetails title={t('assets.voiceTechnicalDetails')}>
               <pre className="ras-json-preview m-0 min-h-72 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-card)] p-3 text-xs">
                 {voicePayload.payload ? JSON.stringify({
                   request: voicePayload.payload,
@@ -793,25 +890,25 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
       <Surface tone="card" padding="md" className="mt-5">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="font-medium">Local creative history</div>
+            <div className="font-medium">{t('assets.history.title')}</div>
             <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-              Candidate history is stored on this desktop device and does not publish profile assets.
+              {t('assets.history.description')}
             </div>
           </div>
-          <StatusBadge tone="warning">app-local</StatusBadge>
+          <StatusBadge tone="warning">{t('common.appLocal')}</StatusBadge>
         </div>
         {creativeHistory.length === 0 ? (
-          <EmptyState title="No creative history" description="Generate or upload a reviewed candidate to add local history." />
+          <EmptyState title={t('assets.history.emptyTitle')} description={t('assets.history.emptyDescription')} />
         ) : (
           <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {creativeHistory.map((record) => (
               <Surface key={record.id} tone="panel" padding="md">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="font-medium">{record.label}</div>
-                  <StatusBadge tone="warning">local only</StatusBadge>
+                  <div className="font-medium">{t(CREATIVE_HISTORY_LABEL_KEYS[record.kind])}</div>
+                  <StatusBadge tone="warning">{t('common.localOnly')}</StatusBadge>
                 </div>
                 <div className="ras-break-anywhere mt-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-secondary)]">
-                  {record.detail}
+                  {translateFixedAssetMessage(record.detail, t)}
                 </div>
                 <div className="ras-break-anywhere mt-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
                   {record.source}

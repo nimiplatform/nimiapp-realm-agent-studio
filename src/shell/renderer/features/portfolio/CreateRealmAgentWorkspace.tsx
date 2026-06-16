@@ -34,6 +34,7 @@ import {
   validateAgentCreationGraphForRealmCreate,
   type AgentCreationGraph,
   type AgentCreationGraphCreateReview,
+  type AgentCreationGraphSectionKey,
   type AgentCreationGraphSourceMode,
 } from './agent-creation-graph.js';
 import {
@@ -47,6 +48,9 @@ import {
   parseDownloadedCharacterCardFile,
   type CharacterCardImportResult,
 } from './character-card-import.js';
+import { useStudioI18n } from '../../i18n/use-studio-i18n.js';
+import type { StudioCopyKey } from '../../i18n/studio-copy.js';
+import type { StudioTranslateOptions } from '../../i18n/studio-i18n.js';
 
 export type CreatedRealmAgentContext = {
   agentId: string;
@@ -60,6 +64,209 @@ type CreateRealmAgentWorkspaceProps = {
   onCreated?: (context: CreatedRealmAgentContext) => void;
   onOpenCreatedAgent?: (agentId: string, target: 'detail' | 'settings') => void;
 };
+
+type StudioTranslator = (key: StudioCopyKey, options?: StudioTranslateOptions) => string;
+
+const GRAPH_SOURCE_MODE_KEYS: Record<AgentCreationGraphSourceMode, StudioCopyKey> = {
+  description: 'create.graph.sourceMode.description',
+  manual: 'create.graph.sourceMode.manual',
+  'downloaded-character-card': 'create.graph.sourceMode.downloadedCharacterCard',
+  'existing-agent-remix': 'create.graph.sourceMode.existingAgentRemix',
+};
+
+const GRAPH_FIELD_STATUS_KEYS: Record<AgentCreationGraph['sourcePackage']['fields'][number]['status'], StudioCopyKey> = {
+  mapped: 'create.graph.fieldStatus.mapped',
+  candidateOnly: 'create.graph.fieldStatus.candidateOnly',
+  unmapped: 'create.graph.fieldStatus.unmapped',
+  rejected: 'create.graph.fieldStatus.rejected',
+};
+
+const GRAPH_SOURCE_FIELD_KEYS: Record<string, StudioCopyKey> = {
+  ownerDescription: 'create.graph.sourceField.ownerDescription',
+  displayName: 'create.graph.sourceField.displayName',
+  handle: 'create.graph.sourceField.handle',
+  concept: 'create.graph.sourceField.concept',
+  description: 'create.graph.sourceField.description',
+  ruleText: 'create.graph.sourceField.ruleText',
+  referenceImageUrl: 'create.graph.sourceField.referenceImageUrl',
+  runtimeRationale: 'create.graph.sourceField.runtimeRationale',
+  'card.name': 'create.graph.sourceField.cardName',
+  'card.description': 'create.graph.sourceField.cardDescription',
+  'card.personality': 'create.graph.sourceField.cardPersonality',
+  'card.scenario': 'create.graph.sourceField.cardScenario',
+  'card.first_mes': 'create.graph.sourceField.cardFirstMessage',
+  'card.mes_example': 'create.graph.sourceField.cardExampleMessages',
+  'card.tags': 'create.graph.sourceField.cardTags',
+  'card.alternate_greetings': 'create.graph.sourceField.cardAlternateGreetings',
+  'card.creator_notes': 'create.graph.sourceField.cardCreatorNotes',
+  'card.system_prompt': 'create.graph.sourceField.cardSystemPrompt',
+  'card.post_history_instructions': 'create.graph.sourceField.cardPostHistoryInstructions',
+  'card.character_book': 'create.graph.sourceField.cardCharacterBook',
+  'card.extensions': 'create.graph.sourceField.cardExtensions',
+  'card.unknown': 'create.graph.sourceField.cardUnknown',
+};
+
+const GRAPH_SECTION_TITLE_KEYS: Record<AgentCreationGraphSectionKey, StudioCopyKey> = {
+  identity: 'create.graph.section.identity.title',
+  dna: 'create.graph.section.dna.title',
+  behavior: 'create.graph.section.behavior.title',
+  worldview: 'create.graph.section.worldview.title',
+  greeting: 'create.graph.section.greeting.title',
+  communicationVoice: 'create.graph.section.communicationVoice.title',
+  contentVoice: 'create.graph.section.contentVoice.title',
+  visualBrief: 'create.graph.section.visualBrief.title',
+  voiceBrief: 'create.graph.section.voiceBrief.title',
+  postBrief: 'create.graph.section.postBrief.title',
+  sourceProvenance: 'create.graph.section.sourceProvenance.title',
+  missingDecisions: 'create.graph.section.missingDecisions.title',
+  riskNotes: 'create.graph.section.riskNotes.title',
+  writePlan: 'create.graph.section.writePlan.title',
+};
+
+const GRAPH_SECTION_SUMMARY_KEYS: Record<string, StudioCopyKey> = {
+  'Public identity fields are ready for owner review.': 'create.graph.section.identity.ready',
+  'Public identity fields are not ready.': 'create.graph.section.identity.missing',
+  'Realm archetype input is selected.': 'create.graph.section.dna.ready',
+  'Realm archetype input is missing.': 'create.graph.section.dna.missing',
+  'Visible behavior notes will stay owner-reviewed.': 'create.graph.section.behavior.ready',
+  'No behavior notes were supplied.': 'create.graph.section.behavior.missing',
+  'Concept can anchor the public agent worldview.': 'create.graph.section.worldview.ready',
+  'Concept is missing.': 'create.graph.section.worldview.missing',
+  'Greeting remains a follow-up owner settings candidate after create.': 'create.graph.section.greeting.summary',
+  'Voice can be inferred for review from concept and behavior notes.': 'create.graph.section.communicationVoice.ready',
+  'Voice needs owner input.': 'create.graph.section.communicationVoice.missing',
+  'Content voice is retained as a post-studio candidate, not a create write.': 'create.graph.section.contentVoice.summary',
+  'A reviewed reference image URL is ready as create input.': 'create.graph.section.visualBrief.ready',
+  'Visual brief remains optional candidate material.': 'create.graph.section.visualBrief.missing',
+  'Voice demo belongs to Identity Studio and remains candidate-only in create.': 'create.graph.section.voiceBrief.summary',
+  'Post ideas belong to Content Studio and remain candidate-only in create.': 'create.graph.section.postBrief.summary',
+  'Unresolved decisions are explicit and do not block create unless they are required Realm create fields.': 'create.graph.section.missingDecisions.summary',
+  'No hidden provider, model, lifecycle, private memory, or raw AgentRule fields are admitted.': 'create.graph.section.riskNotes.summary',
+  'Accepted fields map to admitted Realm write paths; blocked and deferred fields remain explicit.': 'create.graph.section.writePlan.summary',
+};
+
+const GRAPH_MISSING_KEYS: Record<string, StudioCopyKey> = {
+  'display name': 'create.graph.missing.displayName',
+  handle: 'create.graph.missing.handle',
+  'DNA primary archetype': 'create.graph.missing.dnaPrimaryArchetype',
+  'behavior boundaries': 'create.graph.missing.behaviorBoundaries',
+  concept: 'create.graph.missing.concept',
+  'greeting candidate': 'create.graph.missing.greetingCandidate',
+  'communication voice': 'create.graph.missing.communicationVoice',
+  'content voice examples': 'create.graph.missing.contentVoiceExamples',
+  'avatar/profile cover visual brief': 'create.graph.missing.avatarProfileCoverVisualBrief',
+  'voice brief': 'create.graph.missing.voiceBrief',
+  'first post brief': 'create.graph.missing.firstPostBrief',
+  'profile description': 'create.graph.missing.profileDescription',
+  'visual reference': 'create.graph.missing.visualReference',
+  greeting: 'create.graph.missing.greeting',
+  'Realm create required fields': 'create.graph.missing.realmCreateRequiredFields',
+};
+
+const CREATE_FIXED_MESSAGE_KEYS: Record<string, StudioCopyKey> = {
+  'handle missing': 'create.error.handleMissing',
+  'display name missing': 'create.error.displayNameMissing',
+  'concept missing': 'create.error.conceptMissing',
+  'selected world missing': 'create.error.selectedWorldMissing',
+  'DNA primary archetype missing (Realm requires `dnaPrimary` or full `dna` JSON; we send the archetype-based form)': 'create.error.dnaPrimaryMissing',
+  'selected world not source-backed by WorldsService.worldControllerListWorlds': 'create.error.selectedWorldNotSourceBacked',
+  'handle availability not checked by AgentsService.agentControllerCheckHandle': 'create.error.handleAvailabilityMissing',
+  'handle availability not checked for the current normalized handle': 'create.error.handleAvailabilityStale',
+  'Agent handle check requires a non-empty normalized handle.': 'create.error.handleAvailabilityEmpty',
+  'Realm handle availability check did not return an availability boolean.': 'create.error.handleAvailabilityMissingBoolean',
+  'Realm handle availability check failed.': 'create.error.handleAvailabilityFailed',
+  'Realm Create Agent returned no agent object.': 'create.error.realmCreateNoAgent',
+  'Realm Create Agent returned no canonical agent id.': 'create.error.realmCreateNoId',
+  'Realm Create Agent failed.': 'create.error.realmCreateFailed',
+  'Realm owner settings read failed after create.': 'create.error.ownerSettingsReadFailed',
+  'reference image prompt empty': 'create.error.referencePromptEmpty',
+  'Reference image payload invalid.': 'create.error.referencePayloadInvalid',
+  'Runtime imageGenerate scenario transport unavailable: Tauri IPC runtime transport is required.': 'create.error.referenceTransportUnavailable',
+  'Runtime imageGenerate scenario returned no readable artifact.': 'create.error.referenceNoArtifact',
+  'Runtime imageGenerate produced a local artifact but no http(s) URL that Realm can store as a public reference image.': 'create.error.referenceLocalArtifactNoUrl',
+};
+
+function translateGraphSourceMode(mode: AgentCreationGraphSourceMode, t: StudioTranslator): string {
+  return t(GRAPH_SOURCE_MODE_KEYS[mode]);
+}
+
+function translateGraphSourceLabel(label: string, t: StudioTranslator): string {
+  const rawSourceLabels: Record<string, StudioCopyKey> = {
+    'Owner description': 'create.graph.sourceMode.description',
+    'Manual advanced entry': 'create.graph.sourceMode.manual',
+    'Downloaded CharacterCard': 'create.graph.sourceMode.downloadedCharacterCard',
+    'Existing owned Realm Agent': 'create.graph.sourceMode.existingAgentRemix',
+  };
+  const key = rawSourceLabels[label];
+  return key ? t(key) : label;
+}
+
+function translateGraphSourceField(
+  field: AgentCreationGraph['sourcePackage']['fields'][number],
+  t: StudioTranslator,
+): string {
+  const key = GRAPH_SOURCE_FIELD_KEYS[field.key];
+  return key ? t(key) : field.label;
+}
+
+function translateGraphSectionTitle(sectionKey: AgentCreationGraphSectionKey, t: StudioTranslator): string {
+  return t(GRAPH_SECTION_TITLE_KEYS[sectionKey]);
+}
+
+function translateGraphSectionSummary(
+  section: AgentCreationGraph['normalizedGraph']['sections'][number],
+  graph: AgentCreationGraph,
+  t: StudioTranslator,
+): string {
+  if (section.key === 'sourceProvenance') {
+    return t('create.graph.section.sourceProvenance.summary', {
+      source: translateGraphSourceLabel(graph.sourcePackage.label, t),
+    });
+  }
+  const key = GRAPH_SECTION_SUMMARY_KEYS[section.summary];
+  return key ? t(key) : section.summary;
+}
+
+function translateGraphMissingItem(item: string, t: StudioTranslator): string {
+  const key = GRAPH_MISSING_KEYS[item];
+  return key ? t(key) : item;
+}
+
+function translateGraphReviewError(error: string, t: StudioTranslator): string {
+  if (error === 'Agent Creation Graph missing (R-RAS-GRAPH-003).') return t('create.graph.error.graphMissing');
+  if (error === 'Agent Creation Graph write plan missing Realm create target (R-RAS-GRAPH-017).') return t('create.graph.error.writePlanMissing');
+  if (error === 'Agent Creation Graph write plan is blocked for Realm create (R-RAS-GRAPH-017).') return t('create.graph.error.writePlanBlocked');
+  if (error === 'Agent Creation Graph review missing or stale (R-RAS-GRAPH-019).') return t('create.graph.error.reviewMissing');
+
+  const missingSection = error.match(/^Agent Creation Graph section missing: (.+) \(R-RAS-GRAPH-016\)\.$/);
+  if (missingSection) {
+    return t('create.graph.error.sectionMissing', { section: missingSection[1] });
+  }
+
+  const blockedSection = error.match(/^Agent Creation Graph (.+) section is blocked \(R-RAS-GRAPH-027\)\.$/);
+  if (blockedSection) {
+    return t('create.graph.error.sectionBlocked', { section: blockedSection[1] });
+  }
+
+  return error;
+}
+
+function translateGraphReviewErrors(errors: string[], t: StudioTranslator): string {
+  return errors.map((error) => translateGraphReviewError(error, t)).join('; ');
+}
+
+function translateCreateFixedMessage(message: string, t: StudioTranslator): string {
+  const handleUnavailable = message.match(/^handle unavailable: (.+)$/);
+  if (handleUnavailable) {
+    return t('create.error.handleUnavailable', { message: handleUnavailable[1] });
+  }
+  const key = CREATE_FIXED_MESSAGE_KEYS[message];
+  return key ? t(key) : message;
+}
+
+function translateCreateFixedMessages(messages: string[], t: StudioTranslator): string {
+  return messages.map((message) => translateCreateFixedMessage(message, t)).join('; ');
+}
 
 function createEmptyDraft(): CreateRealmAgentDraftInput {
   return {
@@ -76,28 +283,28 @@ function createEmptyDraft(): CreateRealmAgentDraftInput {
   };
 }
 
-const DNA_PRIMARY_DESCRIPTIONS: Record<DnaPrimaryArchetype, string> = {
-  CARING: 'Warm, nurturing, supportive presence.',
-  PLAYFUL: 'Light-hearted, mischievous, fun-loving.',
-  INTELLECTUAL: 'Curious, analytical, learning-driven.',
-  CONFIDENT: 'Assertive, decisive, takes initiative.',
-  MYSTERIOUS: 'Reserved, introspective, layered.',
-  ROMANTIC: 'Emotionally expressive, idealistic.',
+const DNA_PRIMARY_DESCRIPTION_KEYS: Record<DnaPrimaryArchetype, StudioCopyKey> = {
+  CARING: 'create.dna.primary.CARING',
+  PLAYFUL: 'create.dna.primary.PLAYFUL',
+  INTELLECTUAL: 'create.dna.primary.INTELLECTUAL',
+  CONFIDENT: 'create.dna.primary.CONFIDENT',
+  MYSTERIOUS: 'create.dna.primary.MYSTERIOUS',
+  ROMANTIC: 'create.dna.primary.ROMANTIC',
 };
 
-const DNA_SECONDARY_DESCRIPTIONS: Record<DnaSecondaryTrait, string> = {
-  HUMOROUS: 'Quick wit and timing.',
-  SARCASTIC: 'Dry, ironic edge.',
-  GENTLE: 'Soft tone, measured words.',
-  DIRECT: 'Plain-speaking, gets to the point.',
-  OPTIMISTIC: 'Sees the upside.',
-  REALISTIC: 'Grounded expectations.',
-  DRAMATIC: 'Big emotional swings.',
-  PASSIONATE: 'Intense investment.',
-  REBELLIOUS: 'Pushes against norms.',
-  INNOCENT: 'Earnest, sincere outlook.',
-  WISE: 'Reflective, perspective-bringing.',
-  ECCENTRIC: 'Unusual angles and references.',
+const DNA_SECONDARY_DESCRIPTION_KEYS: Record<DnaSecondaryTrait, StudioCopyKey> = {
+  HUMOROUS: 'create.dna.secondary.HUMOROUS',
+  SARCASTIC: 'create.dna.secondary.SARCASTIC',
+  GENTLE: 'create.dna.secondary.GENTLE',
+  DIRECT: 'create.dna.secondary.DIRECT',
+  OPTIMISTIC: 'create.dna.secondary.OPTIMISTIC',
+  REALISTIC: 'create.dna.secondary.REALISTIC',
+  DRAMATIC: 'create.dna.secondary.DRAMATIC',
+  PASSIONATE: 'create.dna.secondary.PASSIONATE',
+  REBELLIOUS: 'create.dna.secondary.REBELLIOUS',
+  INNOCENT: 'create.dna.secondary.INNOCENT',
+  WISE: 'create.dna.secondary.WISE',
+  ECCENTRIC: 'create.dna.secondary.ECCENTRIC',
 };
 
 function worldOptionLabel(world: SelectableRealmWorld): string {
@@ -106,9 +313,10 @@ function worldOptionLabel(world: SelectableRealmWorld): string {
 }
 
 function TechnicalReviewDetails({ children }: { children: ReactNode }) {
+  const { t } = useStudioI18n();
   return (
     <details className="ras-technical-details">
-      <summary>Create request technical details</summary>
+      <summary>{t('create.technicalDetails')}</summary>
       <div className="mt-3">
         {children}
       </div>
@@ -125,6 +333,7 @@ function ReadinessPreview({
   selectableWorldIds: string[];
   handleAvailability: NormalizedRealmAgentHandleAvailability | null;
 }) {
+  const { t } = useStudioI18n();
   const normalizedDraft = normalizeCreateRealmAgentDraft(draft);
   const readiness = validateCreateRealmAgentReadiness(draft, { selectableWorldIds, handleAvailability });
 
@@ -132,35 +341,35 @@ function ReadinessPreview({
     <div className="grid gap-4">
       <Surface tone="card" padding="md">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="font-medium">Visible public fields before submit</div>
-          <StatusBadge tone="info">local draft</StatusBadge>
+          <div className="font-medium">{t('create.visiblePublicFields')}</div>
+          <StatusBadge tone="info">{t('create.localDraft')}</StatusBadge>
         </div>
         <dl className="mt-3 grid gap-2 text-[length:var(--nimi-type-body-sm-size)]">
           <div className="grid gap-1 sm:grid-cols-[140px_1fr]">
-            <dt className="text-[var(--nimi-text-muted)]">Handle</dt>
-            <dd className="ras-break-anywhere m-0">@{normalizedDraft.handle || 'not set'}</dd>
+            <dt className="text-[var(--nimi-text-muted)]">{t('create.handleField')}</dt>
+            <dd className="ras-break-anywhere m-0">@{normalizedDraft.handle || t('common.notSet')}</dd>
           </div>
           <div className="grid gap-1 sm:grid-cols-[140px_1fr]">
-            <dt className="text-[var(--nimi-text-muted)]">Display name</dt>
-            <dd className="ras-break-anywhere m-0">{normalizedDraft.displayName || 'not set'}</dd>
+            <dt className="text-[var(--nimi-text-muted)]">{t('create.displayNameLabel')}</dt>
+            <dd className="ras-break-anywhere m-0">{normalizedDraft.displayName || t('common.notSet')}</dd>
           </div>
           <div className="grid gap-1 sm:grid-cols-[140px_1fr]">
-            <dt className="text-[var(--nimi-text-muted)]">Profile description</dt>
-            <dd className="ras-break-anywhere m-0">{normalizedDraft.description || 'not set'}</dd>
+            <dt className="text-[var(--nimi-text-muted)]">{t('create.profileDescriptionLabel')}</dt>
+            <dd className="ras-break-anywhere m-0">{normalizedDraft.description || t('common.notSet')}</dd>
           </div>
           <div className="grid gap-1 sm:grid-cols-[140px_1fr]">
-            <dt className="text-[var(--nimi-text-muted)]">World ID</dt>
-            <dd className="ras-break-anywhere m-0">{normalizedDraft.selectedWorldId || 'not set'}</dd>
+            <dt className="text-[var(--nimi-text-muted)]">{t('create.worldIdField')}</dt>
+            <dd className="ras-break-anywhere m-0">{normalizedDraft.selectedWorldId || t('common.notSet')}</dd>
           </div>
         </dl>
       </Surface>
 
       {readiness.ready ? null : (
-        <InlineAlert tone="warning">{readiness.errors.join('; ')}</InlineAlert>
+        <InlineAlert tone="warning">{translateCreateFixedMessages(readiness.errors, t)}</InlineAlert>
       )}
       <TechnicalReviewDetails>
         <pre className="ras-json-preview m-0 min-h-56 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-card)] p-3 text-xs">
-          {readiness.payload ? JSON.stringify(readiness.payload, null, 2) : 'Complete handle, display name, concept, and selected world to preview the reviewed create request.'}
+          {readiness.payload ? JSON.stringify(readiness.payload, null, 2) : t('create.completeForPreview')}
         </pre>
       </TechnicalReviewDetails>
     </div>
@@ -169,36 +378,36 @@ function ReadinessPreview({
 
 const SOURCE_MODE_OPTIONS: Array<{
   mode: AgentCreationGraphSourceMode;
-  title: string;
-  description: string;
+  titleKey: StudioCopyKey;
+  descriptionKey: StudioCopyKey;
   enabled: boolean;
   badge: string;
 }> = [
   {
     mode: 'description',
-    title: 'Describe',
-    description: 'Generate a reviewed graph from an owner prompt.',
+    titleKey: 'create.source.description.title',
+    descriptionKey: 'create.source.description.description',
     enabled: true,
     badge: 'W2',
   },
   {
     mode: 'manual',
-    title: 'Manual',
-    description: 'Build the graph from explicit owner-entered fields.',
+    titleKey: 'create.source.manual.title',
+    descriptionKey: 'create.source.manual.description',
     enabled: true,
     badge: 'W2',
   },
   {
     mode: 'downloaded-character-card',
-    title: 'CharacterCard',
-    description: 'Import downloaded JSON or PNG card metadata.',
+    titleKey: 'create.source.characterCard.title',
+    descriptionKey: 'create.source.characterCard.description',
     enabled: true,
     badge: 'W3',
   },
   {
     mode: 'existing-agent-remix',
-    title: 'Remix Agent',
-    description: 'Start from an existing owned Realm Agent.',
+    titleKey: 'create.source.remix.title',
+    descriptionKey: 'create.source.remix.description',
     enabled: false,
     badge: 'W4',
   },
@@ -211,6 +420,7 @@ function SourceModeChooser({
   value: AgentCreationGraphSourceMode;
   onSelect: (mode: AgentCreationGraphSourceMode) => void;
 }) {
+  const { t } = useStudioI18n();
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       {SOURCE_MODE_OPTIONS.map((option) => {
@@ -236,11 +446,11 @@ function SourceModeChooser({
             }}
           >
             <div className="flex items-center justify-between gap-2">
-              <span style={{ fontWeight: 650 }}>{option.title}</span>
+              <span style={{ fontWeight: 650 }}>{t(option.titleKey)}</span>
               <StatusBadge tone={option.enabled ? 'info' : 'neutral'}>{option.badge}</StatusBadge>
             </div>
             <p className="m-0 mt-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-              {option.description}
+              {t(option.descriptionKey)}
             </p>
           </button>
         );
@@ -250,9 +460,10 @@ function SourceModeChooser({
 }
 
 function GraphStatusBadge({ status }: { status: AgentCreationGraph['normalizedGraph']['sections'][number]['status'] }) {
-  if (status === 'ready') return <StatusBadge tone="success">ready</StatusBadge>;
-  if (status === 'blocked') return <StatusBadge tone="warning">blocked</StatusBadge>;
-  return <StatusBadge tone="neutral">needs decision</StatusBadge>;
+  const { t } = useStudioI18n();
+  if (status === 'ready') return <StatusBadge tone="success">{t('create.graph.status.ready')}</StatusBadge>;
+  if (status === 'blocked') return <StatusBadge tone="warning">{t('create.graph.status.blocked')}</StatusBadge>;
+  return <StatusBadge tone="neutral">{t('create.graph.status.needsDecision')}</StatusBadge>;
 }
 
 function GraphReviewBoard({
@@ -264,36 +475,37 @@ function GraphReviewBoard({
   review: AgentCreationGraphCreateReview;
   onAccept: () => void;
 }) {
+  const { t } = useStudioI18n();
   return (
     <Surface tone="card" padding="md">
       <div className="grid gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="font-medium">Agent Creation Graph</div>
+              <div className="font-medium">{t('create.graph.title')}</div>
               <StatusBadge tone={review.ready ? 'success' : review.canAccept ? 'info' : 'warning'}>
-                {review.ready ? 'accepted' : review.canAccept ? 'review required' : 'blocked'}
+                {review.ready ? t('create.graph.accepted') : review.canAccept ? t('create.graph.reviewRequired') : t('create.graph.blocked')}
               </StatusBadge>
             </div>
             <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-              {agentCreationGraphSourceModeLabel(graph.sourcePackage.mode)} · {graph.sourcePackage.label}
+              {translateGraphSourceMode(graph.sourcePackage.mode, t)} · {translateGraphSourceLabel(graph.sourcePackage.label, t)}
             </p>
           </div>
           <Button tone="secondary" size="sm" disabled={!review.canAccept || review.ready} onClick={onAccept}>
-            {review.ready ? 'Graph accepted' : 'Accept graph'}
+            {review.ready ? t('create.graph.graphAccepted') : t('create.graph.acceptGraph')}
           </Button>
         </div>
 
         {review.shapeErrors.length > 0 ? (
-          <InlineAlert tone="danger">{review.shapeErrors.join('; ')}</InlineAlert>
+          <InlineAlert tone="danger">{translateGraphReviewErrors(review.shapeErrors, t)}</InlineAlert>
         ) : review.reviewErrors.length > 0 ? (
-          <InlineAlert tone="warning">{review.reviewErrors.join('; ')}</InlineAlert>
+          <InlineAlert tone="warning">{translateGraphReviewErrors(review.reviewErrors, t)}</InlineAlert>
         ) : (
-          <InlineAlert tone="success">Graph review is accepted for this exact draft fingerprint.</InlineAlert>
+          <InlineAlert tone="success">{t('create.graph.acceptedAlert')}</InlineAlert>
         )}
 
         <div className="grid gap-2">
-          <div className="font-medium">Source mapping</div>
+          <div className="font-medium">{t('create.graph.sourceMapping')}</div>
           {graph.sourcePackage.fields.length > 0 ? (
             <div className="grid gap-2">
               {graph.sourcePackage.fields.slice(0, 6).map((item) => (
@@ -302,37 +514,37 @@ function GraphReviewBoard({
                   className="grid gap-1 rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-raised)] p-2 text-[length:var(--nimi-type-body-sm-size)]"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-medium">{item.label}</span>
-                    <StatusBadge tone={item.status === 'mapped' ? 'success' : 'neutral'}>{item.status}</StatusBadge>
+                    <span className="font-medium">{translateGraphSourceField(item, t)}</span>
+                    <StatusBadge tone={item.status === 'mapped' ? 'success' : 'neutral'}>{t(GRAPH_FIELD_STATUS_KEYS[item.status])}</StatusBadge>
                   </div>
                   <div className="ras-break-anywhere text-[var(--nimi-text-muted)]">{item.value}</div>
                 </div>
               ))}
             </div>
           ) : (
-            <InlineAlert tone="warning">No source fields have been mapped into the graph yet.</InlineAlert>
+            <InlineAlert tone="warning">{t('create.graph.noSourceFields')}</InlineAlert>
           )}
         </div>
 
         <div className="grid gap-2">
-          <div className="font-medium">Review sections</div>
+          <div className="font-medium">{t('create.graph.reviewSections')}</div>
           <div className="grid gap-2">
             {graph.normalizedGraph.sections.map((section) => (
               <div
                 key={section.key}
                 className="rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-raised)] p-2"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium">{section.title}</span>
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">{translateGraphSectionTitle(section.key, t)}</span>
                   <GraphStatusBadge status={section.status} />
                 </div>
                 <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                  {section.summary}
+                  {translateGraphSectionSummary(section, graph, t)}
                 </p>
                 {section.missing.length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {section.missing.slice(0, 4).map((item) => (
-                      <StatusBadge key={item} tone="neutral">{item}</StatusBadge>
+                      <StatusBadge key={item} tone="neutral">{translateGraphMissingItem(item, t)}</StatusBadge>
                     ))}
                   </div>
                 ) : null}
@@ -358,6 +570,7 @@ function GraphReviewBoard({
 type CreateStage = 'seed' | 'edit';
 
 export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: CreateRealmAgentWorkspaceProps) {
+  const { t } = useStudioI18n();
   const [stage, setStage] = useState<CreateStage>('seed');
   const [sourceMode, setSourceMode] = useState<AgentCreationGraphSourceMode>('description');
   const [graphAcceptedFingerprint, setGraphAcceptedFingerprint] = useState<string | null>(null);
@@ -400,7 +613,7 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
   const creationGraph = useMemo(() => buildAgentCreationGraphFromDraft(draft, {
     sourceMode,
     sourceLabel: sourceMode === 'description'
-      ? (draft.originalDescription || seedDescription || 'Owner description')
+      ? (draft.originalDescription || seedDescription || agentCreationGraphSourceModeLabel(sourceMode))
       : sourceMode === 'downloaded-character-card' && characterCardImportResult?.ok
         ? `CharacterCard: ${characterCardImportResult.card.data.name} (${characterCardImportResult.card.sourceName})`
       : agentCreationGraphSourceModeLabel(sourceMode),
@@ -620,28 +833,28 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
       <Surface tone="panel" padding="lg" className="min-w-0">
         <div className="grid min-w-0 gap-5">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <h2 className="m-0 text-xl font-semibold">Create Realm Agent</h2>
-            <StatusBadge tone="info">Creation Graph</StatusBadge>
-            <StatusBadge tone="neutral">source first</StatusBadge>
+            <h2 className="m-0 text-xl font-semibold">{t('create.title')}</h2>
+            <StatusBadge tone="info">{t('create.creationGraph')}</StatusBadge>
+            <StatusBadge tone="neutral">{t('create.sourceFirst')}</StatusBadge>
           </div>
           <p className="m-0 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-            Choose a source, build a reviewed graph, then submit only admitted Realm fields after handle and world checks pass.
+            {t('create.seedDescription')}
           </p>
           <SourceModeChooser value={sourceMode} onSelect={selectSourceMode} />
           {sourceMode === 'existing-agent-remix' ? (
             <InlineAlert tone="warning">
-              {agentCreationGraphSourceModeLabel(sourceMode)} is admitted in the spec but implemented in the next dependent wave.
+              {t('create.source.deferred', { source: translateGraphSourceMode(sourceMode, t) })}
             </InlineAlert>
           ) : null}
           {sourceMode === 'description' ? (
             <>
               <FieldShell
-                label="One-line agent description"
-                message="Example: 一个20岁冷酷的中国唐代杀手女孩"
+                label={t('create.oneLineLabel')}
+                message={t('create.oneLineExample')}
               >
                 <TextareaField
                   value={seedDescription}
-                  placeholder="一个20岁冷酷的中国唐代杀手女孩"
+                  placeholder={t('create.oneLinePlaceholder')}
                   onChange={(event) => setSeedDescription(event.currentTarget.value)}
                 />
               </FieldShell>
@@ -652,7 +865,7 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
                   loading={isGeneratingSeed}
                   onClick={() => void runSeedGeneration()}
                 >
-                  Generate graph from description
+                  {t('create.generateFromDescription')}
                 </Button>
               </div>
             </>
@@ -660,13 +873,13 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
           {sourceMode === 'manual' ? (
             <Surface tone="card" padding="md">
               <div className="grid gap-3">
-                <div className="font-medium">Manual advanced entry</div>
+                <div className="font-medium">{t('create.manualEntryTitle')}</div>
                 <p className="m-0 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                  Start with an empty owner-reviewed graph and fill admitted create fields by hand.
+                  {t('create.manualEntryDescription')}
                 </p>
                 <div>
                   <Button tone="primary" onClick={skipSeedAndCreateManually}>
-                    Start manual graph
+                    {t('create.startManualGraph')}
                   </Button>
                 </div>
               </div>
@@ -676,12 +889,12 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
             <Surface tone="card" padding="md">
               <div className="grid gap-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="font-medium">Downloaded CharacterCard</div>
-                  <StatusBadge tone="info">local file</StatusBadge>
+                  <div className="font-medium">{t('create.characterCardTitle')}</div>
+                  <StatusBadge tone="info">{t('create.localFile')}</StatusBadge>
                 </div>
                 <FieldShell
-                  label="CharacterCard JSON or PNG"
-                  message="Supported: local JSON card data, or PNG with chara tEXt metadata. Studio does not fetch chub.ai URLs."
+                  label={t('create.characterCardFieldLabel')}
+                  message={t('create.characterCardFieldMessage')}
                 >
                   <input
                     type="file"
@@ -695,16 +908,19 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
                   />
                 </FieldShell>
                 {isImportingCharacterCard ? (
-                  <InlineAlert tone="info">Importing local CharacterCard.</InlineAlert>
+                  <InlineAlert tone="info">{t('create.importingCharacterCard')}</InlineAlert>
                 ) : null}
                 {characterCardImportResult && !characterCardImportResult.ok ? (
                   <InlineAlert tone="danger">
-                    CharacterCard import failed: {characterCardImportResult.message}
+                    {t('create.characterCardImportFailed', { message: characterCardImportResult.message })}
                   </InlineAlert>
                 ) : null}
                 {characterCardImportResult?.ok ? (
                   <InlineAlert tone="success">
-                    Imported {characterCardImportResult.card.data.name} from {characterCardImportResult.card.sourceFormat.toUpperCase()}.
+                    {t('create.characterCardImported', {
+                      name: characterCardImportResult.card.data.name,
+                      format: characterCardImportResult.card.sourceFormat.toUpperCase(),
+                    })}
                   </InlineAlert>
                 ) : null}
               </div>
@@ -712,11 +928,11 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
           ) : null}
           {seedResult && !seedResult.ok ? (
             <InlineAlert tone="danger">
-              Seed generation failed: {seedResult.message}
+              {t('create.seedGenerationFailed', { message: seedResult.message })}
             </InlineAlert>
           ) : null}
           <InlineAlert tone="neutral">
-            <strong>Boundary:</strong> Runtime output and imported card data are graph candidate material. Nothing reaches Realm until the graph is accepted, handle and world gates pass, and Create returns a canonical id.
+            <strong>{t('create.boundaryLabel')}</strong> {t('create.boundaryDescription')}
           </InlineAlert>
         </div>
       </Surface>
@@ -728,107 +944,107 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
       <div className="grid min-w-0 gap-5 xl:grid-cols-[1fr_400px]">
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <h2 className="m-0 text-xl font-semibold">Create Realm Agent</h2>
-            <StatusBadge tone="info">owner scoped</StatusBadge>
-            <StatusBadge tone="neutral">review required</StatusBadge>
+            <h2 className="m-0 text-xl font-semibold">{t('create.title')}</h2>
+            <StatusBadge tone="info">{t('create.ownerScoped')}</StatusBadge>
+            <StatusBadge tone="neutral">{t('create.reviewRequired')}</StatusBadge>
             {draft.originalDescription ? (
-              <StatusBadge tone="success">AI seeded</StatusBadge>
+              <StatusBadge tone="success">{t('create.aiSeeded')}</StatusBadge>
             ) : null}
             <Button tone="ghost" size="sm" onClick={returnToSeedStage}>
-              Change source
+              {t('create.changeSource')}
             </Button>
           </div>
           <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-            Create a user-owned Realm Agent by reviewing the graph, selecting a world, defining public identity, and submitting only admitted Realm fields.
+            {t('create.editDescription')}
           </p>
           {characterCardImportResult?.ok ? (
             <InlineAlert tone="info" className="mt-3">
-              <strong>CharacterCard source:</strong> {characterCardImportResult.card.data.name} · {characterCardImportResult.card.spec} {characterCardImportResult.card.specVersion}
+              <strong>{t('create.characterCardSource')}</strong> {characterCardImportResult.card.data.name} · {characterCardImportResult.card.spec} {characterCardImportResult.card.specVersion}
             </InlineAlert>
           ) : null}
           {seedResult?.ok && seedResult.rationale ? (
             <InlineAlert tone="info" className="mt-3">
-              <strong>AI draft rationale:</strong> {seedResult.rationale}
+              <strong>{t('create.aiDraftRationale')}</strong> {seedResult.rationale}
             </InlineAlert>
           ) : null}
 
           <div className="mt-4 grid gap-4">
             <div className="grid gap-4 md:grid-cols-2">
-              <FieldShell label="Agent handle" message="Checked before submit.">
+              <FieldShell label={t('create.handleLabel')} message={t('create.handleMessage')}>
                 <TextField
                   value={draft.handle}
-                  placeholder="@creator-agent"
+                  placeholder={t('create.handlePlaceholder')}
                   onChange={(event) => updateDraft({ handle: event.currentTarget.value })}
                 />
               </FieldShell>
-              <FieldShell label="Display name" message="Visible public identity field.">
+              <FieldShell label={t('create.displayNameLabel')} message={t('create.displayNameMessage')}>
                 <TextField
                   value={draft.displayName}
-                  placeholder="Creator Agent"
+                  placeholder={t('create.displayNamePlaceholder')}
                   onChange={(event) => updateDraft({ displayName: event.currentTarget.value })}
                 />
               </FieldShell>
             </div>
             {normalizedDraft.handle && handleAvailabilityQuery.isLoading ? (
-              <InlineAlert tone="info">Checking handle availability.</InlineAlert>
+              <InlineAlert tone="info">{t('create.checkingHandle')}</InlineAlert>
             ) : null}
             {handleAvailabilityQuery.isError ? (
-              <InlineAlert tone="danger">Handle availability check failed.</InlineAlert>
+              <InlineAlert tone="danger">{t('create.handleCheckFailed')}</InlineAlert>
             ) : null}
             {handleAvailabilityQuery.data?.ok === false ? (
-              <InlineAlert tone="danger">{handleAvailabilityQuery.data.message}</InlineAlert>
+              <InlineAlert tone="danger">{translateCreateFixedMessage(handleAvailabilityQuery.data.message, t)}</InlineAlert>
             ) : null}
             {handleAvailability ? (
               <InlineAlert tone={handleAvailability.available ? 'success' : 'danger'}>
                 {handleAvailability.available
-                  ? `Handle @${handleAvailability.normalized} is available.`
-                  : `Handle @${handleAvailability.normalized} is unavailable: ${handleAvailability.message}`}
+                  ? t('create.handleAvailable', { handle: handleAvailability.normalized })
+                  : t('create.handleUnavailable', { handle: handleAvailability.normalized, message: translateCreateFixedMessage(handleAvailability.message, t) })}
               </InlineAlert>
             ) : null}
-            <FieldShell label="Profile description" message="Public profile description saved through owner settings after create.">
+            <FieldShell label={t('create.profileDescriptionLabel')} message={t('create.profileDescriptionMessage')}>
               <TextareaField
                 value={draft.description}
-                placeholder="Short public profile description"
+                placeholder={t('create.profileDescriptionPlaceholder')}
                 onChange={(event) => updateDraft({ description: event.currentTarget.value })}
               />
             </FieldShell>
-            <FieldShell label="Concept" message="Core creative concept for the agent.">
+            <FieldShell label={t('create.conceptLabel')} message={t('create.conceptMessage')}>
               <TextareaField
                 value={draft.concept}
-                placeholder="Creative concept"
+                placeholder={t('create.conceptPlaceholder')}
                 onChange={(event) => updateDraft({ concept: event.currentTarget.value })}
               />
             </FieldShell>
-            <FieldShell label="Visible rules" message="Optional behavior and boundary notes for review.">
+            <FieldShell label={t('create.visibleRulesLabel')} message={t('create.visibleRulesMessage')}>
               <TextareaField
                 value={draft.ruleText}
-                placeholder="Style, boundaries, and public behavior rules"
+                placeholder={t('create.visibleRulesPlaceholder')}
                 onChange={(event) => updateDraft({ ruleText: event.currentTarget.value })}
               />
             </FieldShell>
             <FieldShell
-              label="DNA primary archetype"
-              message="Required by Realm. Backend constructs the full AgentDna JSON from this primary archetype plus optional secondary traits."
+              label={t('create.dnaPrimaryLabel')}
+              message={t('create.dnaPrimaryMessage')}
               messageTone={draft.dnaPrimary ? 'neutral' : 'danger'}
             >
               <SelectField
                 value={draft.dnaPrimary}
                 options={[
-                  { value: '', label: 'Select an archetype…' },
+                  { value: '', label: t('create.dnaPrimaryPlaceholder') },
                   ...DNA_PRIMARY_ARCHETYPES.map((archetype) => ({
                     value: archetype,
-                    label: `${archetype} — ${DNA_PRIMARY_DESCRIPTIONS[archetype]}`,
+                    label: `${archetype} - ${t(DNA_PRIMARY_DESCRIPTION_KEYS[archetype])}`,
                   })),
                 ]}
                 onValueChange={(value) => updateDraft({ dnaPrimary: value as DnaPrimaryArchetype | '' })}
               />
             </FieldShell>
             <FieldShell
-              label={`DNA secondary traits (optional, up to ${DNA_SECONDARY_MAX_RECOMMENDED} recommended)`}
+              label={t('create.dnaSecondaryLabel', { max: DNA_SECONDARY_MAX_RECOMMENDED })}
               message={
                 draft.dnaSecondary.length > DNA_SECONDARY_MAX_RECOMMENDED
-                  ? `You have ${draft.dnaSecondary.length} traits selected — Realm recommends at most ${DNA_SECONDARY_MAX_RECOMMENDED}. The request will still submit.`
-                  : 'Tap to toggle.'
+                  ? t('create.dnaSecondaryTooMany', { count: draft.dnaSecondary.length, max: DNA_SECONDARY_MAX_RECOMMENDED })
+                  : t('create.dnaSecondaryToggle')
               }
               messageTone={draft.dnaSecondary.length > DNA_SECONDARY_MAX_RECOMMENDED ? 'warning' : 'neutral'}
             >
@@ -839,7 +1055,7 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
                     <button
                       key={trait}
                       type="button"
-                      title={DNA_SECONDARY_DESCRIPTIONS[trait]}
+                      title={t(DNA_SECONDARY_DESCRIPTION_KEYS[trait])}
                       onClick={() => {
                         const next = active
                           ? draft.dnaSecondary.filter((value) => value !== trait)
@@ -868,8 +1084,8 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
               </div>
             </FieldShell>
             <FieldShell
-              label="World"
-              message={oasisWorld ? `Defaults to OASIS: ${oasisWorld.name}.` : 'OASIS default is unavailable until worlds load.'}
+              label={t('create.worldLabel')}
+              message={oasisWorld ? t('create.worldDefault', { name: oasisWorld.name }) : t('create.worldDefaultUnavailable')}
               messageTone={oasisWorld ? 'neutral' : 'danger'}
             >
               <SelectField
@@ -880,54 +1096,63 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
               />
             </FieldShell>
             {worldsQuery.isError ? (
-              <InlineAlert tone="danger">World selection is unavailable.</InlineAlert>
+              <InlineAlert tone="danger">{t('create.worldSelectionUnavailable')}</InlineAlert>
             ) : null}
             {!worldsQuery.isLoading && worlds.length === 0 ? (
-              <InlineAlert tone="warning">World selection is unavailable because Realm returned no selectable worlds.</InlineAlert>
+              <InlineAlert tone="warning">{t('create.noSelectableWorlds')}</InlineAlert>
             ) : null}
             {!worldsQuery.isLoading && worlds.length > 0 && draft.selectedWorldId && !selectedWorld ? (
-              <InlineAlert tone="danger">Selected world is no longer available.</InlineAlert>
+              <InlineAlert tone="danger">{t('create.selectedWorldUnavailable')}</InlineAlert>
             ) : null}
             {!readiness.ready ? (
-              <InlineAlert tone="warning">{readiness.errors.join('; ')}</InlineAlert>
+              <InlineAlert tone="warning">{translateCreateFixedMessages(readiness.errors, t)}</InlineAlert>
             ) : null}
             {!creationGraphReview.ready ? (
               <InlineAlert tone={creationGraphReview.canAccept ? 'warning' : 'danger'}>
-                {creationGraphReview.errors.join('; ')}
+                {translateGraphReviewErrors(creationGraphReview.errors, t)}
               </InlineAlert>
             ) : null}
             {localSubmitErrors.length > 0 ? (
-              <InlineAlert tone="danger">Create validation failed: {localSubmitErrors.join('; ')}</InlineAlert>
+              <InlineAlert tone="danger">{t('create.validationFailed', { errors: translateCreateFixedMessages(localSubmitErrors, t) })}</InlineAlert>
             ) : null}
             {submitResult ? (
               <InlineAlert tone={submitResult.ok ? 'success' : 'danger'}>
                 {submitResult.ok
-                  ? `Realm Agent created: ${submitResult.canonical.id}. Profile description completion: ${submitResult.profileSettings.status}.`
-                  : `${submitResult.message}${submitResult.createdCanonical ? ` Created agent id: ${submitResult.createdCanonical.id}.` : ''}`}
+                  ? t('create.createdSuccess', { id: submitResult.canonical.id, status: submitResult.profileSettings.status })
+                  : t('create.createdPartial', {
+                    message: translateCreateFixedMessage(submitResult.message, t),
+                    created: submitResult.createdCanonical
+                      ? t('create.createdAgentId', { id: submitResult.createdCanonical.id })
+                      : '',
+                  })}
               </InlineAlert>
             ) : null}
             {createdContext ? (
               <Surface tone="card" padding="md">
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="font-medium">Created Realm Agent</div>
+                    <div className="font-medium">{t('create.createdCardTitle')}</div>
                     <div className="ras-break-anywhere mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
                       @{createdContext.handle} · {createdContext.agentId}
                     </div>
                   </div>
-                  <StatusBadge tone="success">{createdContext.state || 'created'}</StatusBadge>
+                  <StatusBadge tone="success">{createdContext.state || t('create.createdStateFallback')}</StatusBadge>
                 </div>
                 {submitResult?.ok && submitResult.profileSettings.status !== 'not-requested' ? (
                   <InlineAlert tone="success" className="mt-3">
-                    Profile description is {submitResult.profileSettings.status === 'updated' ? 'saved through owner settings' : 'already current in owner settings'}.
+                    {t('create.profileDescriptionSaved', {
+                      status: submitResult.profileSettings.status === 'updated'
+                        ? t('create.profileDescriptionSavedUpdated')
+                        : t('create.profileDescriptionSavedCurrent'),
+                    })}
                   </InlineAlert>
                 ) : null}
                 <div className="mt-3 flex flex-wrap gap-3">
                   <Button tone="secondary" onClick={() => onOpenCreatedAgent?.(createdContext.agentId, 'detail')}>
-                    Open Agent Cockpit
+                    {t('create.openCockpit')}
                   </Button>
                   <Button tone="ghost" onClick={() => onOpenCreatedAgent?.(createdContext.agentId, 'settings')}>
-                    Open settings
+                    {t('create.openSettings')}
                   </Button>
                 </div>
               </Surface>
@@ -935,18 +1160,18 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
             <Surface tone="card" padding="md">
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600 }}>Reference image (optional)</div>
+                  <div style={{ fontWeight: 600 }}>{t('create.referenceTitle')}</div>
                   <div className="ras-text-muted ras-text-size-sm" style={{ marginTop: 4 }}>
-                    Generate a visual reference for owner review. Studio attaches it only when Runtime returns a public image URL that Realm can store.
+                    {t('create.referenceDescription')}
                   </div>
                 </div>
                 <StatusBadge tone={draft.referenceImageUrl ? 'success' : 'neutral'}>
-                  {draft.referenceImageUrl ? 'reference attached' : 'no reference yet'}
+                  {draft.referenceImageUrl ? t('create.referenceAttached') : t('create.noReferenceYet')}
                 </StatusBadge>
               </div>
               <FieldShell
-                label="Image prompt"
-                message="Auto-filled from your description + display name + DNA archetype. Edit before generating."
+                label={t('create.imagePromptLabel')}
+                message={t('create.imagePromptMessage')}
               >
                 <TextareaField
                   value={referenceImagePrompt}
@@ -966,22 +1191,22 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
                   loading={isGeneratingReferenceImage}
                   onClick={() => void runReferenceImageGeneration()}
                 >
-                  {draft.referenceImageUrl ? 'Regenerate reference image' : 'Generate reference image'}
+                  {draft.referenceImageUrl ? t('create.regenerateReference') : t('create.generateReference')}
                 </Button>
                 {draft.referenceImageUrl ? (
                   <Button tone="ghost" onClick={clearReferenceImage}>
-                    Clear reference image
+                    {t('create.clearReference')}
                   </Button>
                 ) : null}
               </div>
               {referenceImageResult && !referenceImageResult.ok ? (
                 <InlineAlert tone="danger" className="mt-3">
-                  Reference image failed: {referenceImageResult.message}
+                  {t('create.referenceFailed', { message: translateCreateFixedMessage(referenceImageResult.message, t) })}
                 </InlineAlert>
               ) : null}
               {draft.referenceImageUrl ? (
                 <div style={{ marginTop: 12 }}>
-                  <div className="ras-text-muted ras-text-size-sm" style={{ marginBottom: 6 }}>Preview</div>
+                  <div className="ras-text-muted ras-text-size-sm" style={{ marginBottom: 6 }}>{t('create.preview')}</div>
                   <div
                     style={{
                       width: '100%',
@@ -994,7 +1219,7 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
                   >
                     <img
                       src={draft.referenceImageUrl}
-                      alt="Agent reference"
+                      alt={t('create.referenceAlt')}
                       style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'cover' }}
                     />
                   </div>
@@ -1005,7 +1230,7 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
               ) : null}
             </Surface>
             <Button tone="primary" disabled={createDisabled} loading={createMutation.isPending} onClick={submitCreate}>
-              Create Realm Agent
+              {t('create.submit')}
             </Button>
           </div>
         </div>
@@ -1018,31 +1243,31 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
           />
           <Surface tone="card" padding="md">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="font-medium">Selected world preview</div>
-              <StatusBadge tone="neutral">world settings</StatusBadge>
+              <div className="font-medium">{t('create.worldPreview.title')}</div>
+              <StatusBadge tone="neutral">{t('create.worldPreview.badge')}</StatusBadge>
             </div>
             {!selectedWorld ? (
-              <EmptyState title="No selected world" description="Select a Realm world." />
+              <EmptyState title={t('create.worldPreview.noneTitle')} description={t('create.worldPreview.noneDescription')} />
             ) : worldPreviewQuery.isLoading ? (
-              <EmptyState title="Loading world preview" description="Loading selected world settings." />
+              <EmptyState title={t('create.worldPreview.loadingTitle')} description={t('create.worldPreview.loadingDescription')} />
             ) : worldPreviewQuery.isError ? (
-              <InlineAlert tone="danger">Selected-world settings preview is unavailable.</InlineAlert>
+              <InlineAlert tone="danger">{t('create.worldPreview.unavailable')}</InlineAlert>
             ) : worldPreviewQuery.data ? (
               <div className="mt-3 grid gap-3 text-[length:var(--nimi-type-body-sm-size)]">
                 <div>
                   <div className="ras-break-anywhere font-medium">{worldPreviewQuery.data.name}</div>
-                  <div className="ras-break-anywhere mt-1 text-[var(--nimi-text-muted)]">{worldPreviewQuery.data.tagline || worldPreviewQuery.data.description || 'basic setting text unavailable'}</div>
+                  <div className="ras-break-anywhere mt-1 text-[var(--nimi-text-muted)]">{worldPreviewQuery.data.tagline || worldPreviewQuery.data.description || t('create.worldPreview.basicUnavailable')}</div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <StatusBadge tone="info">{worldPreviewQuery.data.type || 'type unavailable'}</StatusBadge>
-                  <StatusBadge tone="neutral">{worldPreviewQuery.data.status || 'status unavailable'}</StatusBadge>
-                  <StatusBadge tone="neutral">{worldPreviewQuery.data.contentRating || 'rating unavailable'}</StatusBadge>
+                  <StatusBadge tone="info">{worldPreviewQuery.data.type || t('create.worldPreview.typeUnavailable')}</StatusBadge>
+                  <StatusBadge tone="neutral">{worldPreviewQuery.data.status || t('create.worldPreview.statusUnavailable')}</StatusBadge>
+                  <StatusBadge tone="neutral">{worldPreviewQuery.data.contentRating || t('create.worldPreview.ratingUnavailable')}</StatusBadge>
                 </div>
-                <div className="ras-break-anywhere text-[var(--nimi-text-secondary)]">{worldPreviewQuery.data.overview || 'overview unavailable'}</div>
+                <div className="ras-break-anywhere text-[var(--nimi-text-secondary)]">{worldPreviewQuery.data.overview || t('create.worldPreview.overviewUnavailable')}</div>
                 <div className="flex flex-wrap gap-2">
                   {worldPreviewQuery.data.themes.length > 0
                     ? worldPreviewQuery.data.themes.map((theme) => <StatusBadge key={theme} tone="neutral">{theme}</StatusBadge>)
-                    : <StatusBadge tone="warning">themes unavailable</StatusBadge>}
+                    : <StatusBadge tone="warning">{t('create.worldPreview.themesUnavailable')}</StatusBadge>}
                 </div>
               </div>
             ) : null}

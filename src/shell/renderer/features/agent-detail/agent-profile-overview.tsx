@@ -7,6 +7,7 @@ import {
   ownerScopeLabel,
   settingFieldDisplayValue,
 } from '@renderer/features/portfolio/OwnerPortfolio.shared.js';
+import { useStudioI18n } from '@renderer/i18n/use-studio-i18n.js';
 
 export function AgentProfileOverview({
   agent,
@@ -15,6 +16,7 @@ export function AgentProfileOverview({
   agent: OwnerPortfolioAgentDetail;
   compact?: boolean;
 }) {
+  const { t } = useStudioI18n();
   return (
     <Surface tone="panel" material="glass-regular" padding={compact ? 'md' : 'lg'} className="ras-radius-xl">
       <div
@@ -34,13 +36,13 @@ export function AgentProfileOverview({
               <div className="ras-profile-cover__heading">
                 <div className="ras-profile-cover__title-row">
                   <h2 className="ras-break-anywhere ras-profile-cover__title">
-                    {settingFieldDisplayValue(agent.displayName, 'Display name not set')}
+                    {settingFieldDisplayValue(agent.displayName, t('shared.displayNameNotSet'), t)}
                   </h2>
-                  <StatusBadge tone="info">Realm Agent</StatusBadge>
-                  <StatusBadge tone="neutral">current profile</StatusBadge>
+                  <StatusBadge tone="info">{t('agent.profile.realmAgentBadge')}</StatusBadge>
+                  <StatusBadge tone="neutral">{t('agent.profile.currentProfileBadge')}</StatusBadge>
                 </div>
                 <p className="ras-break-anywhere ras-profile-cover__handle">
-                  {agent.handle.value ? `@${agent.handle.value}` : settingFieldDisplayValue(agent.handle, 'handle not set')}
+                  {agent.handle.value ? `@${agent.handle.value}` : settingFieldDisplayValue(agent.handle, t('shared.handleNotSet'), t)}
                 </p>
               </div>
               <div className="ras-profile-fields">
@@ -58,30 +60,32 @@ export function AgentProfileOverview({
             <>
               <div className="ras-profile-cover__title-row">
                 <h2 className="ras-break-anywhere ras-profile-cover__title">
-                  {settingFieldDisplayValue(agent.displayName, 'Display name not set')}
+                  {settingFieldDisplayValue(agent.displayName, t('shared.displayNameNotSet'), t)}
                 </h2>
-                <StatusBadge tone="info">Realm Agent</StatusBadge>
+                <StatusBadge tone="info">{t('agent.profile.realmAgentBadge')}</StatusBadge>
               </div>
               <p className="ras-break-anywhere ras-text-secondary" style={{ margin: '4px 0 0' }}>
-                {agent.handle.value ? `@${agent.handle.value}` : settingFieldDisplayValue(agent.handle, 'handle not set')}
+                {agent.handle.value ? `@${agent.handle.value}` : settingFieldDisplayValue(agent.handle, t('shared.handleNotSet'), t)}
               </p>
               <p className="ras-break-anywhere ras-text-muted" style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.55 }}>
-                {settingFieldDisplayValue(agent.bio, 'Profile description not set')}
+                {settingFieldDisplayValue(agent.bio, t('shared.profileDescriptionNotSet'), t)}
               </p>
             </>
           ) : (
             <>
               <div className="ras-info-tile">
-                <div className="ras-info-tile__label">Ownership</div>
-                <div className="ras-info-tile__value">{ownerScopeLabel(agent.ownerScope)} Realm Agent</div>
+                <div className="ras-info-tile__label">{t('agent.profile.ownershipLabel')}</div>
+                <div className="ras-info-tile__value">
+                  {t('agent.profile.ownershipValue', { scope: ownerScopeLabel(agent.ownerScope, t) })}
+                </div>
               </div>
               {agent.friendCount.status === 'available' ? (
                 <div className="ras-info-tile">
-                  <div className="ras-info-tile__label">好友数 / friendCount</div>
-                  <div className="ras-info-tile__value">{detailFriendCountLabel(agent)}</div>
+                  <div className="ras-info-tile__label">{t('agent.profile.friendCountLabel')}</div>
+                  <div className="ras-info-tile__value">{detailFriendCountLabel(agent, t)}</div>
                 </div>
               ) : (
-                <InlineAlert tone="warning">{agent.friendCount.label}</InlineAlert>
+                <InlineAlert tone="warning">{detailFriendCountLabel(agent, t)}</InlineAlert>
               )}
               <EvidenceCard field={agent.ownership} />
               <EvidenceCard field={agent.world} />
@@ -92,9 +96,9 @@ export function AgentProfileOverview({
         {compact ? (
           <div className="ras-profile-meta__compact-badges">
             <StatusBadge tone={agent.friendCount.status === 'available' ? 'success' : 'warning'}>
-              {detailFriendCountLabel(agent)}
+              {detailFriendCountLabel(agent, t)}
             </StatusBadge>
-            <StatusBadge tone="neutral">{settingFieldDisplayValue(agent.world, 'world not set')}</StatusBadge>
+            <StatusBadge tone="neutral">{settingFieldDisplayValue(agent.world, t('shared.worldNotSet'), t)}</StatusBadge>
           </div>
         ) : null}
       </div>

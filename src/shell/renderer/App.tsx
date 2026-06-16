@@ -6,13 +6,16 @@ import { AppRoutes } from './app-shell/routes.js';
 import { ShellLayout } from './app-shell/shell-layout.js';
 import { AuthProvider } from './app-shell/auth-provider.js';
 import { studioQueryClient } from './infra/query-client.js';
+import { useStudioI18n } from './i18n/use-studio-i18n.js';
 
 export function App() {
+  const { t } = useStudioI18n();
+
   return (
     <ShellErrorBoundary
-      appName="Realm Agent Studio"
-      fallbackTitle="Realm Agent Studio renderer failed"
-      fallbackHint="Restart Realm Agent Studio after checking the renderer diagnostics."
+      appName={t('app.name')}
+      fallbackTitle={t('shell.error.title')}
+      fallbackHint={t('shell.error.hint')}
     >
       <QueryClientProvider client={studioQueryClient}>
         <TooltipProvider>

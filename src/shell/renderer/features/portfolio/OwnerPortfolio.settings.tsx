@@ -30,8 +30,46 @@ import {
   type OwnerAgentSettingsDraft,
 } from './setting-proposal.js';
 import { TechnicalReviewDetails } from './OwnerPortfolio.shared.js';
+import { useStudioI18n } from '../../i18n/use-studio-i18n.js';
+import type { StudioCopyKey } from '../../i18n/studio-copy.js';
+import type { StudioTranslateOptions } from '../../i18n/studio-i18n.js';
+
+type StudioTranslator = (key: StudioCopyKey, options?: StudioTranslateOptions) => string;
+
+const SETTINGS_FIXED_MESSAGE_KEYS: Record<string, StudioCopyKey> = {
+  [RAW_RULE_REVIEW_DEFERRED_REASON]: 'settings.error.rawRuleReviewDeferred',
+  'owner settings have no reviewed changes': 'settings.error.noReviewedChanges',
+  'natural-language setting intent missing': 'settings.error.intentMissing',
+  'Runtime settings proposal payload invalid.': 'settings.error.runtimeProposalPayloadInvalid',
+  'Runtime runtime.ai.text.generate runtime transport unavailable: Tauri IPC runtime transport is required.': 'settings.error.runtimeProposalTransportUnavailable',
+  'Runtime settings proposal output invalid.': 'settings.error.runtimeProposalOutputInvalid',
+  'Owner settings payload invalid.': 'settings.error.ownerSettingsPayloadInvalid',
+  'Realm owner settings update failed.': 'settings.error.ownerSettingsUpdateFailed',
+  'visibility payload invalid': 'settings.error.visibilityPayloadInvalid',
+  'Realm visibility update failed.': 'settings.error.visibilityUpdateFailed',
+  'Runtime projection requires worldId evidence from Realm MeService.getMyRealmAgent.': 'runtimeProjection.error.worldIdRequired',
+  'Runtime projection response did not include RUNTIME_PAYLOAD checksum summary.': 'runtimeProjection.error.checksumMissing',
+  'Realm runtime projection failed.': 'runtimeProjection.error.failed',
+  'Agent Chat readiness projection requires RealmAgent id and worldId evidence.': 'runtimeProjection.error.chatWorldRequired',
+  'Agent Chat readiness projection response did not include agent-specific RUNTIME_PAYLOAD summary.': 'runtimeProjection.error.chatChecksumMissing',
+  'Realm Agent Chat readiness projection failed.': 'runtimeProjection.error.chatFailed',
+};
+
+function translateSettingsFixedMessage(message: string, t: StudioTranslator): string {
+  const visibilityFieldInvalid = message.match(/^(.+) must be PUBLIC, FRIENDS, or PRIVATE$/);
+  if (visibilityFieldInvalid) {
+    return t('settings.error.visibilityFieldInvalid', { field: visibilityFieldInvalid[1] });
+  }
+  const key = SETTINGS_FIXED_MESSAGE_KEYS[message];
+  return key ? t(key) : message;
+}
+
+function translateSettingsFixedMessages(messages: string[], t: StudioTranslator): string {
+  return messages.map((message) => translateSettingsFixedMessage(message, t)).join('; ');
+}
 
 export function SettingProposalWorkspace({ agent, onAgentWrite }: { agent: OwnerPortfolioAgentDetail; onAgentWrite: () => Promise<void> }) {
+  const { t } = useStudioI18n();
   const settingsQuery = useQuery({
     queryKey: ['realm-agent-studio', 'agent-settings', agent.ownerScope, agent.id],
     queryFn: () => getPortfolioAgentSettings(agent),
@@ -119,180 +157,182 @@ export function SettingProposalWorkspace({ agent, onAgentWrite }: { agent: Owner
       <div className="grid min-w-0 gap-5 xl:grid-cols-[1fr_360px]">
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <h3 className="m-0 text-xl font-semibold">Agent settings</h3>
-            <StatusBadge tone="success">Realm save</StatusBadge>
-            <StatusBadge tone="neutral">owner-reviewed</StatusBadge>
+            <h3 className="m-0 text-xl font-semibold">{t('agent.settings.title')}</h3>
+            <StatusBadge tone="success">{t('common.realmSave')}</StatusBadge>
+            <StatusBadge tone="neutral">{t('common.ownerReviewed')}</StatusBadge>
           </div>
           <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-            Edit the agent's public identity, behavior notes, and communication style. Changes are reviewed before save.
+            {t('settings.workspace.description')}
           </p>
 
           {settingsQuery.isLoading ? (
-            <EmptyState title="Loading agent settings" description="Loading editable settings for this Realm Agent." />
+            <EmptyState title={t('settings.loadingTitle')} description={t('settings.loadingDescription')} />
           ) : null}
           {settingsQuery.isError ? (
             <InlineAlert tone="danger">
-              Agent settings unavailable: {settingsQuery.error instanceof Error ? settingsQuery.error.message : 'Realm agent settings read failed.'}
+              {t('settings.unavailable', {
+                message: settingsQuery.error instanceof Error ? settingsQuery.error.message : t('settings.readFailed'),
+              })}
             </InlineAlert>
           ) : null}
           {draft && settingsQuery.data ? (
             <div className="mt-4 grid gap-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <FieldShell label="Display name" message="Shown on the agent profile.">
+                <FieldShell label={t('settingField.displayName')} message={t('settings.displayNameMessage')}>
                   <TextField
                     value={draft.displayName}
-                    placeholder="Public display name"
+                    placeholder={t('settings.displayNamePlaceholder')}
                     onChange={(event) => updateDraft({ displayName: event.currentTarget.value })}
                   />
                 </FieldShell>
-                <FieldShell label="Greeting" message="The agent's opening line for public presentation.">
+                <FieldShell label={t('settingField.greeting')} message={t('settings.greetingMessage')}>
                   <TextField
                     value={draft.greeting}
-                    placeholder="Opening greeting"
+                    placeholder={t('settings.greetingPlaceholder')}
                     onChange={(event) => updateDraft({ greeting: event.currentTarget.value })}
                   />
                 </FieldShell>
               </div>
-              <FieldShell label="Description" message="Public description for the agent profile.">
+              <FieldShell label={t('settings.descriptionLabel')} message={t('settings.descriptionMessage')}>
                 <TextareaField
                   value={draft.description}
-                  placeholder="Public description"
+                  placeholder={t('settings.descriptionPlaceholder')}
                   onChange={(event) => updateDraft({ description: event.currentTarget.value })}
                 />
               </FieldShell>
               <div className="grid gap-4 md:grid-cols-2">
-                <FieldShell label="Public role" message="How the agent should be understood by visitors.">
+                <FieldShell label={t('settings.publicRoleLabel')} message={t('settings.publicRoleMessage')}>
                   <TextField
                     value={draft.publicRole}
-                    placeholder="Guide, mentor, companion..."
+                    placeholder={t('settings.publicRolePlaceholder')}
                     onChange={(event) => updateDraft({ publicRole: event.currentTarget.value })}
                   />
                 </FieldShell>
-                <FieldShell label="Relationship mode" message="The agent's preferred interaction posture.">
+                <FieldShell label={t('settings.relationshipModeLabel')} message={t('settings.relationshipModeMessage')}>
                   <TextField
                     value={draft.relationshipMode}
-                    placeholder="coach, friend, narrator..."
+                    placeholder={t('settings.relationshipModePlaceholder')}
                     onChange={(event) => updateDraft({ relationshipMode: event.currentTarget.value })}
                   />
                 </FieldShell>
               </div>
-              <FieldShell label="Worldview" message="The background, beliefs, and setting assumptions the agent should preserve.">
+              <FieldShell label={t('settings.worldviewLabel')} message={t('settings.worldviewMessage')}>
                 <TextareaField
                   value={draft.worldview}
-                  placeholder="Public worldview and background"
+                  placeholder={t('settings.worldviewPlaceholder')}
                   onChange={(event) => updateDraft({ worldview: event.currentTarget.value })}
                 />
               </FieldShell>
-              <FieldShell label="Personality summary" message="Saved as personality.summary.">
+              <FieldShell label={t('settings.personalitySummaryLabel')} message={t('settings.personalitySummaryMessage')}>
                 <TextareaField
                   value={draft.personalitySummary}
-                  placeholder="Owner-reviewed personality summary"
+                  placeholder={t('settings.personalitySummaryPlaceholder')}
                   onChange={(event) => updateDraft({ personalitySummary: event.currentTarget.value })}
                 />
               </FieldShell>
               <div className="grid gap-4 md:grid-cols-2">
-                <FieldShell label="Interests" message="Comma or newline separated; saved as personality.interests.">
+                <FieldShell label={t('settings.interestsLabel')} message={t('settings.interestsMessage')}>
                   <TextareaField
                     value={draft.interestsText}
-                    placeholder="strategy, tea, ruins"
+                    placeholder={t('settings.interestsPlaceholder')}
                     onChange={(event) => updateDraft({ interestsText: event.currentTarget.value })}
                   />
                 </FieldShell>
-                <FieldShell label="Goals" message="Comma or newline separated; saved as personality.goals.">
+                <FieldShell label={t('settings.goalsLabel')} message={t('settings.goalsMessage')}>
                   <TextareaField
                     value={draft.goalsText}
-                    placeholder="help users plan, keep lore coherent"
+                    placeholder={t('settings.goalsPlaceholder')}
                     onChange={(event) => updateDraft({ goalsText: event.currentTarget.value })}
                   />
                 </FieldShell>
               </div>
-              <FieldShell label="Content style" message="Saved as communication.contentStyle; no provider or model routing is included.">
+              <FieldShell label={t('settings.contentStyleLabel')} message={t('settings.contentStyleMessage')}>
                 <TextareaField
                   value={draft.contentStyle}
-                  placeholder="Concise, pragmatic, warm..."
+                  placeholder={t('settings.contentStylePlaceholder')}
                   onChange={(event) => updateDraft({ contentStyle: event.currentTarget.value })}
                 />
               </FieldShell>
               <div className="grid gap-4 md:grid-cols-3">
-                <FieldShell label="Formality">
+                <FieldShell label={t('settings.formalityLabel')}>
                   <SelectField
                     value={draft.formality}
                     options={[
-                      { value: '', label: 'Unset' },
-                      { value: 'casual', label: 'Casual' },
-                      { value: 'formal', label: 'Formal' },
-                      { value: 'slang', label: 'Slang' },
+                      { value: '', label: t('settings.option.unset') },
+                      { value: 'casual', label: t('settings.option.casual') },
+                      { value: 'formal', label: t('settings.option.formal') },
+                      { value: 'slang', label: t('settings.option.slang') },
                     ]}
                     onValueChange={(value) => updateDraft({ formality: value })}
                   />
                 </FieldShell>
-                <FieldShell label="Response length">
+                <FieldShell label={t('settings.responseLengthLabel')}>
                   <SelectField
                     value={draft.responseLength}
                     options={[
-                      { value: '', label: 'Unset' },
-                      { value: 'short', label: 'Short' },
-                      { value: 'medium', label: 'Medium' },
-                      { value: 'long', label: 'Long' },
+                      { value: '', label: t('settings.option.unset') },
+                      { value: 'short', label: t('settings.option.short') },
+                      { value: 'medium', label: t('settings.option.medium') },
+                      { value: 'long', label: t('settings.option.long') },
                     ]}
                     onValueChange={(value) => updateDraft({ responseLength: value })}
                   />
                 </FieldShell>
-                <FieldShell label="Sentiment">
+                <FieldShell label={t('settings.sentimentLabel')}>
                   <SelectField
                     value={draft.sentiment}
                     options={[
-                      { value: '', label: 'Unset' },
-                      { value: 'positive', label: 'Positive' },
-                      { value: 'neutral', label: 'Neutral' },
-                      { value: 'cynical', label: 'Cynical' },
+                      { value: '', label: t('settings.option.unset') },
+                      { value: 'positive', label: t('settings.option.positive') },
+                      { value: 'neutral', label: t('settings.option.neutral') },
+                      { value: 'cynical', label: t('settings.option.cynical') },
                     ]}
                     onValueChange={(value) => updateDraft({ sentiment: value })}
                   />
                 </FieldShell>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                <FieldShell label="Allowed themes" message="Comma or newline separated; saved as boundaries.allowedThemes.">
+                <FieldShell label={t('settings.allowedThemesLabel')} message={t('settings.allowedThemesMessage')}>
                   <TextareaField
                     value={draft.allowedThemesText}
-                    placeholder="adventure, friendship"
+                    placeholder={t('settings.allowedThemesPlaceholder')}
                     onChange={(event) => updateDraft({ allowedThemesText: event.currentTarget.value })}
                   />
                 </FieldShell>
-                <FieldShell label="Disallowed themes" message="Comma or newline separated; saved as boundaries.disallowedThemes.">
+                <FieldShell label={t('settings.disallowedThemesLabel')} message={t('settings.disallowedThemesMessage')}>
                   <TextareaField
                     value={draft.disallowedThemesText}
-                    placeholder="gore, harassment"
+                    placeholder={t('settings.disallowedThemesPlaceholder')}
                     onChange={(event) => updateDraft({ disallowedThemesText: event.currentTarget.value })}
                   />
                 </FieldShell>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                <FieldShell label="Target audience" message="Saved as positioning.targetAudience.">
+                <FieldShell label={t('settings.targetAudienceLabel')} message={t('settings.targetAudienceMessage')}>
                   <TextareaField
                     value={draft.targetAudience}
-                    placeholder="Who this agent is for"
+                    placeholder={t('settings.targetAudiencePlaceholder')}
                     onChange={(event) => updateDraft({ targetAudience: event.currentTarget.value })}
                   />
                 </FieldShell>
-                <FieldShell label="Positioning" message="How this agent should be presented and differentiated.">
+                <FieldShell label={t('settings.positioningLabel')} message={t('settings.positioningMessage')}>
                   <TextareaField
                     value={draft.positioning}
-                    placeholder="How this agent should be positioned"
+                    placeholder={t('settings.positioningPlaceholder')}
                     onChange={(event) => updateDraft({ positioning: event.currentTarget.value })}
                   />
                 </FieldShell>
               </div>
-              <FieldShell label="Natural-language intent" message="Describe the update in your own words before review.">
+              <FieldShell label={t('settings.intentLabel')} message={t('settings.intentMessage')}>
                 <TextareaField
                   value={draft.naturalLanguageIntent}
-                  placeholder="Describe the owner-reviewed setting intent"
+                  placeholder={t('settings.intentPlaceholder')}
                   onChange={(event) => updateDraft({ naturalLanguageIntent: event.currentTarget.value })}
                 />
               </FieldShell>
               <div className="flex flex-wrap gap-3">
                 <Button disabled={!draft.naturalLanguageIntent.trim()} onClick={useInstructionAsRuleCandidate}>
-                  Use as rule review note
+                  {t('settings.useAsRuleNote')}
                 </Button>
                 <Button
                   tone="secondary"
@@ -300,22 +340,22 @@ export function SettingProposalWorkspace({ agent, onAgentWrite }: { agent: Owner
                   loading={isProposing}
                   onClick={() => void requestRuntimeProposal()}
                 >
-                  Ask Runtime for proposal
+                  {t('settings.askRuntime')}
                 </Button>
               </div>
               {runtimeProposal ? (
                 <Surface tone="card" padding="md">
                   <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-medium">Runtime settings proposal</div>
+                      <div className="font-medium">{t('settings.runtimeProposalTitle')}</div>
                       <div className="ras-break-anywhere mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
                         {runtimeProposal.ok
                           ? runtimeProposal.proposal.rationale
-                          : runtimeProposal.message}
+                          : translateSettingsFixedMessage(runtimeProposal.message, t)}
                       </div>
                     </div>
                     <StatusBadge tone={runtimeProposal.ok ? 'info' : 'danger'}>
-                      {runtimeProposal.ok ? 'candidate' : 'unavailable'}
+                      {runtimeProposal.ok ? t('common.candidate') : t('common.sourceUnavailable')}
                     </StatusBadge>
                   </div>
                   {runtimeProposal.ok ? (
@@ -326,54 +366,54 @@ export function SettingProposalWorkspace({ agent, onAgentWrite }: { agent: Owner
                         ))}
                       </div>
                       <InlineAlert tone="info" className="mt-3">
-                        Runtime output is candidate material only. Apply it to the form, review the fields, then save through Realm.
+                        {t('settings.runtimeCandidateBoundary')}
                       </InlineAlert>
                       <div className="mt-3">
-                        <Button onClick={applyRuntimeProposal}>Apply proposal to fields</Button>
+                        <Button onClick={applyRuntimeProposal}>{t('settings.applyProposal')}</Button>
                       </div>
                     </>
                   ) : (
                     <InlineAlert tone="danger" className="mt-3">
-                      Draft fields were preserved. Edit manually or retry after Runtime text generation is available.
+                      {t('settings.runtimeUnavailableDetail')}
                     </InlineAlert>
                   )}
                 </Surface>
               ) : null}
-              <FieldShell label="Rule review note" message="Visible note for future advanced review. It is not saved with this settings update.">
+              <FieldShell label={t('settings.ruleReviewNoteLabel')} message={t('settings.ruleReviewNoteMessage')}>
                 <TextareaField
                   value={draft.rawRuleTextCandidate}
-                  placeholder="Advanced note for future rule-content review"
+                  placeholder={t('settings.ruleReviewNotePlaceholder')}
                   onChange={(event) => updateDraft({ rawRuleTextCandidate: event.currentTarget.value })}
                 />
               </FieldShell>
-              <FieldShell label="Profile cover URL" message="Current cover projection. Editing will be enabled once this profile asset path is admitted.">
-                <TextField readOnly value={agent.profileCoverUrl.value} placeholder="profileCoverUrl read unavailable" />
+              <FieldShell label={t('settingField.profileCoverUrl')} message={t('settings.profileCoverMessage')}>
+                <TextField readOnly value={agent.profileCoverUrl.value} placeholder={t('settings.profileCoverUnavailable')} />
               </FieldShell>
               {proposal?.ok ? (
                 <InlineAlert tone="info">
-                  {proposal.changedSettingKeys.join(', ')} ready for owner-reviewed settings save.
+                  {t('settings.readyForSave', { keys: proposal.changedSettingKeys.join(', ') })}
                 </InlineAlert>
               ) : (
                 <InlineAlert tone="warning">
-                  {proposal?.errors.join('; ') || 'Owner settings payload unavailable.'}
+                  {proposal ? translateSettingsFixedMessages(proposal.errors, t) : t('settings.payloadUnavailable')}
                 </InlineAlert>
               )}
               {draft.rawRuleTextCandidate.trim() ? (
                 <InlineAlert tone="warning">
-                  {RAW_RULE_REVIEW_DEFERRED_REASON}
+                  {t('settings.error.rawRuleReviewDeferred')}
                 </InlineAlert>
               ) : null}
               {result ? (
                 <InlineAlert tone={result.ok ? 'success' : 'danger'}>
                   {result.ok
-                    ? 'Settings saved. The agent profile has been refreshed.'
-                    : result.message}
+                    ? t('settings.saved')
+                    : translateSettingsFixedMessage(result.message, t)}
                 </InlineAlert>
               ) : null}
               <Checkbox
                 checked={ownerReviewed}
                 onChange={(event) => setOwnerReviewed(event.currentTarget.checked)}
-                label="Human review complete"
+                label={t('common.humanReviewComplete')}
               />
               <div className="flex flex-wrap gap-3">
                 <Button
@@ -381,7 +421,7 @@ export function SettingProposalWorkspace({ agent, onAgentWrite }: { agent: Owner
                   loading={isSaving}
                   onClick={() => void saveOwnerSettings()}
                 >
-                  Save owner settings
+                  {t('settings.save')}
                 </Button>
                 <Button
                   tone="secondary"
@@ -392,7 +432,7 @@ export function SettingProposalWorkspace({ agent, onAgentWrite }: { agent: Owner
                     setResult(null);
                   }}
                 >
-                  Reset
+                  {t('settings.reset')}
                 </Button>
               </div>
             </div>
@@ -400,16 +440,16 @@ export function SettingProposalWorkspace({ agent, onAgentWrite }: { agent: Owner
         </div>
         <div className="min-w-0">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h4 className="m-0 text-base font-semibold">Review summary</h4>
-            <StatusBadge tone={proposal?.ok ? 'success' : 'warning'}>{proposal?.ok ? 'ready' : 'not ready'}</StatusBadge>
+            <h4 className="m-0 text-base font-semibold">{t('settings.reviewSummary')}</h4>
+            <StatusBadge tone={proposal?.ok ? 'success' : 'warning'}>{proposal?.ok ? t('settings.ready') : t('settings.notReady')}</StatusBadge>
           </div>
-          <TechnicalReviewDetails title="Settings technical review">
+          <TechnicalReviewDetails title={t('settings.technicalReview')}>
             <pre className="ras-json-preview m-0 min-h-80 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-card)] p-3 text-xs">
-              {proposal?.ok ? JSON.stringify(proposal.preview, null, 2) : proposal?.errors.join('; ') || 'No owner settings loaded.'}
+              {proposal?.ok ? JSON.stringify(proposal.preview, null, 2) : proposal?.errors.join('; ') || t('settings.noLoaded')}
             </pre>
           </TechnicalReviewDetails>
           {result ? (
-            <TechnicalReviewDetails title="Settings save response">
+            <TechnicalReviewDetails title={t('settings.saveResponse')}>
               <pre className="ras-json-preview m-0 min-h-24 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-card)] p-3 text-xs">
                 {JSON.stringify(result, null, 2)}
               </pre>
@@ -421,14 +461,15 @@ export function SettingProposalWorkspace({ agent, onAgentWrite }: { agent: Owner
   );
 }
 
-export const VISIBILITY_FIELD_LABELS: Record<AgentVisibilityField, string> = {
-  accountVisibility: 'Account discoverability',
-  defaultPostVisibility: 'Default post visibility',
-  dmVisibility: 'Direct message visibility',
-  profileVisibility: 'Profile visibility',
+export const VISIBILITY_FIELD_LABEL_KEYS: Record<AgentVisibilityField, StudioCopyKey> = {
+  accountVisibility: 'visibility.field.accountVisibility',
+  defaultPostVisibility: 'visibility.field.defaultPostVisibility',
+  dmVisibility: 'visibility.field.dmVisibility',
+  profileVisibility: 'visibility.field.profileVisibility',
 };
 
 export function VisibilitySettingsWorkspace({ agent, onAgentWrite }: { agent: OwnerPortfolioAgentDetail; onAgentWrite: () => Promise<void> }) {
+  const { t } = useStudioI18n();
   const visibilityQuery = useQuery({
     queryKey: ['realm-agent-studio', 'owner-agent-visibility', agent.id],
     queryFn: () => getAgentVisibilitySettings(agent.id),
@@ -482,27 +523,29 @@ export function VisibilitySettingsWorkspace({ agent, onAgentWrite }: { agent: Ow
   return (
     <Surface tone="panel" padding="lg" className="mt-5">
       <div className="flex min-w-0 flex-wrap items-center gap-3">
-        <h3 className="m-0 text-xl font-semibold">Visibility settings</h3>
-        <StatusBadge tone="info">Realm save</StatusBadge>
-        <StatusBadge tone="neutral">not lifecycle</StatusBadge>
+        <h3 className="m-0 text-xl font-semibold">{t('visibility.title')}</h3>
+        <StatusBadge tone="info">{t('common.realmSave')}</StatusBadge>
+        <StatusBadge tone="neutral">{t('common.notLifecycle')}</StatusBadge>
       </div>
       <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-        Control how this agent appears socially. Visibility changes do not create lifecycle, moderation, or scheduling state.
+        {t('visibility.description')}
       </p>
 
       {visibilityQuery.isLoading ? (
-        <EmptyState title="Loading visibility settings" description="Loading current profile and interaction visibility." />
+        <EmptyState title={t('visibility.loadingTitle')} description={t('visibility.loadingDescription')} />
       ) : null}
       {visibilityQuery.isError ? (
         <InlineAlert tone="danger">
-          Visibility settings unavailable: {visibilityQuery.error instanceof Error ? visibilityQuery.error.message : 'Realm visibility read failed.'}
+          {t('visibility.unavailable', {
+            message: visibilityQuery.error instanceof Error ? visibilityQuery.error.message : t('visibility.readFailed'),
+          })}
         </InlineAlert>
       ) : null}
       {draft && visibilityQuery.data ? (
         <div className="mt-4 grid gap-4">
           <div className="grid gap-3 md:grid-cols-2">
             {AGENT_VISIBILITY_FIELDS.map((field) => (
-              <FieldShell key={field} label={VISIBILITY_FIELD_LABELS[field]} message="Allowed values: PUBLIC, FRIENDS, PRIVATE.">
+              <FieldShell key={field} label={t(VISIBILITY_FIELD_LABEL_KEYS[field])} message={t('visibility.allowedValues')}>
                 <SelectField
                   value={draft[field]}
                   options={AGENT_VISIBILITY_VALUES.map((value) => ({ value, label: value }))}
@@ -514,18 +557,18 @@ export function VisibilitySettingsWorkspace({ agent, onAgentWrite }: { agent: Ow
           <Checkbox
             checked={humanReviewed}
             onChange={(event) => setHumanReviewed(event.currentTarget.checked)}
-            label="Human review complete"
+            label={t('common.humanReviewComplete')}
           />
           {!hasChanges ? (
             <InlineAlert tone="warning">
-              Visibility settings have no reviewed changes.
+              {t('visibility.noChanges')}
             </InlineAlert>
           ) : null}
           {result ? (
             <InlineAlert tone={result.ok ? 'success' : 'danger'}>
               {result.ok
-                ? 'Visibility settings saved.'
-                : result.message}
+                ? t('visibility.saved')
+                : translateSettingsFixedMessage(result.message, t)}
             </InlineAlert>
           ) : null}
           <div className="flex flex-wrap gap-3">
@@ -534,7 +577,7 @@ export function VisibilitySettingsWorkspace({ agent, onAgentWrite }: { agent: Ow
               loading={isSaving}
               onClick={() => void saveVisibility()}
             >
-              Save visibility
+              {t('visibility.save')}
             </Button>
             <Button
               disabled={!visibilityQuery.data || isSaving}
@@ -546,10 +589,10 @@ export function VisibilitySettingsWorkspace({ agent, onAgentWrite }: { agent: Ow
                 }
               }}
             >
-              Reset draft
+              {t('visibility.resetDraft')}
             </Button>
           </div>
-          <TechnicalReviewDetails title="Visibility technical review">
+          <TechnicalReviewDetails title={t('visibility.technicalReview')}>
             <pre className="ras-json-preview m-0 min-h-24 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-card)] p-3 text-xs">
               {result ? JSON.stringify(result, null, 2) : JSON.stringify({ current: visibilityQuery.data, draft }, null, 2)}
             </pre>
@@ -561,6 +604,7 @@ export function VisibilitySettingsWorkspace({ agent, onAgentWrite }: { agent: Ow
 }
 
 export function RuntimeProjectionWorkspace({ agent }: { agent: OwnerPortfolioAgentDetail }) {
+  const { t } = useStudioI18n();
   const [projectionResult, setProjectionResult] = useState<
     RuntimeProjectionSummaryResult | AgentChatReadinessSummaryResult | null
   >(null);
@@ -596,32 +640,32 @@ export function RuntimeProjectionWorkspace({ agent }: { agent: OwnerPortfolioAge
   return (
     <Surface tone="panel" padding="lg" className="mt-5">
       <div className="flex min-w-0 flex-wrap items-center gap-3">
-        <h3 className="m-0 text-xl font-semibold">World context summary</h3>
-        <StatusBadge tone="info">AI context</StatusBadge>
-        <StatusBadge tone="neutral">summary only</StatusBadge>
-        <StatusBadge tone="warning">read only</StatusBadge>
+        <h3 className="m-0 text-xl font-semibold">{t('runtimeProjection.title')}</h3>
+        <StatusBadge tone="info">{t('common.aiContext')}</StatusBadge>
+        <StatusBadge tone="neutral">{t('common.summaryOnly')}</StatusBadge>
+        <StatusBadge tone="warning">{t('common.readOnly')}</StatusBadge>
       </div>
       <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-        Preview the world context available to AI-assisted workflows without exposing or editing raw rules.
+        {t('runtimeProjection.description')}
       </p>
       <div className="mt-4 flex flex-wrap gap-3">
         <Button disabled={isProjecting || agent.world.status !== 'available'} loading={isProjecting} onClick={() => void projectRuntimeContext()}>
-          Generate world context summary
+          {t('runtimeProjection.generateContext')}
         </Button>
         <Button disabled={isProjecting || agent.world.status !== 'available'} loading={isProjecting} onClick={() => void projectAgentChatReadinessContext()}>
-          Generate Agent Chat readiness summary
+          {t('runtimeProjection.generateChatReadiness')}
         </Button>
       </div>
       {agent.world.status !== 'available' ? (
         <InlineAlert tone="warning">
-          World context is unavailable because this agent does not have a resolved world.
+          {t('runtimeProjection.worldUnavailable')}
         </InlineAlert>
       ) : null}
       {projectionResult ? (
         <InlineAlert tone={projectionResult.ok ? 'success' : 'danger'} className="mt-3">
           {projectionResult.ok
-            ? 'Runtime context summary generated. No agent settings were changed.'
-            : projectionResult.message}
+            ? t('runtimeProjection.generated')
+            : translateSettingsFixedMessage(projectionResult.message, t)}
         </InlineAlert>
       ) : null}
       {projectionResult?.ok ? (
@@ -635,7 +679,7 @@ export function RuntimeProjectionWorkspace({ agent }: { agent: OwnerPortfolioAge
         </dl>
       ) : null}
       {projectionResult ? (
-        <TechnicalReviewDetails title="World context request details">
+        <TechnicalReviewDetails title={t('runtimeProjection.requestDetails')}>
           <pre className="ras-json-preview m-0 mt-3 min-h-24 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-panel)] p-3 text-xs">
             {JSON.stringify(projectionResult.submitted, null, 2)}
           </pre>

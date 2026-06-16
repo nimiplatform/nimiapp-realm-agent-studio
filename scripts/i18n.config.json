@@ -1,0 +1,35 @@
+{
+  "supportedLocales": [
+    "en",
+    "zh"
+  ],
+  "audit": {
+    "scopeDirs": [
+      "src/shell/renderer"
+    ],
+    "extensions": [
+      ".ts",
+      ".tsx",
+      ".html"
+    ],
+    "excludePathPatterns": [
+      "/i18n/",
+      "/__fixtures__/",
+      ".test.",
+      ".spec."
+    ],
+    "allowTextPatterns": [
+      "^Realm Agent Studio$",
+      "^RAS$",
+      "^https://\\.\\.\\.$",
+      "^[A-Z0-9_]+$",
+      "^[-–—]$",
+      "^\\d+(\\.\\d+)?$",
+      "^(1:1|4:5|16:9)$",
+      "^(PUBLIC|FRIENDS|PRIVATE)$",
+      "^(IMAGE|VIDEO|AUDIO)$",
+      "^(RESOURCE|ASSET|BUNDLE)$",
+      "^(Sprite2D|Live2D|VRM|OASIS)$"
+    ]
+  }
+}

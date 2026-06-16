@@ -12,8 +12,10 @@ import {
   createRendererEntryModuleLoader,
 } from '@nimiplatform/kit/shell/renderer/bootstrap';
 import { installStudioGlobalErrorLogging } from './infra/telemetry/renderer-log.js';
+import { ensureStudioI18nInitialized, translateStudioCopy } from './i18n/studio-i18n.js';
 import './styles.css';
 
+ensureStudioI18nInitialized();
 installStudioGlobalErrorLogging();
 installNimiShellRuntimeBridge();
 
@@ -30,8 +32,8 @@ function EntryFallback() {
   return (
     <AmbientBackground variant="mesh" className="ras-entry-fallback">
       <Surface tone="panel" padding="lg" className="ras-entry-fallback__panel">
-        <div className="ras-entry-fallback__title">Realm Agent Studio</div>
-        <LoadingSkeleton lines={2} aria-label="Loading Realm Agent Studio" />
+        <div className="ras-entry-fallback__title">{translateStudioCopy('app.name')}</div>
+        <LoadingSkeleton lines={2} aria-label={translateStudioCopy('shell.entry.loading')} />
       </Surface>
     </AmbientBackground>
   );

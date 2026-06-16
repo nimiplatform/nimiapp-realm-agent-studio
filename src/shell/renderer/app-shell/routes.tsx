@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Surface } from '@nimiplatform/kit/ui';
+import { useStudioI18n } from '../i18n/use-studio-i18n.js';
 
 const AgentListPage = lazy(() =>
   import('../features/agent-list/agent-list-page.js').then((m) => ({ default: m.AgentListPage })),
@@ -38,9 +39,10 @@ const StudioAIConfigPage = lazy(() =>
 );
 
 function PageFallback() {
+  const { t } = useStudioI18n();
   return (
     <Surface tone="canvas" padding="none" className="flex h-full items-center justify-center border-0 ras-text-muted">
-      Loading…
+      {t('common.loadingEllipsis')}
     </Surface>
   );
 }

@@ -43,6 +43,12 @@ jobs:
       - name: Spec consistency
         run: pnpm check:spec-consistency
 
+      - name: i18n key parity
+        run: pnpm i18n:check
+
+      - name: i18n hardcoded text audit
+        run: pnpm i18n:audit
+
       - name: Typecheck
         run: pnpm typecheck
 

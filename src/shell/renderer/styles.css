@@ -203,6 +203,10 @@ a {
   gap: 12px;
 }
 
+.ras-language-switcher {
+  flex-shrink: 0;
+}
+
 .ras-shell__body {
   position: relative;
   z-index: 10;

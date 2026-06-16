@@ -7,8 +7,10 @@ import {
   SettingProposalWorkspace,
   VisibilitySettingsWorkspace,
 } from '@renderer/features/portfolio/OwnerPortfolio.settings.js';
+import { useStudioI18n } from '@renderer/i18n/use-studio-i18n.js';
 
 function AgentSettingsPageForScope() {
+  const { t } = useStudioI18n();
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
   const refreshAgentReads = useRefreshAgentReads(agentId ?? '');
@@ -16,7 +18,7 @@ function AgentSettingsPageForScope() {
   if (!agentId) {
     return (
       <Surface tone="panel" material="glass-regular" padding="lg">
-        <InlineAlert tone="danger">Agent id missing from route.</InlineAlert>
+        <InlineAlert tone="danger">{t('common.agentIdMissing')}</InlineAlert>
       </Surface>
     );
   }
@@ -26,12 +28,12 @@ function AgentSettingsPageForScope() {
       {(agent) => (
         <>
           <WorkspaceIntro
-            title="Agent settings"
-            badges={<StatusBadge tone="info">workspace</StatusBadge>}
-            description="Edit owner Realm Agent identity, communication, and boundary fields through the admitted owner settings ingress."
+            title={t('agent.settings.title')}
+            badges={<StatusBadge tone="info">{t('common.workspace')}</StatusBadge>}
+            description={t('agent.settings.description')}
             actions={(
               <Button tone="secondary" onClick={() => navigate(`/portfolio/${agentId}/settings/review`)}>
-                Open consistency review
+                {t('agent.settings.openReview')}
               </Button>
             )}
           />
