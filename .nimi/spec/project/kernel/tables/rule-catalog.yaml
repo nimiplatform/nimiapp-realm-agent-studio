@@ -400,7 +400,7 @@ rules:
   - rule_id: R-RAS-CORE-007
     level: must
     title: 'realm-agent-studio-must-scope'
-    statement: 'Realm Agent Studio MUST keep its default owner portfolio scoped to current-authenticated-user MASTER_OWNED Realm Agents. The only admitted WORLD_OWNED surface is the separate Forge-imported system-curation lane for Halliday-owned Forge-imported agents; generic world-created agents, world NPCs, and world maintainer tooling remain out of scope.'
+    statement: 'Realm Agent Studio MUST keep its owner portfolio scoped to current-authenticated-user MASTER_OWNED Realm Agents. WORLD_OWNED agents, Forge-imported system curation, generic world-created agents, world NPCs, and world maintainer tooling remain out of scope.'
     doc_ref: project/kernel/core-rules.md
   - rule_id: R-RAS-CORE-008
     level: must_not
@@ -455,12 +455,12 @@ rules:
   - rule_id: R-RAS-SCOPE-002
     level: must_not
     title: 'no-localagent-or-world-or-forge-sources'
-    statement: 'Studio does not manage LocalAgent private runtime forks, generic world-created agents, world NPCs, or Forge package sources outside the separate admitted Forge-imported system-curation lane.'
+    statement: 'Studio does not manage LocalAgent private runtime forks, generic world-created agents, world NPCs, Forge-imported system curation, or Forge package sources.'
     doc_ref: project/kernel/product-scope.md
   - rule_id: R-RAS-SCOPE-003
     level: must_not
     title: 'owner-led-first-version-depth'
-    statement: 'First-version depth is owner-led plus a separate Forge-imported system-curation lane: no invited editors, no team workspace, and no world-owner override over owner-created agents.'
+    statement: 'First-version depth is owner-led: no invited editors, no team workspace, and no world-owner override over owner-created agents.'
     doc_ref: project/kernel/product-scope.md
   - rule_id: R-RAS-SCOPE-004
     level: required
@@ -525,7 +525,7 @@ rules:
   - rule_id: R-RAS-SCOPE-016
     level: forbidden
     title: 'no-world-agent-or-npc-tooling'
-    statement: 'Generic world-created agents, world-owned NPCs, non-Forge-imported world agents, and world maintainer tooling are out of scope.'
+    statement: 'Generic world-created agents, world-owned NPCs, Forge-imported system curation, and world maintainer tooling are out of scope.'
     doc_ref: project/kernel/product-scope.md
   - rule_id: R-RAS-SCOPE-017
     level: forbidden
@@ -608,9 +608,9 @@ rules:
     statement: 'Local draft save, local asset preview, AI generation, and local schedule creation are never Realm publish or public asset success.'
     doc_ref: project/kernel/product-scope.md
   - rule_id: R-RAS-SCOPE-033
-    level: required
-    title: 'forge-imported-system-agent-lane'
-    statement: 'Halliday-owned Forge-imported WORLD_OWNED RealmAgents may be updated only through the curated system-agent settings ingress; this lane is not owner quota/listing truth or generic world-created agent tooling.'
+    level: forbidden
+    title: 'forge-imported-system-agent-curation-out-of-scope'
+    statement: 'Forge-imported WORLD_OWNED system-agent curation belongs outside Realm Agent Studio and must not become owner quota, listing, detail, settings, media, voice, chat-readiness, or metric truth.'
     doc_ref: project/kernel/product-scope.md
   - rule_id: R-RAS-AGENT-001
     level: must_not
@@ -644,8 +644,8 @@ rules:
     doc_ref: project/kernel/realm-agent-object.md
   - rule_id: R-RAS-AGENT-007
     level: must
-    title: 'studio-manages-owner-and-forge-imported-only'
-    statement: 'Realm Agent Studio manages user-owned public Realm Agents and the separate admitted Forge-imported system-curation lane only.'
+    title: 'studio-manages-user-owned-public-agents-only'
+    statement: 'Realm Agent Studio manages user-owned public Realm Agents only.'
     doc_ref: project/kernel/realm-agent-object.md
   - rule_id: R-RAS-AGENT-008
     level: must_not
@@ -655,7 +655,7 @@ rules:
   - rule_id: R-RAS-AGENT-009
     level: must_not
     title: 'exclude-world-owned-agents'
-    statement: 'Studio owner-created scope excludes WORLD_OWNED agents and is limited to current user MASTER_OWNED except for the explicit separate Forge-imported system-curation lane.'
+    statement: 'Studio owner-created scope is limited to current user MASTER_OWNED Realm Agents and excludes WORLD_OWNED agents.'
     doc_ref: project/kernel/realm-agent-object.md
   - rule_id: R-RAS-AGENT-010
     level: must
@@ -789,13 +789,13 @@ rules:
     doc_ref: project/kernel/realm-agent-object.md
   - rule_id: R-RAS-AGENT-036
     level: must_not
-    title: 'forge-imported-lane-does-not-weaken-owner-contract'
-    statement: 'The separate Forge-imported system-curation lane must not weaken /api/me/agents, owner-agent quotas, or generic world-created/NPC boundaries.'
+    title: 'forge-imported-surfaces-not-studio-authority'
+    statement: 'Studio must not call /api/agent/forge-imported-system/** as portfolio, detail, settings, media, voice, chat-readiness, owner-quota, or metric authority.'
     doc_ref: project/kernel/realm-agent-object.md
   - rule_id: R-RAS-AGENT-037
-    level: must
-    title: 'forge-imported-settings-system-provenance'
-    statement: 'Accepted Forge-imported settings writes use SYSTEM AgentRule provenance and forge-imported-system-agent-settings source refs.'
+    level: must_not
+    title: 'no-forge-imported-system-provenance-claims'
+    statement: 'Studio must not claim SYSTEM AgentRule provenance or forge-imported-system-agent-settings source refs.'
     doc_ref: project/kernel/realm-agent-object.md
   - rule_id: R-RAS-SETTING-001
     level: required
@@ -1425,7 +1425,7 @@ rules:
   - rule_id: R-RAS-METRIC-012
     level: forbidden
     title: 'no-world-owned-portfolio'
-    statement: 'Backend owner-portfolio semantics are current user scope and MASTER_OWNED only; WORLD_OWNED / NPC agents are not owner portfolio items. The Forge-imported system-curation lane is separate.'
+    statement: 'Backend owner-portfolio semantics are current user scope and MASTER_OWNED only; WORLD_OWNED / NPC agents are not owner portfolio items, and Forge-imported system curation is outside Realm Agent Studio.'
     doc_ref: project/kernel/metrics-and-realm-gaps.md
   - rule_id: R-RAS-METRIC-013
     level: must_not
@@ -1720,7 +1720,7 @@ rules:
   - rule_id: R-RAS-STORY-016
     level: must
     title: 'owner-authority-required'
-    statement: 'Owner-created agent edits require owner authority; generic world-created agents remain out of scope outside the separate admitted Forge-imported system-curation lane.'
+    statement: 'Owner-created agent edits require owner authority; generic world-created agents and Forge-imported system curation remain out of scope.'
     doc_ref: project/kernel/storybook.md
   - rule_id: R-RAS-STORY-017
     level: must
@@ -1755,7 +1755,7 @@ rules:
   - rule_id: R-RAS-STORY-023
     level: must_not
     title: 'portfolio-canonical-read-surfaces'
-    statement: 'Owner portfolio uses GET /api/me/agents and /{agentId}; the separate Forge-imported system-curation lane uses /api/agent/forge-imported-system/** and must not be confused with generic world-owned/NPC lists or creator/dev surfaces.'
+    statement: 'Owner portfolio uses GET /api/me/agents and /{agentId}; /api/agent/forge-imported-system/**, creator, and dev surfaces are not Studio canonical surfaces.'
     doc_ref: project/kernel/storybook.md
   - rule_id: R-RAS-STORY-024
     level: must
@@ -1813,9 +1813,9 @@ rules:
     statement: 'Single reviewed local draft scheduling is app-local; local schedule success is not Realm publish success or scheduling gap.'
     doc_ref: project/kernel/storybook.md
   - rule_id: R-RAS-STORY-035
-    level: must
+    level: must_not
     title: 'forge-imported-setting-save-surface'
-    statement: 'Forge-imported system-agent setting save uses PATCH /api/agent/forge-imported-system/agents/{agentId}/settings and preserves SYSTEM provenance.'
+    statement: 'Forge-imported system-agent setting save through PATCH /api/agent/forge-imported-system/agents/{agentId}/settings belongs outside Realm Agent Studio and must not be exposed as an owner settings path.'
     doc_ref: project/kernel/storybook.md
   - rule_id: R-RAS-ACCEPT-001
     level: required
@@ -1885,7 +1885,7 @@ rules:
   - rule_id: R-RAS-ACCEPT-014
     level: must_not
     title: 'no-placeholder-or-localagent-leak'
-    statement: 'No LocalAgent private state, generic world-created agent lane, creator/world-maintainer surface, fake return, or placeholder success leaks. The separate Forge-imported system-curation lane is the only admitted WORLD_OWNED surface.'
+    statement: 'No LocalAgent private state, generic world-created agent lane, Forge-imported system curation, creator/world-maintainer surface, fake return, or placeholder success leaks.'
     doc_ref: project/kernel/product-acceptance-and-execution-plan.md
   - rule_id: R-RAS-ACCEPT-015
     level: required
@@ -1940,7 +1940,7 @@ rules:
   - rule_id: R-RAS-ACCEPT-025
     level: required
     title: 'gate-a10-verification-evidence'
-    statement: 'A10: Final closeout includes desktop smoke, tests, boundary checks, spec governance, no REST bypass, and acceptance matrix per gate.'
+    statement: 'A10: Final closeout includes desktop smoke, tests, boundary checks, spec governance, no app REST bypass, Runtime-mediated Realm transport, and acceptance matrix per gate.'
     doc_ref: project/kernel/product-acceptance-and-execution-plan.md
   - rule_id: R-RAS-ACCEPT-026
     level: required
@@ -1960,7 +1960,7 @@ rules:
   - rule_id: R-RAS-ACCEPT-029
     level: required
     title: 'wave-w3-portfolio-create-detail'
-    statement: 'W3 closure goal: finish owner list/filter/sort, create, world selection, post-create flow, detail state, owner boundaries, and the separately admitted Forge-imported system-agent boundary.'
+    statement: 'W3 closure goal: finish owner list/filter/sort, create, world selection, post-create flow, detail state, owner boundaries, and forbidden creator/world/system surface boundaries.'
     doc_ref: project/kernel/product-acceptance-and-execution-plan.md
   - rule_id: R-RAS-ACCEPT-030
     level: required

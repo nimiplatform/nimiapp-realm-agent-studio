@@ -12,7 +12,7 @@ updated: 2026-05-25
 
 This kernel is the single authoritative product/app contract source for Realm Agent Studio. Every kernel document below carries explicit `R-RAS-<DOMAIN>-NNN` rule IDs. Implementation, tests, and review must cite these IDs; they must not duplicate kernel rule prose.
 
-Realm Agent Studio is the owner operation center for user-owned public Realm Agents as durable Agent IP, plus a separate admitted Forge-imported system-curation lane for Halliday-owned Forge-imported agents. It is not a general agent management center. Generic world-created agents, world NPCs, LocalAgent private state, Forge package provenance, and provider/model routing are out of scope.
+Realm Agent Studio is the owner operation center for user-owned public Realm Agents as durable Agent IP. It is not a general agent management center. Generic world-created agents, world NPCs, Forge-imported system curation, LocalAgent private state, Forge package provenance, and provider/model routing are out of scope.
 
 ## Rule ID Format
 
@@ -38,14 +38,12 @@ The canonical rule catalog enumerating every admitted rule ID lives in [`tables/
 
 - `GET /api/me/agents` is the Studio canonical owner my-agents portfolio list surface.
 - `GET /api/me/agents/{agentId}` is the Studio canonical owner my-agents detail surface.
-- `GET /api/agent/forge-imported-system/agents` and `GET /api/agent/forge-imported-system/agents/{agentId}` are the separate admitted Forge-imported system-curation read surfaces for Halliday-owned Forge-imported `WORLD_OWNED` RealmAgents.
 - `POST /api/agent` / `AgentsService.agentControllerCreate` is the Studio owner-scoped Realm Agent create surface.
 - `GET /api/agent/handles/check` / `AgentsService.agentControllerCheckHandle` is the Studio create preflight handle availability surface; it writes no truth and must not replace Realm create confirmation.
 - `GET/PATCH /api/me/agents/{agentId}/settings` is the Studio owner-scoped settings read/write surface; the write surface compiles owner-reviewed structured settings into Realm profile writes and versioned `AgentRule` truth writes and is not raw `AgentRule` CRUD.
-- `GET/PATCH /api/agent/forge-imported-system/agents/{agentId}/settings` is the separate admitted Forge-imported system-curation settings surface. It writes reviewed settings for Halliday-owned Forge-imported agents with `SYSTEM` AgentRule provenance and must not weaken the `/api/me/agents` owner quota/listing contract.
 - `POST /api/agent/accounts/{id}/avatar` / `AgentsService.agentControllerSelectAvatar` is the Studio owner-scoped avatar URL selection surface; it is not a Resource/Binding upload path.
 - `GET/PATCH /api/agent/accounts/{id}/visibility` are owner-scoped social visibility setting surfaces; they must not be mapped into a Realm Agent lifecycle or publication state machine.
-- `GET /api/creator/agents` and `GET /api/agent/dev/my-agents` are evidence inputs only and must not become Studio canonical surfaces.
+- `GET /api/creator/agents`, `/api/agent/forge-imported-system/**`, and `GET /api/agent/dev/my-agents` belong outside Realm Agent Studio and must not become owner portfolio surfaces.
 - Top-level `friendCount` is the only admitted first-version owner-visible metric field.
 
 ## Kernel Document Read Order
@@ -87,19 +85,19 @@ Active inputs absorbed into the kernel above (not parallel authority):
 
 ## Desktop Runtime Caller Authority
 
-Realm Agent Studio's standalone Tauri shell uses a fixed developer-registered
-local Runtime account caller:
+Realm Agent Studio's standalone Tauri shell uses a fixed Nimi local first-party
+Runtime account caller:
 
 | Field | Value |
 | --- | --- |
 | `appId` | `nimi.realm-agent-studio` |
-| `appInstanceId` | `nimi.realm-agent-studio.local-developer` |
-| `deviceId` | `realm-agent-studio-local-developer-device` |
-| `mode` | `ACCOUNT_CALLER_MODE_LOCAL_DEVELOPER_APP` |
+| `appInstanceId` | `nimi.realm-agent-studio.local-first-party` |
+| `deviceId` | `local-first-party-device` |
+| `mode` | `ACCOUNT_CALLER_MODE_LOCAL_FIRST_PARTY_APP` |
 
-Desktop Developer Mode owns the Runtime developer-registration gate. Studio may
-request developer registration in dev builds, but it must not call first-party
-account-control or raw-token surfaces.
+Runtime owns account session, app-session metadata, and mediated Realm unary
+invocation. Studio must not call first-party account-control or raw-token
+surfaces directly, and must not expose app-owned Realm token custody.
 
 ## Hard Boundaries
 

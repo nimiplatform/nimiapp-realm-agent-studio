@@ -7,7 +7,7 @@
 - **App name (English)**: Realm Agent Studio
 - **Canonical Nimi app_id**: `nimi.realm-agent-studio`
 - **Tauri identifier**: `nimi.realm-agent-studio`
-- **One-line**: Owner-facing creation and operation desktop app for user-owned public Realm Agents, plus a separate admitted Forge-imported system-curation lane.
+- **One-line**: Owner-facing creation and operation desktop app for user-owned public Realm Agents.
 - **Status**: Pre-Alpha, not yet launched.
 
 ## Architecture
@@ -39,15 +39,10 @@ from `@nimiplatform/nimi-coding`; refresh with `pnpm exec nimicoding start
 --yes` after bumping the package.
 
 Studio canonical owner portfolio surfaces are `/api/me/agents` and
-`/api/me/agents/{agentId}`. `/portfolio` must not call Forge-imported system
-surfaces. `/api/creator/agents` and `/api/agent/dev/my-agents` are
-evidence-only and must not be promoted into Studio canonical surfaces.
-
-The only admitted `WORLD_OWNED` Studio lane is the separate Forge-imported
-system-curation lane under `/api/agent/forge-imported-system/**` and
-`/curation/forge-imported-system/**`. It is limited to Halliday-owned
-Forge-imported agents, is authorized by Realm backend authority, and must not
-become a generic world-created/NPC management surface.
+`/api/me/agents/{agentId}`. `/portfolio` must not call Forge-imported system,
+creator, world-maintainer, or dev-agent surfaces. `/api/creator/agents`,
+`/api/agent/dev/my-agents`, and `/api/agent/forge-imported-system/**` belong
+outside Realm Agent Studio.
 
 The first-version owner-visible metric field is top-level `friendCount`.
 Do not invent `agentFriendCount`. Do not zero-fill if the source is
@@ -56,8 +51,8 @@ unavailable — render an explicit "source unavailable" state.
 ## Hard Boundaries
 
 ### Scope boundary
-- **In scope:** owner-created Realm Agents, the Forge-imported system-agent lane, public profile/settings, visual identity candidates, agent-authored posts, single local schedule, source-backed `friendCount`.
-- **Out of scope:** LocalAgent private runtime / memory / emotion state, generic world-created agent management, agent direct chat from Studio, version history / rollback diffs, performance analytics, gift/economic settlement, team collaboration.
+- **In scope:** owner-created Realm Agents, public profile/settings, visual identity candidates, agent-authored posts, single local schedule, source-backed `friendCount`.
+- **Out of scope:** LocalAgent private runtime / memory / emotion state, creator/world-created agent management, Forge-imported system curation, agent direct chat from Studio, version history / rollback diffs, performance analytics, gift/economic settlement, team collaboration.
 
 ### Failure mode
 - Fail-closed on every typed contract or source-availability gap. No pseudo-success, no synthesized placeholders, no zero-fill metrics, no parallel app-local shadow truth.

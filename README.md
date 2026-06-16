@@ -76,11 +76,11 @@ Realm Agent Studio inherits the Runtime account session from the Nimi
 desktop shell. On first launch:
 
 1. `runStudioBootstrap` loads `RuntimeDefaults` and constructs a
-   developer-registered Runtime client (`@nimiplatform/sdk`).
+   first-party Runtime client (`@nimiplatform/sdk`).
 2. If no Runtime account session exists, the kit's `DesktopShellAuthPage`
    renders the login UI; on success, Runtime owns refresh-token custody and
    projects an account identity into the app store.
-3. Once authenticated, the shell renders the workspace shell with the ten
+3. Once authenticated, the shell renders the workspace shell with the owner
    storybook routes (Portfolio, Create, Detail, Settings + Review, Assets +
    Voice, Posts + Schedule, Insights).
 
@@ -101,11 +101,6 @@ access or refresh tokens locally (PO-SHELL-008 / K-ACCSVC-008 equivalent).
 | `/portfolio/:agentId/posts` | Agent-authored post draft, attachment, publish |
 | `/portfolio/:agentId/posts/schedule` | Single app-local foreground-only post schedule |
 | `/portfolio/:agentId/insights` | friendCount, source availability, stale warnings |
-| `/curation/forge-imported-system` | Halliday/Admin Forge-imported system-agent curation list |
-| `/curation/forge-imported-system/:agentId` | Forge-imported system-agent curation detail |
-| `/curation/forge-imported-system/:agentId/settings` | Forge-imported system-agent reviewed settings save |
-| `/curation/forge-imported-system/:agentId/assets` | Forge-imported system-agent profile media and voice promotion |
-| `/curation/forge-imported-system/:agentId/insights` | Forge-imported system-agent source availability and friendCount |
 
 ## Spec Authority
 
@@ -117,10 +112,10 @@ are in [`.nimi/spec/project/AGENTS.md`](./.nimi/spec/project/AGENTS.md). Every r
 carries an explicit `R-RAS-<DOMAIN>-NNN` identifier.
 
 Studio canonical owner portfolio surfaces are `/api/me/agents` and
-`/api/me/agents/{agentId}`. The separate Forge-imported system-curation lane
-uses `/api/agent/forge-imported-system/**` and must not be merged into
-`/api/me/agents`. `/api/creator/agents` and `/api/agent/dev/my-agents` are
-evidence-only and must not be promoted into Studio canonical surfaces.
+`/api/me/agents/{agentId}`. `/api/creator/agents`,
+`/api/agent/forge-imported-system/**`, and `/api/agent/dev/my-agents` belong
+outside Realm Agent Studio and must not be promoted into owner portfolio
+surfaces.
 
 `.nimi/{config,contracts,methodology}/**` are package-canonical projections from
 `@nimiplatform/nimi-coding`; refresh with `pnpm exec nimicoding start --yes`

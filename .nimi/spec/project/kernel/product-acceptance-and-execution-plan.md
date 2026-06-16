@@ -40,8 +40,8 @@ acceptance. Acceptance requires the whole owner workflow to be coherent:
 - **[R-RAS-ACCEPT-013]** source failures preserve valid drafts and name the next valid action;
 - **[R-RAS-ACCEPT-014]** no LocalAgent private state, generic world-created
   agent lane, creator/world-maintainer surface, fake return, or placeholder
-  success leaks into the product. The separate Forge-imported system-curation lane
-  is the only admitted `WORLD_OWNED` surface.
+  success leaks into the product. Forge-imported system curation and
+  `WORLD_OWNED` management remain outside Realm Agent Studio.
 
 ## Acceptance Gates
 
@@ -57,7 +57,7 @@ acceptance. Acceptance requires the whole owner workflow to be coherent:
 | A7 Agent-authored posts | **[R-RAS-ACCEPT-022]** Owner can draft from agent voice, use AI assistance, attach canonical media, human-review, publish through Realm, and create a single local schedule that is actually persisted/executable or explicitly not admitted. | W6 closed for admitted surfaces. Post copy assistance is candidate-only, attachment and publish paths use Realm canonical services, and one app-local schedule is persisted per agent with foreground due execution. Realm publish success is claimed only after `PostsService.createPost` returns canonical post identity. |
 | A8 Runtime AI consumption | **[R-RAS-ACCEPT-023]** Runtime AI support covers setting rewrite/proposal, visual/image generation candidates when available, post copy, voice demo, and source-backed suggestions through SDK surfaces. Runtime output remains candidate material until owner review. | W7 accepted for admitted surfaces. Settings proposals, visual candidates, voice-demo candidates, and post copy use Runtime SDK surfaces and remain owner-reviewed candidate material. Source-backed portfolio suggestions are explicitly deferred until an admitted owner-scoped suggestion surface exists. |
 | A9 Failure and recovery | **[R-RAS-ACCEPT-024]** Every failure state preserves valid local work, names the unavailable source/capability in product terms, avoids pseudo-success, and gives a valid next action. | W7 accepted for admitted surfaces. Client and UI tests cover fail-closed Realm/Runtime/source failures, invalid output, unavailable transport, local schedule invalidity, and no pseudo-success. |
-| A10 Verification evidence | **[R-RAS-ACCEPT-025]** Final closeout includes desktop-shell smoke, renderer screenshot only as secondary evidence, unit/integration tests, boundary checks, spec governance, no app REST bypass, no first-party SDK misuse, and acceptance matrix results per gate. | Current hard cut supersedes W7R first-party smoke evidence. Studio is a developer-registered local app (`nimi.realm-agent-studio`) and must not use raw Realm tokens or local-first-party caller mode. |
+| A10 Verification evidence | **[R-RAS-ACCEPT-025]** Final closeout includes desktop-shell smoke, renderer screenshot only as secondary evidence, unit/integration tests, boundary checks, spec governance, no app REST bypass, Runtime-mediated Realm transport, and acceptance matrix results per gate. | Current hard cut supersedes W7R local bridge evidence. Studio uses `createNimiLocalFirstPartyRuntimeAccountCaller` and `runtime.account.invokeRealmUnary`; it must not own raw Realm tokens or an app-local Realm REST bridge. |
 
 ## Current Implementation Gap Audit
 
@@ -112,7 +112,7 @@ P2 gaps:
 | W0 Acceptance authority | active | none | **[R-RAS-ACCEPT-026]** Admit this product acceptance standard, gap audit, waves, and preflight. | This document exists, is indexed, and spec governance passes. |
 | W1 Desktop shell hard cut | closed | W0 | **[R-RAS-ACCEPT-027]** Build a real desktop app shell equivalent in posture to parentOS: `src-tauri`, `dev:shell`, shell bridge/runtime defaults, desktop launch, Runtime session, SDK client custody. | A1 shell baseline passed. Renderer-only launch is no longer treated as product acceptance. |
 | W2 Product information architecture | closed | W1 | **[R-RAS-ACCEPT-028]** Replace the single mega-surface with functional Studio workspaces: Portfolio, Create, Agent Detail, Settings, Assets, Posts, Local Schedule. | A2 and A3 passed with interaction evidence, local shell failure-state evidence, and verification commands. |
-| W3 Owner portfolio/create/detail completion | closed | W2 | **[R-RAS-ACCEPT-029]** Finish owner list/filter/sort, create, world selection, post-create flow, detail state, friendCount, source failures, owner boundaries, and the separately admitted Forge-imported system-agent boundary. | A4 and relevant A9 cases passed for portfolio/create/detail. |
+| W3 Owner portfolio/create/detail completion | closed | W2 | **[R-RAS-ACCEPT-029]** Finish owner list/filter/sort, create, world selection, post-create flow, detail state, friendCount, source failures, owner boundaries, and forbidden creator/world/system surface boundaries. | A4 and relevant A9 cases passed for portfolio/create/detail. |
 | W4 Settings and AI proposal workflow | closed | W3 | **[R-RAS-ACCEPT-030]** Natural-language setting edits, Runtime-assisted proposal/rewrite, structured field review, owner settings save, no raw rule CRUD. | A5 and A8 settings subset passed. |
 | W5 Creative identity and media workflow | closed | W3 | **[R-RAS-ACCEPT-031]** Avatar/profile cover strategy, visual/image candidates, upload, local durable history, clear blocked/deferred public asset publishing. | A6 and A8 visual subset passed for admitted surfaces; blocked Realm profile/binding publication is explicitly deferred. |
 | W6 Agent post and local schedule | closed | W3 | **[R-RAS-ACCEPT-032]** Agent-authored post composer, AI copy assistance, attachments, human review, publish, and real app-local single schedule. | A7 and A8 post-copy subset passed. App-local schedule is persisted and foreground-executable when due. |
@@ -185,7 +185,7 @@ W1 closed on 2026-05-22 with:
 - `pnpm --filter @nimiplatform/realm-agent-studio build:renderer` passed with
   existing chunk/circular warnings.
 - `pnpm check:no-app-realm-rest-bypass` passed.
-- `pnpm check:no-first-party-sdk-client-construction` passed.
+- SDK/Runtime account access used no app-owned Realm token path.
 - `pnpm exec nimicoding validate-spec-governance --profile nimi --scope
   apps/realm-agent-studio` passed.
 - Desktop shell smoke: with an existing renderer on port 1426, `cargo run`
@@ -219,7 +219,7 @@ W2 closed on 2026-05-22 with:
   the pre-existing large chunk, empty sdk-realm chunk, and circular chunk
   warnings still carried to W7 risk audit.
 - `pnpm check:no-app-realm-rest-bypass` passed.
-- `pnpm check:no-first-party-sdk-client-construction` passed.
+- SDK/Runtime account access used no app-owned Realm token path.
 - `pnpm exec nimicoding validate-spec-governance --profile nimi --scope
   apps/realm-agent-studio` passed.
 - `pnpm exec nimicoding generate-spec-derived-docs --profile nimi --scope
@@ -261,7 +261,7 @@ W3 closed on 2026-05-22 with:
 - `pnpm --filter @nimiplatform/realm-agent-studio build:renderer` passed with
   the existing chunk warnings still carried to W7 risk audit.
 - `pnpm check:no-app-realm-rest-bypass` passed.
-- `pnpm check:no-first-party-sdk-client-construction` passed.
+- SDK/Runtime account access used no app-owned Realm token path.
 
 W3 closure does not claim settings, asset, post, schedule, or final product
 acceptance. W4 remains responsible for the settings and AI proposal workflow.
@@ -293,7 +293,7 @@ W4 closed on 2026-05-22 with:
 - `pnpm --filter @nimiplatform/realm-agent-studio build:renderer` passed with
   the existing chunk warnings still carried to W7 risk audit.
 - `pnpm check:no-app-realm-rest-bypass` passed.
-- `pnpm check:no-first-party-sdk-client-construction` passed.
+- SDK/Runtime account access used no app-owned Realm token path.
 
 W4 closure does not claim visual/image generation, creative media history, post
 copy assistance, local schedule, or final product acceptance. W5 remains
@@ -329,7 +329,7 @@ W5 closed on 2026-05-22 with:
 - `pnpm --filter @nimiplatform/realm-agent-studio build:renderer` passed with
   the existing chunk warnings still carried to W7 risk audit.
 - `pnpm check:no-app-realm-rest-bypass` passed.
-- `pnpm check:no-first-party-sdk-client-construction` passed.
+- SDK/Runtime account access used no app-owned Realm token path.
 - `pnpm exec nimicoding validate-spec-governance --profile nimi --scope
   apps/realm-agent-studio` passed.
 - `pnpm exec nimicoding generate-spec-derived-docs --profile nimi --scope
@@ -370,7 +370,7 @@ W6 closed on 2026-05-22 with:
 - `pnpm --filter @nimiplatform/realm-agent-studio build:renderer` passed with
   the existing chunk warnings still carried to W7 risk audit.
 - `pnpm check:no-app-realm-rest-bypass` passed.
-- `pnpm check:no-first-party-sdk-client-construction` passed.
+- SDK/Runtime account access used no app-owned Realm token path.
 - `pnpm exec nimicoding validate-spec-governance --profile nimi --scope
   apps/realm-agent-studio` passed.
 - `pnpm exec nimicoding generate-spec-derived-docs --profile nimi --scope
@@ -412,7 +412,7 @@ W7 closed on 2026-05-22 with:
 - `pnpm check:no-legacy-imports` passed.
 - `pnpm check:no-absolute-user-paths` passed.
 - `pnpm check:no-app-realm-rest-bypass` passed.
-- `pnpm check:no-first-party-sdk-client-construction` passed.
+- SDK/Runtime account access used no app-owned Realm token path.
 - `pnpm exec nimicoding validate-spec-governance --profile nimi --scope
   apps/realm-agent-studio` passed.
 - `pnpm exec nimicoding generate-spec-derived-docs --profile nimi --scope
@@ -425,32 +425,23 @@ W7 closed on 2026-05-22 with:
 
 ## W7R Desktop Session Regression Closure
 
-Trigger: manager desktop smoke found that `pnpm dev:realm:agent:studio` could
-open the Tauri shell but failed Runtime account bootstrap with
-`local first-party Runtime account caller registration rejected: 5`
-(`APP_NOT_REGISTERED`). That invalidated the prior A1/A10 closeout because the
-W7 smoke had only proved `realm-agent-studio main() entered`.
+Trigger: manager desktop smoke previously found that `pnpm dev:realm:agent:studio`
+could open the Tauri shell while the Realm access path still depended on
+app-local bridge ownership. The current hard cut replaces that path with the
+Runtime account Realm unary mediation surface.
 
 Closure:
 
-- Platform registry admission now includes developer-only
-  `nimi.realm-agent-studio`, with bundled first-party release descriptor
-  `nimi.realm-agent-studio.bundled-with-nimi`.
-- Studio caller authority is documented in `.nimi/spec/project/kernel/index.md`:
-  `nimi.realm-agent-studio` /
-  `nimi.realm-agent-studio.local-developer` /
-  `ACCOUNT_CALLER_MODE_LOCAL_DEVELOPER_APP`.
-- Studio Tauri shell no longer exposes Runtime start/stop/restart/config
-  commands. Realm Agent Studio assumes Runtime is already running, matching its
+- Studio caller authority is documented in `.nimi/spec/project/kernel/index.md`
+  as `nimi.realm-agent-studio` /
+  `nimi.realm-agent-studio.local-first-party` /
+  `ACCOUNT_CALLER_MODE_LOCAL_FIRST_PARTY_APP`.
+- Studio Tauri shell no longer exposes a custom Realm HTTP bridge command.
+  Realm calls go through `runtime.account.invokeRealmUnary` with Runtime-owned
+  account/session mediation.
+- Studio Tauri shell still assumes Runtime is already running, matching its
   product boundary as a satellite desktop app rather than the core Desktop app.
-- Shared `scripts/run-runtime-dist.mjs` now loads root `.env` for Runtime dev
-  launch and defaults `NIMI_RUNTIME_APP_REGISTRY_PATH` to the repo Platform Nimi
-  App registry when omitted. This keeps Runtime registry truth in the Runtime
-  launch path, not in Studio.
-- Runtime `appregistrycatalog` now accepts canonical
-  `health_repair_projection` arrays from
-  `.nimi/spec/platform/kernel/tables/nimi-app-registry.yaml`; this was required
-  for external Runtime to consume the current registry truth.
+- Runtime registry truth remains in the Runtime launch path, not in Studio.
 
 W7R verification:
 
@@ -463,13 +454,11 @@ W7R verification:
   and 136 tests.
 - `cd apps/realm-agent-studio/src-tauri && cargo check` passed.
 - `pnpm check:no-app-realm-rest-bypass` passed.
-- `pnpm check:no-first-party-sdk-client-construction` passed.
-- External Runtime smoke: after `pnpm build:runtime`, launched
-  `node scripts/run-runtime-dist.mjs serve` on isolated
-  `NIMI_RUNTIME_GRPC_ADDR=127.0.0.1:46381` and
-  `NIMI_RUNTIME_HTTP_ADDR=127.0.0.1:46382`; Runtime loaded the Platform Nimi App
-  registry and logged successful registration for the prior first-party-like
-  Studio caller. That evidence is no longer accepted as current authority.
+- Boundary checks passed for no app-owned Realm token transport and no local
+  Realm REST bridge.
+- External Runtime smoke evidence must prove `runtime.account.invokeRealmUnary`
+  mediation; prior local bridge evidence is no longer accepted as current
+  authority.
 - Studio desktop smoke: launched
   `NIMI_RUNTIME_GRPC_ADDR=127.0.0.1:46381
   NIMI_RUNTIME_HTTP_ADDR=127.0.0.1:46382

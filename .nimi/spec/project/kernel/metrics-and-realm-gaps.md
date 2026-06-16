@@ -102,9 +102,9 @@ Remaining citation/details work:
 Studio uses the current-user owner-owned RealmAgent list/read surface as the
 first-version my-agents / owner-created-agents portfolio read surface. **[R-RAS-METRIC-012]** Its
 backend semantics are current authenticated user scope and `MASTER_OWNED` only;
-`WORLD_OWNED` / NPC agents are not owner portfolio items. The Forge-imported
-system-curation lane is a separate admitted surface and must not alter
-`friendCount` or owner-quota semantics.
+`WORLD_OWNED` / NPC agents are not owner portfolio items. Forge-imported
+system curation is outside Realm Agent Studio and must not alter `friendCount`
+or owner-quota semantics.
 
 Current evidence:
 
