@@ -32,6 +32,11 @@ import {
   saveLocalPostSchedule,
   type LocalPostScheduleRecord,
 } from './local-post-schedule-store.js';
+import {
+  buildContentVariantsFromAgent,
+  type ContentVariant,
+  type ContentVariantBuildResult,
+} from './content-variant.js';
 import { TechnicalReviewDetails } from './OwnerPortfolio.shared.js';
 
 type LocalCreativeAssetCandidate = {
@@ -61,6 +66,8 @@ export function createEmptyLocalPostScheduleInput(): LocalPostScheduleInput {
 
 export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAgentDetail; mode: 'posts' | 'schedule' }) {
   const [draft, setDraft] = useState<LocalPostDraftInput>(() => createEmptyPostDraft());
+  const [contentVariantIntent, setContentVariantIntent] = useState('');
+  const [contentVariants, setContentVariants] = useState<ContentVariantBuildResult | null>(null);
   const [postCopyIntent, setPostCopyIntent] = useState('');
   const [postCopyResult, setPostCopyResult] = useState<RuntimePostCopyProposalResult | null>(null);
   const [isProposingPostCopy, setIsProposingPostCopy] = useState(false);
@@ -89,6 +96,8 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
 
   useEffect(() => {
     setDraft(createEmptyPostDraft());
+    setContentVariantIntent('');
+    setContentVariants(null);
     setPostCopyIntent('');
     setPostCopyResult(null);
     setIsProposingPostCopy(false);
@@ -115,6 +124,7 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
 
   function updateDraft(patch: Partial<LocalPostDraftInput>) {
     setDraft((current) => ({ ...current, ...patch }));
+    setContentVariants(null);
     setPayloadPreview(null);
     setPublishResult(null);
     setTextResourceResult(null);
@@ -124,6 +134,20 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
     setSchedulePreview(null);
     setSchedulePublishResult(null);
     setScheduleErrors([]);
+  }
+
+  function buildContentVariantBoard() {
+    setContentVariants(buildContentVariantsFromAgent(agent, draft, contentVariantIntent));
+  }
+
+  function useContentVariant(variant: ContentVariant) {
+    updateDraft({
+      caption: variant.caption,
+      tagsText: variant.tagsText,
+      humanReviewed: false,
+      attachmentEnabled: variant.attachmentPlan === 'optional-ready-resource' ? draft.attachmentEnabled : false,
+    });
+    setPostCopyResult(null);
   }
 
   function updateScheduleInput(patch: Partial<LocalPostScheduleInput>) {
@@ -322,6 +346,67 @@ export function CreativePostWorkspace({ agent, mode }: { agent: OwnerPortfolioAg
           </p>
 
           <div className="mt-4 grid gap-4">
+            {!isScheduleWorkspace ? <Surface tone="card" padding="md">
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="font-medium">Content Studio variants</div>
+                    <StatusBadge tone="info">review board</StatusBadge>
+                    <StatusBadge tone="warning">candidate only</StatusBadge>
+                  </div>
+                  <div className="mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
+                    Build multiple caption/tag/image-prompt variants from current agent state and owner intent. Applying a variant never publishes.
+                  </div>
+                </div>
+                <Button tone="secondary" onClick={buildContentVariantBoard}>
+                  Build variants
+                </Button>
+              </div>
+              <FieldShell label="Owner intent" message="What should this agent post about?">
+                <TextareaField
+                  value={contentVariantIntent}
+                  placeholder="Announce a new artifact review pass"
+                  onChange={(event) => {
+                    setContentVariantIntent(event.currentTarget.value);
+                    setContentVariants(null);
+                  }}
+                />
+              </FieldShell>
+              {contentVariants && !contentVariants.changed ? (
+                <InlineAlert tone="warning" className="mt-3">
+                  {contentVariants.errors.join('; ')}
+                </InlineAlert>
+              ) : null}
+              {contentVariants?.changed ? (
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  {contentVariants.variants.map((variant) => (
+                    <Surface key={variant.key} tone="panel" padding="md">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-medium">{variant.title}</div>
+                        <StatusBadge tone="neutral">{variant.attachmentPlan}</StatusBadge>
+                      </div>
+                      <p className="ras-break-anywhere m-0 mt-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-primary)]">
+                        {variant.caption}
+                      </p>
+                      <div className="ras-break-anywhere mt-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
+                        Tags: {variant.tagsText || 'none'}
+                      </div>
+                      <div className="ras-break-anywhere mt-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
+                        Image prompt: {variant.imagePrompt}
+                      </div>
+                      <ul className="m-0 mt-3 grid list-none gap-1 p-0 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-secondary)]">
+                        {variant.reviewChecklist.map((item) => <li key={item}>{item}</li>)}
+                      </ul>
+                      <div className="mt-3">
+                        <Button tone="secondary" size="sm" onClick={() => useContentVariant(variant)}>
+                          Use variant
+                        </Button>
+                      </div>
+                    </Surface>
+                  ))}
+                </div>
+              ) : null}
+            </Surface> : null}
             {!isScheduleWorkspace ? <Surface tone="card" padding="md">
               <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">

@@ -35,6 +35,11 @@ import {
   loadLocalCreativeAssetHistory,
   type CreativeAssetHistoryRecord,
 } from './creative-asset-history.js';
+import {
+  buildIdentityPackFromAgent,
+  type IdentityPackBuildResult,
+  type IdentityPackCandidate,
+} from './identity-pack.js';
 import { CandidateFactGrid, TechnicalReviewDetails } from './OwnerPortfolio.shared.js';
 
 export function createVisualMediaCandidateInput(): VisualMediaCandidateInput {
@@ -76,6 +81,7 @@ export function createVoiceDemoCandidateInput(agent: OwnerPortfolioAgentDetail):
 }
 
 export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: OwnerPortfolioAgentDetail; onAgentWrite: () => Promise<void> }) {
+  const [identityPack, setIdentityPack] = useState<IdentityPackBuildResult | null>(null);
   const [visualImageDraft, setVisualImageDraft] = useState(() => createVisualImageGenerationDraft());
   const [visualImageResult, setVisualImageResult] = useState<RuntimeVisualImageGenerationResult | null>(null);
   const [isGeneratingVisualImage, setIsGeneratingVisualImage] = useState(false);
@@ -106,6 +112,7 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
   const voicePreviewUrl = voiceResult?.ok ? voiceResult.runtime.previewUrls[0] || '' : '';
 
   useEffect(() => {
+    setIdentityPack(null);
     setVisualImageDraft(createVisualImageGenerationDraft());
     setVisualImageResult(null);
     setIsGeneratingVisualImage(false);
@@ -125,6 +132,27 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
     setVoiceResult(null);
     setIsSynthesizingVoice(false);
   }, [agent.id]);
+
+  function buildIdentityPack() {
+    setIdentityPack(buildIdentityPackFromAgent(agent));
+  }
+
+  function useIdentityCandidate(candidate: IdentityPackCandidate) {
+    if (candidate.key === 'voice-demo') {
+      updateVoiceDraft({ scriptText: candidate.prompt });
+      return;
+    }
+    updateVisualImageDraft({
+      prompt: candidate.prompt,
+      notes: `${candidate.title} from identity pack. Public write: ${candidate.publicWrite}.`,
+      bindingPoint: candidate.key === 'avatar'
+        ? 'AGENT_AVATAR'
+        : candidate.key === 'portrait-reference'
+          ? 'AGENT_PORTRAIT'
+          : 'AGENT_CANDIDATE',
+      aspectRatio: candidate.key === 'profile-cover' || candidate.key === 'post-image-style' ? '16:9' : '1:1',
+    });
+  }
 
   function updateVisualImageDraft(patch: Partial<typeof visualImageDraft>) {
     setVisualImageDraft((current) => ({ ...current, ...patch }));
@@ -270,7 +298,67 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
 
   return (
     <Surface tone="panel" padding="lg" className="mt-5">
-      <div className="grid min-w-0 gap-5 xl:grid-cols-[1fr_1fr]">
+      <div className="grid gap-4">
+        <Surface tone="card" padding="md">
+          <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="m-0 text-xl font-semibold">Identity Pack</h3>
+                <StatusBadge tone="info">source-backed</StatusBadge>
+                <StatusBadge tone="warning">candidate only</StatusBadge>
+              </div>
+              <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
+                Build avatar, cover, portrait, post image style, and voice demo candidates from the current Realm Agent profile. Only avatar URL selection has an admitted public profile write.
+              </p>
+            </div>
+            <Button tone="secondary" onClick={buildIdentityPack}>
+              Build identity pack
+            </Button>
+          </div>
+          {identityPack && !identityPack.changed ? (
+            <InlineAlert tone="warning" className="mt-3">
+              {identityPack.errors.join('; ')}
+            </InlineAlert>
+          ) : null}
+          {identityPack?.changed ? (
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              {identityPack.candidates.map((candidate) => (
+                <Surface key={candidate.key} tone="panel" padding="md">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-medium">{candidate.title}</div>
+                    <StatusBadge tone={candidate.blockedReason ? 'warning' : 'neutral'}>
+                      {candidate.blockedReason ? 'blocked public write' : 'candidate'}
+                    </StatusBadge>
+                  </div>
+                  <p className="ras-break-anywhere m-0 mt-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
+                    {candidate.prompt}
+                  </p>
+                  {candidate.blockedReason ? (
+                    <InlineAlert tone="warning" className="mt-3">
+                      {candidate.blockedReason}
+                    </InlineAlert>
+                  ) : null}
+                  <CandidateFactGrid
+                    facts={[{
+                      label: 'Public write',
+                      value: candidate.publicWrite,
+                    }, {
+                      label: 'Source fields',
+                      value: candidate.sourceFields.join(', ') || 'source unavailable',
+                    }]}
+                  />
+                  <div className="mt-3">
+                    <Button tone="secondary" size="sm" onClick={() => useIdentityCandidate(candidate)}>
+                      Use candidate
+                    </Button>
+                  </div>
+                </Surface>
+              ))}
+            </div>
+          ) : null}
+        </Surface>
+
+        <div className="grid min-w-0 gap-5 xl:grid-cols-[1fr_1fr]">
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
             <h3 className="m-0 text-xl font-semibold">Visual identity candidate</h3>
@@ -701,6 +789,7 @@ export function MediaVoiceCandidateWorkspace({ agent, onAgentWrite }: { agent: O
           </div>
         </div>
       </div>
+        </div>
       <Surface tone="card" padding="md" className="mt-5">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
