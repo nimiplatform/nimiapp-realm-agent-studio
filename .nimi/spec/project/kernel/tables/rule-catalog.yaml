@@ -400,7 +400,7 @@ rules:
   - rule_id: R-RAS-CORE-007
     level: must
     title: 'realm-agent-studio-must-scope'
-    statement: 'Realm Agent Studio MUST keep its default owner portfolio scoped to current-authenticated-user MASTER_OWNED Realm Agents. The only admitted WORLD_OWNED exception is the Forge-imported system-agent lane for Halliday-owned Forge-imported agents; generic world-created agents, world NPCs, and world maintainer tooling remain out of scope.'
+    statement: 'Realm Agent Studio MUST keep its default owner portfolio scoped to current-authenticated-user MASTER_OWNED Realm Agents. The only admitted WORLD_OWNED surface is the separate Forge-imported system-curation lane for Halliday-owned Forge-imported agents; generic world-created agents, world NPCs, and world maintainer tooling remain out of scope.'
     doc_ref: project/kernel/core-rules.md
   - rule_id: R-RAS-CORE-008
     level: must_not
@@ -455,12 +455,12 @@ rules:
   - rule_id: R-RAS-SCOPE-002
     level: must_not
     title: 'no-localagent-or-world-or-forge-sources'
-    statement: 'Studio does not manage LocalAgent private runtime forks, generic world-created agents, world NPCs, or Forge package sources outside the admitted Forge-imported system-agent lane.'
+    statement: 'Studio does not manage LocalAgent private runtime forks, generic world-created agents, world NPCs, or Forge package sources outside the separate admitted Forge-imported system-curation lane.'
     doc_ref: project/kernel/product-scope.md
   - rule_id: R-RAS-SCOPE-003
     level: must_not
     title: 'owner-led-first-version-depth'
-    statement: 'First-version depth is owner-led plus the Forge-imported system-agent exception: no invited editors, no team workspace, and no world-owner override over owner-created agents.'
+    statement: 'First-version depth is owner-led plus a separate Forge-imported system-curation lane: no invited editors, no team workspace, and no world-owner override over owner-created agents.'
     doc_ref: project/kernel/product-scope.md
   - rule_id: R-RAS-SCOPE-004
     level: required
@@ -645,7 +645,7 @@ rules:
   - rule_id: R-RAS-AGENT-007
     level: must
     title: 'studio-manages-owner-and-forge-imported-only'
-    statement: 'Realm Agent Studio manages user-owned public Realm Agents and the admitted Forge-imported system-agent lane only.'
+    statement: 'Realm Agent Studio manages user-owned public Realm Agents and the separate admitted Forge-imported system-curation lane only.'
     doc_ref: project/kernel/realm-agent-object.md
   - rule_id: R-RAS-AGENT-008
     level: must_not
@@ -655,7 +655,7 @@ rules:
   - rule_id: R-RAS-AGENT-009
     level: must_not
     title: 'exclude-world-owned-agents'
-    statement: 'Studio owner-created scope excludes WORLD_OWNED agents and is limited to current user MASTER_OWNED except for the explicit Forge-imported system-agent lane.'
+    statement: 'Studio owner-created scope excludes WORLD_OWNED agents and is limited to current user MASTER_OWNED except for the explicit separate Forge-imported system-curation lane.'
     doc_ref: project/kernel/realm-agent-object.md
   - rule_id: R-RAS-AGENT-010
     level: must
@@ -790,7 +790,7 @@ rules:
   - rule_id: R-RAS-AGENT-036
     level: must_not
     title: 'forge-imported-lane-does-not-weaken-owner-contract'
-    statement: 'The Forge-imported system-agent lane must not weaken /api/me/agents, owner-agent quotas, or generic world-created/NPC boundaries.'
+    statement: 'The separate Forge-imported system-curation lane must not weaken /api/me/agents, owner-agent quotas, or generic world-created/NPC boundaries.'
     doc_ref: project/kernel/realm-agent-object.md
   - rule_id: R-RAS-AGENT-037
     level: must
@@ -1425,7 +1425,7 @@ rules:
   - rule_id: R-RAS-METRIC-012
     level: forbidden
     title: 'no-world-owned-portfolio'
-    statement: 'Backend owner-portfolio semantics are current user scope and MASTER_OWNED only; WORLD_OWNED / NPC agents are not owner portfolio items. The Forge-imported system-agent lane is separate.'
+    statement: 'Backend owner-portfolio semantics are current user scope and MASTER_OWNED only; WORLD_OWNED / NPC agents are not owner portfolio items. The Forge-imported system-curation lane is separate.'
     doc_ref: project/kernel/metrics-and-realm-gaps.md
   - rule_id: R-RAS-METRIC-013
     level: must_not
@@ -1720,7 +1720,7 @@ rules:
   - rule_id: R-RAS-STORY-016
     level: must
     title: 'owner-authority-required'
-    statement: 'Owner-created agent edits require owner authority; generic world-created agents remain out of scope outside the admitted Forge-imported system-agent lane.'
+    statement: 'Owner-created agent edits require owner authority; generic world-created agents remain out of scope outside the separate admitted Forge-imported system-curation lane.'
     doc_ref: project/kernel/storybook.md
   - rule_id: R-RAS-STORY-017
     level: must
@@ -1755,7 +1755,7 @@ rules:
   - rule_id: R-RAS-STORY-023
     level: must_not
     title: 'portfolio-canonical-read-surfaces'
-    statement: 'Owner portfolio uses GET /api/me/agents and /{agentId}; the Forge-imported system-agent lane uses /api/agent/forge-imported-system/** and must not be confused with generic world-owned/NPC lists or creator/dev surfaces.'
+    statement: 'Owner portfolio uses GET /api/me/agents and /{agentId}; the separate Forge-imported system-curation lane uses /api/agent/forge-imported-system/** and must not be confused with generic world-owned/NPC lists or creator/dev surfaces.'
     doc_ref: project/kernel/storybook.md
   - rule_id: R-RAS-STORY-024
     level: must
@@ -1885,7 +1885,7 @@ rules:
   - rule_id: R-RAS-ACCEPT-014
     level: must_not
     title: 'no-placeholder-or-localagent-leak'
-    statement: 'No LocalAgent private state, generic world-created agent lane, creator/world-maintainer surface, fake return, or placeholder success leaks. The Forge-imported system-agent lane is the only admitted WORLD_OWNED exception.'
+    statement: 'No LocalAgent private state, generic world-created agent lane, creator/world-maintainer surface, fake return, or placeholder success leaks. The separate Forge-imported system-curation lane is the only admitted WORLD_OWNED surface.'
     doc_ref: project/kernel/product-acceptance-and-execution-plan.md
   - rule_id: R-RAS-ACCEPT-015
     level: required

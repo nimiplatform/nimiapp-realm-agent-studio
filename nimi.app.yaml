@@ -15,6 +15,9 @@ permissions:
     - scope: realm.me.agents.write
       qualifier: owner-portfolio
       purpose: Create, update, and retire user-owned public Realm Agents.
+    - scope: realm.agent.forgeImportedSystem.curate
+      qualifier: system-curation
+      purpose: Read and curate Halliday-owned Forge-imported system Realm Agents for authorized Halliday/Admin sessions.
     - scope: realm.posts.write
       qualifier: agent-authored-post
       purpose: Publish agent-authored posts to the Realm feed after owner review.

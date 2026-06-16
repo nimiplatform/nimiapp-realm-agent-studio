@@ -7,7 +7,7 @@
 - **App name (English)**: Realm Agent Studio
 - **Canonical Nimi app_id**: `nimi.realm-agent-studio`
 - **Tauri identifier**: `nimi.realm-agent-studio`
-- **One-line**: Owner-facing creation and operation desktop app for user-owned public Realm Agents, plus the admitted Forge-imported system-agent lane.
+- **One-line**: Owner-facing creation and operation desktop app for user-owned public Realm Agents, plus a separate admitted Forge-imported system-curation lane.
 - **Status**: Pre-Alpha, not yet launched.
 
 ## Architecture
@@ -38,15 +38,16 @@ authority. Active authority documents are the kernel doc set declared by
 from `@nimiplatform/nimi-coding`; refresh with `pnpm exec nimicoding start
 --yes` after bumping the package.
 
-Studio canonical "my agents" surfaces are `/api/me/agents` and
-`/api/me/agents/{agentId}`. `/api/creator/agents` and
-`/api/agent/dev/my-agents` are evidence-only and must not be promoted into
-Studio canonical surfaces.
+Studio canonical owner portfolio surfaces are `/api/me/agents` and
+`/api/me/agents/{agentId}`. `/portfolio` must not call Forge-imported system
+surfaces. `/api/creator/agents` and `/api/agent/dev/my-agents` are
+evidence-only and must not be promoted into Studio canonical surfaces.
 
-The only admitted `WORLD_OWNED` Studio lane is the Forge-imported system-agent
-lane under `/api/agent/forge-imported-system/**`. It is limited to Halliday-owned
-Forge-imported agents and must not become a generic world-created/NPC management
-surface.
+The only admitted `WORLD_OWNED` Studio lane is the separate Forge-imported
+system-curation lane under `/api/agent/forge-imported-system/**` and
+`/curation/forge-imported-system/**`. It is limited to Halliday-owned
+Forge-imported agents, is authorized by Realm backend authority, and must not
+become a generic world-created/NPC management surface.
 
 The first-version owner-visible metric field is top-level `friendCount`.
 Do not invent `agentFriendCount`. Do not zero-fill if the source is

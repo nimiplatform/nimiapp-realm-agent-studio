@@ -40,8 +40,8 @@ acceptance. Acceptance requires the whole owner workflow to be coherent:
 - **[R-RAS-ACCEPT-013]** source failures preserve valid drafts and name the next valid action;
 - **[R-RAS-ACCEPT-014]** no LocalAgent private state, generic world-created
   agent lane, creator/world-maintainer surface, fake return, or placeholder
-  success leaks into the product. The Forge-imported system-agent lane is the only
-  admitted `WORLD_OWNED` exception.
+  success leaks into the product. The separate Forge-imported system-curation lane
+  is the only admitted `WORLD_OWNED` surface.
 
 ## Acceptance Gates
 

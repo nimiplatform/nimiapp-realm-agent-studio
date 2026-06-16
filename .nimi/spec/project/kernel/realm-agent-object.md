@@ -57,12 +57,12 @@ rule CRUD or owner rule-content review.
 
 ## Owner Boundary
 
-**[R-RAS-AGENT-007]** Realm Agent Studio manages user-owned public Realm Agents and the admitted Forge-imported system-agent lane only. Current DTO
+**[R-RAS-AGENT-007]** Realm Agent Studio manages user-owned public Realm Agents and the separate admitted Forge-imported system-curation lane only. Current DTO
 evidence exposes `AgentOwnershipType` as `MASTER_OWNED | WORLD_OWNED`
 (`sdk/src/realm/generated/schema.ts:3889`), but **[R-RAS-AGENT-008]** this app spec does not
 rename that source model. **[R-RAS-AGENT-009]** Studio owner-created scope is the current
 authenticated user's `MASTER_OWNED` Realm Agents and excludes `WORLD_OWNED`
-agents except for the explicit Forge-imported system-agent lane.
+agents except for the explicit separate Forge-imported system-curation lane.
 
 Studio portfolio reads use the current-user owner-owned RealmAgent read surface:
 `GET /api/me/agents` / `listMyRealmAgents` returns `UserLiteDto[]`
@@ -72,7 +72,7 @@ and `GET /api/me/agents/{agentId}` / `getMyRealmAgent` returns one
 to `:11844`). **[R-RAS-AGENT-010]** These surfaces are current authenticated user scoped and
 `MASTER_OWNED` only.
 
-The Forge-imported system-agent lane uses
+The separate Forge-imported system-curation lane uses
 `GET /api/agent/forge-imported-system/agents`,
 `GET /api/agent/forge-imported-system/agents/{agentId}`, and
 `GET/PATCH /api/agent/forge-imported-system/agents/{agentId}/settings` for

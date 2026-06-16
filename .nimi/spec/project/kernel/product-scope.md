@@ -11,13 +11,14 @@ updated: 2026-05-22
 ## Product Position
 
 Realm Agent Studio is for agent owners who incubate and operate user-owned
-public Realm Agents as durable Agent IP, plus the admitted Forge-imported
-system-agent lane for Halliday-owned Forge-imported RealmAgents. **[R-RAS-SCOPE-001]** It is not a general agent management
+public Realm Agents as durable Agent IP, plus a separate admitted
+Forge-imported system-curation lane for Halliday-owned Forge-imported
+RealmAgents. **[R-RAS-SCOPE-001]** It is not a general agent management
 center. **[R-RAS-SCOPE-002]** It does not manage LocalAgent private runtime forks, generic world-created
 agents, world NPCs, or Forge package sources.
 
 The primary user is an agent owner who may operate one public Realm Agent or a
-portfolio of public Realm Agents. **[R-RAS-SCOPE-003]** The first-version depth is owner-led plus the Forge-imported system-agent exception: no
+portfolio of public Realm Agents. **[R-RAS-SCOPE-003]** The first-version depth is owner-led plus a separate Forge-imported system-curation lane: no
 invited editors, no team workspace, and no world-owner override over
 owner-created agents.
 
@@ -35,8 +36,9 @@ owner-created agents.
   review only when an admitted owner-scoped rule-content read surface exists.
 - **[R-RAS-SCOPE-033]** Update Halliday-owned Forge-imported `WORLD_OWNED`
   RealmAgents through the curated system-agent settings ingress
-  `/api/agent/forge-imported-system/agents/{agentId}/settings`. This lane is
-  not owner quota/listing truth and is not generic world-created agent tooling.
+  `/api/agent/forge-imported-system/agents/{agentId}/settings`. This separate
+  curation lane is not owner quota/listing truth and is not generic
+  world-created agent tooling.
 - **[R-RAS-SCOPE-007]** Generate or upload visual/media candidates, keep app-local preview/history
   only, and mark assets public only after Realm write succeeds.
 - **[R-RAS-SCOPE-008]** Generate voice-demo candidates through Runtime `audio.synthesize` when the

@@ -91,7 +91,7 @@ access or refresh tokens locally (PO-SHELL-008 / K-ACCSVC-008 equivalent).
 
 | Route | Purpose |
 |-------|---------|
-| `/portfolio` | Owner agent list, search, filter, sort, source warnings |
+| `/portfolio` | Current-user owner-created agent list, search, filter, sort, source warnings |
 | `/portfolio/create` | Create a Realm Agent (handle preflight, world select, identity fields) |
 | `/portfolio/:agentId` | Current public profile, ownership, world, state, friendCount |
 | `/portfolio/:agentId/settings` | Visibility + setting proposal + AI context projection |
@@ -101,6 +101,11 @@ access or refresh tokens locally (PO-SHELL-008 / K-ACCSVC-008 equivalent).
 | `/portfolio/:agentId/posts` | Agent-authored post draft, attachment, publish |
 | `/portfolio/:agentId/posts/schedule` | Single app-local foreground-only post schedule |
 | `/portfolio/:agentId/insights` | friendCount, source availability, stale warnings |
+| `/curation/forge-imported-system` | Halliday/Admin Forge-imported system-agent curation list |
+| `/curation/forge-imported-system/:agentId` | Forge-imported system-agent curation detail |
+| `/curation/forge-imported-system/:agentId/settings` | Forge-imported system-agent reviewed settings save |
+| `/curation/forge-imported-system/:agentId/assets` | Forge-imported system-agent profile media and voice promotion |
+| `/curation/forge-imported-system/:agentId/insights` | Forge-imported system-agent source availability and friendCount |
 
 ## Spec Authority
 
@@ -111,10 +116,11 @@ Top-level index is [`.nimi/spec/INDEX.md`](./.nimi/spec/INDEX.md); editing rules
 are in [`.nimi/spec/project/AGENTS.md`](./.nimi/spec/project/AGENTS.md). Every rule
 carries an explicit `R-RAS-<DOMAIN>-NNN` identifier.
 
-Studio canonical "my agents" surfaces are `/api/me/agents` and
-`/api/me/agents/{agentId}`. `/api/creator/agents` and
-`/api/agent/dev/my-agents` are evidence-only and must not be promoted into
-Studio canonical surfaces.
+Studio canonical owner portfolio surfaces are `/api/me/agents` and
+`/api/me/agents/{agentId}`. The separate Forge-imported system-curation lane
+uses `/api/agent/forge-imported-system/**` and must not be merged into
+`/api/me/agents`. `/api/creator/agents` and `/api/agent/dev/my-agents` are
+evidence-only and must not be promoted into Studio canonical surfaces.
 
 `.nimi/{config,contracts,methodology}/**` are package-canonical projections from
 `@nimiplatform/nimi-coding`; refresh with `pnpm exec nimicoding start --yes`
