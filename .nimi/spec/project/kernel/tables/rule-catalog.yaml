@@ -108,6 +108,36 @@ entries:
   - R-RAS-AGENT-035
   - R-RAS-AGENT-036
   - R-RAS-AGENT-037
+  - R-RAS-GRAPH-001
+  - R-RAS-GRAPH-002
+  - R-RAS-GRAPH-003
+  - R-RAS-GRAPH-004
+  - R-RAS-GRAPH-005
+  - R-RAS-GRAPH-006
+  - R-RAS-GRAPH-007
+  - R-RAS-GRAPH-008
+  - R-RAS-GRAPH-009
+  - R-RAS-GRAPH-010
+  - R-RAS-GRAPH-011
+  - R-RAS-GRAPH-012
+  - R-RAS-GRAPH-013
+  - R-RAS-GRAPH-014
+  - R-RAS-GRAPH-015
+  - R-RAS-GRAPH-016
+  - R-RAS-GRAPH-017
+  - R-RAS-GRAPH-018
+  - R-RAS-GRAPH-019
+  - R-RAS-GRAPH-020
+  - R-RAS-GRAPH-021
+  - R-RAS-GRAPH-022
+  - R-RAS-GRAPH-023
+  - R-RAS-GRAPH-024
+  - R-RAS-GRAPH-025
+  - R-RAS-GRAPH-026
+  - R-RAS-GRAPH-027
+  - R-RAS-GRAPH-028
+  - R-RAS-GRAPH-029
+  - R-RAS-GRAPH-030
   - R-RAS-SETTING-001
   - R-RAS-SETTING-002
   - R-RAS-SETTING-003
@@ -797,6 +827,156 @@ rules:
     title: 'no-forge-imported-system-provenance-claims'
     statement: 'Studio must not claim SYSTEM AgentRule provenance or forge-imported-system-agent-settings source refs.'
     doc_ref: project/kernel/realm-agent-object.md
+  - rule_id: R-RAS-GRAPH-001
+    level: must
+    title: 'graph-is-owner-reviewed-candidate-workspace'
+    statement: 'Agent Creation Graph is an owner-reviewed candidate workspace; it is not Realm Agent truth, Runtime truth, LocalAgent memory, Forge provenance, or a substitute for an admitted Realm write result.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-002
+    level: must
+    title: 'graph-is-canonical-ai-assisted-creation-model'
+    statement: 'Agent Creation Graph is the canonical Studio model for AI-assisted creation and maintenance flows; description seed, CharacterCard import, existing-agent remix, avatar/profile-cover generation, and post generation must flow through the graph before any public write.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-003
+    level: must
+    title: 'graph-instance-required-sections'
+    statement: 'Every graph instance must carry sourcePackage, normalizedGraph, reviewState, writePlan, and provenance sections before the owner can submit an admitted Realm action.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-004
+    level: must
+    title: 'admitted-graph-source-modes'
+    statement: 'Admitted graph source modes are owner description, downloaded local CharacterCard, existing current-owner Realm Agent detail/settings/public media, and manual advanced entry.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-005
+    level: must_not
+    title: 'no-direct-third-party-fetching-without-policy'
+    statement: 'Direct third-party URL fetching, remote Chub.ai import, remote package scraping, and background network enrichment are not admitted until this spec adds an explicit source, copyright, and network policy.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-006
+    level: must
+    title: 'preserve-source-fields-and-source-loss'
+    statement: 'The graph must preserve original source fields and source type as local evidence visible to the owner; Studio must not hide source loss, inferred mapping, or rejected material behind a successful AI draft.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-007
+    level: must
+    title: 'source-fields-require-classification'
+    statement: 'Source parsing must classify each source field as mapped, candidateOnly, unmapped, or rejected; unclassified source fields are a graph failure state.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-008
+    level: must
+    title: 'charactercard-import-local-validated-files'
+    statement: 'CharacterCard import admits downloaded local JSON files and downloaded local PNG files with supported embedded card metadata only after parser validation succeeds.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-009
+    level: must
+    title: 'charactercard-mapping-visible'
+    statement: 'CharacterCard mapping must show the owner how source fields map into Studio graph sections and must keep unmapped fields visible as review notes.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-010
+    level: must_not
+    title: 'import-cannot-bypass-review-or-realm-validation'
+    statement: 'Imported source material cannot bypass owner review, handle preflight, world selection, Realm create response validation, or admitted settings write validation.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-011
+    level: must
+    title: 'existing-agent-remix-source-boundary'
+    statement: 'Existing-agent remix may use only current-authenticated-user owner detail, admitted owner settings projection, public media URLs, and local candidate lineage.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-012
+    level: must_not
+    title: 'remix-cannot-mutate-source-or-copy-private-state'
+    statement: 'Existing-agent remix must not mutate the source agent, copy private state, copy LocalAgent runtime state, or claim the source agent Realm truth as a new agent truth.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-013
+    level: must
+    title: 'description-seed-complete-graph'
+    statement: 'Owner description seed must generate a complete graph with explicit missing decisions; a flat prefilled form is insufficient when required graph sections remain absent.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-014
+    level: must
+    title: 'runtime-only-visible-approved-graph-context'
+    statement: 'Runtime may assist graph drafting only from owner-provided or owner-approved source context that is visible in the current graph.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-015
+    level: must
+    title: 'runtime-graph-output-strict-structured-candidate'
+    statement: 'Runtime graph output must be strict structured candidate data; malformed, partial, untyped, or unverifiable output fails closed and cannot populate hidden write fields.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-016
+    level: must
+    title: 'graph-required-domain-sections'
+    statement: 'Graph sections must include identity, DNA/archetype, behavior, worldview, greeting, communication voice, content voice, visual brief, voice brief, post brief, source provenance, missing decisions, risk notes, and write plan.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-017
+    level: must
+    title: 'write-plan-maps-to-admitted-write-paths'
+    statement: 'The write plan must map each accepted graph field to an admitted Realm Studio write path or mark it blocked or deferred with the governing rule ID.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-018
+    level: must_not
+    title: 'graph-forbidden-hidden-write-fields'
+    statement: 'The graph must not introduce provider/model routing, lifecycle state, ownerId override, hidden worldId override, raw AgentRule content, private memory, or unreviewed rule JSON into create or update payloads.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-019
+    level: must
+    title: 'owner-review-required-before-derived-actions'
+    statement: 'The owner must review and accept every writeable graph section before Studio can call create, settings update, asset selection, or post publishing actions derived from the graph.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-020
+    level: must_not
+    title: 'graph-acceptance-not-public-success'
+    statement: 'Graph acceptance is not Realm create success, settings success, asset publication success, avatar selection success, or post publish success.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-021
+    level: must
+    title: 'graph-derived-create-still-uses-agent-create'
+    statement: 'Realm Agent creation derived from a graph still succeeds only through POST /api/agent / AgentsService.agentControllerCreate and only after the canonical response contains an id.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-022
+    level: must
+    title: 'post-create-routes-to-agent-cockpit'
+    statement: 'After graph-derived creation succeeds, Studio must route the owner to an Agent Cockpit for maintenance actions instead of treating creation as a terminal success screen.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-023
+    level: must
+    title: 'agent-cockpit-source-backed-only'
+    statement: 'Agent Cockpit consumes source-backed agent status, admitted owner settings projection, public media, local candidates, and graph lineage; it must not consume private LocalAgent memory or runtime transcript state.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-024
+    level: must
+    title: 'identity-studio-candidates-local-until-admitted-success'
+    statement: 'Identity Studio candidates for avatar, profile cover, voice, and visual profile remain local candidates until the relevant admitted Realm or Runtime operation succeeds.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-025
+    level: must
+    title: 'content-studio-candidates-local-until-publish'
+    statement: 'Content Studio post variants derived from the graph or current agent remain local candidates until human review and Realm publish success.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-026
+    level: must
+    title: 'maintenance-suggestions-source-backed'
+    statement: 'Maintenance suggestions must be source-backed by current agent state, graph lineage, owner-visible gaps, or owner-provided prompts; Studio must not invent urgent work from unavailable metrics.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-027
+    level: must
+    title: 'graph-named-failure-states'
+    statement: 'Graph flows must expose named failure states for source import unavailable, source parse failed, graph invalid, required mapping incomplete, review missing, route unbound, unsupported CharacterCard shape, and unauthorized Runtime source transmission.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-028
+    level: must_not
+    title: 'no-runtime-source-transmission-without-owner-trigger'
+    statement: 'Source content must not be transmitted to Runtime unless the owner explicitly triggers generation, rewrite, or normalization for the visible graph.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-029
+    level: must
+    title: 'owner-facing-source-mapping-primary'
+    statement: 'Technical source previews may be placed behind disclosure controls, but the primary product surface must show user-level mapping, unresolved decisions, and blocked writes in plain owner-facing language.'
+    doc_ref: project/kernel/agent-creation-graph.md
+  - rule_id: R-RAS-GRAPH-030
+    level: must
+    title: 'graph-audits-cite-rule-ids-and-boundaries'
+    statement: 'Implementation tests, design audits, and closeout notes for intelligent creation or maintenance must cite R-RAS-GRAPH-* IDs and prove the candidate/truth boundary.'
+    doc_ref: project/kernel/agent-creation-graph.md
   - rule_id: R-RAS-SETTING-001
     level: required
     title: 'handle-check-admitted-preflight'
@@ -2069,8 +2249,8 @@ rules:
     doc_ref: project/kernel/product-acceptance-and-execution-plan.md
   - rule_id: R-RAS-ACCEPT-051
     level: should
-    title: 'deferred-source-backed-suggestions'
-    statement: 'Source-backed portfolio suggestions remain deferred until an admitted owner-scoped Realm/Runtime suggestion surface exists.'
+    title: 'source-backed-maintenance-suggestions-local-guidance'
+    statement: 'Source-backed maintenance suggestions are admitted only as local cockpit action guidance derived from current Realm detail, graph lineage, owner-visible gaps, owner-provided prompts, and Studio-owned local candidate history; they do not create Realm truth, Runtime truth, metrics, queues, campaigns, or public success states.'
     doc_ref: project/kernel/product-acceptance-and-execution-plan.md
   - rule_id: R-RAS-ACCEPT-052
     level: should

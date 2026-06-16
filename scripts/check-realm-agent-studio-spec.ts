@@ -27,6 +27,7 @@ const REQUIRED_KERNEL_FILES = [
   'core-rules.md',
   'product-scope.md',
   'realm-agent-object.md',
+  'agent-creation-graph.md',
   'agent-setting-field-map.md',
   'asset-and-binding.md',
   'post-publishing.md',

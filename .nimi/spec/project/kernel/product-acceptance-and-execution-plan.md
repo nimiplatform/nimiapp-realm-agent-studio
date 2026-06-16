@@ -55,7 +55,7 @@ acceptance. Acceptance requires the whole owner workflow to be coherent:
 | A5 Settings and rule-of-truth | **[R-RAS-ACCEPT-020]** Settings flow is natural-language-first plus structured fields, AI proposal/review where useful, field-to-layer clarity, human review, owner settings save, and no raw world-scoped `AgentRule` CRUD. | W4 closed. Runtime-assisted settings proposals are candidate-only, apply to visible fields for owner review, and save only through owner-scoped `MeService.updateMyRealmAgentSettings`. |
 | A6 Creative identity assets | **[R-RAS-ACCEPT-021]** Avatar, profile cover/background, visual candidates, upload/generation, local history, owner review, public write success, and deferred public asset paths are clearly separated. App-local history is durable enough for the desktop product shape. | W5 closed for admitted surfaces. Avatar URL remains the only owner-reviewed public profile asset write; Runtime image candidates, identity Resource upload, voice-demo candidates, and app-local creative history are candidate-only. Profile cover/background and Resource-to-Agent binding publication remain explicitly deferred pending owner-scoped Realm ingress. |
 | A7 Agent-authored posts | **[R-RAS-ACCEPT-022]** Owner can draft from agent voice, use AI assistance, attach canonical media, human-review, publish through Realm, and create a single local schedule that is actually persisted/executable or explicitly not admitted. | W6 closed for admitted surfaces. Post copy assistance is candidate-only, attachment and publish paths use Realm canonical services, and one app-local schedule is persisted per agent with foreground due execution. Realm publish success is claimed only after `PostsService.createPost` returns canonical post identity. |
-| A8 Runtime AI consumption | **[R-RAS-ACCEPT-023]** Runtime AI support covers setting rewrite/proposal, visual/image generation candidates when available, post copy, voice demo, and source-backed suggestions through SDK surfaces. Runtime output remains candidate material until owner review. | W7 accepted for admitted surfaces. Settings proposals, visual candidates, voice-demo candidates, and post copy use Runtime SDK surfaces and remain owner-reviewed candidate material. Source-backed portfolio suggestions are explicitly deferred until an admitted owner-scoped suggestion surface exists. |
+| A8 Runtime AI consumption | **[R-RAS-ACCEPT-023]** Runtime AI support covers setting rewrite/proposal, visual/image generation candidates when available, post copy, voice demo, and source-backed suggestions through SDK surfaces. Runtime output remains candidate material until owner review. | W7 reopened for source-backed maintenance suggestions. Settings proposals, visual candidates, voice-demo candidates, and post copy use Runtime SDK surfaces and remain owner-reviewed candidate material. Maintenance suggestions may be derived locally only from source-backed Realm detail, graph lineage, owner-visible gaps, owner-provided prompts, and Studio-owned local candidate history; they are action guidance, not Realm/Runtime truth. |
 | A9 Failure and recovery | **[R-RAS-ACCEPT-024]** Every failure state preserves valid local work, names the unavailable source/capability in product terms, avoids pseudo-success, and gives a valid next action. | W7 accepted for admitted surfaces. Client and UI tests cover fail-closed Realm/Runtime/source failures, invalid output, unavailable transport, local schedule invalidity, and no pseudo-success. |
 | A10 Verification evidence | **[R-RAS-ACCEPT-025]** Final closeout includes desktop-shell smoke, renderer screenshot only as secondary evidence, unit/integration tests, boundary checks, spec governance, no app REST bypass, Runtime-mediated Realm transport, and acceptance matrix results per gate. | Current hard cut supersedes W7R local bridge evidence. Studio uses `createNimiLocalFirstPartyRuntimeAccountCaller` and `runtime.account.invokeRealmUnary`; it must not own raw Realm tokens or an app-local Realm REST bridge. |
 
@@ -77,9 +77,10 @@ P1 gaps:
 - `OwnerPortfolio.tsx` and `portfolio-client.ts` are too broad for sustained
   product iteration. Their size is a symptom of mixed workflow ownership, not a
   cosmetic refactor issue.
-- AI support is still incomplete for source-backed portfolio suggestions. W4
-  closed setting rewrite/proposal, W5 closed image/visual candidate generation,
-  and W6 closed post-copy assistance as candidate-only Runtime output.
+- AI support still needs source-backed maintenance suggestions to become a
+  first-class, test-covered cockpit model. W4 closed setting rewrite/proposal,
+  W5 closed image/visual candidate generation, and W6 closed post-copy
+  assistance as candidate-only Runtime output.
 - Local post scheduling is a single persisted app-local schedule with foreground
   due execution after W6. It is not a recurring queue, campaign calendar, or
   Realm scheduling layer.
@@ -478,8 +479,11 @@ Residual verification note:
 
 Deferred blockers and risks carried after W7:
 
-- **[R-RAS-ACCEPT-051]** Source-backed portfolio suggestions remain deferred until an admitted
-  owner-scoped Realm/Runtime suggestion surface exists.
+- **[R-RAS-ACCEPT-051]** Source-backed maintenance suggestions are admitted only as local cockpit
+  action guidance derived from current Realm detail, graph lineage,
+  owner-visible gaps, owner-provided prompts, and Studio-owned local candidate
+  history. They do not create Realm truth, Runtime truth, metrics, queues,
+  campaigns, or public success states.
 - **[R-RAS-ACCEPT-052]** Profile cover/background publication and Resource-to-Agent Binding public
   truth remain deferred until Realm admits an owner-scoped binding ingress.
 - **[R-RAS-ACCEPT-053]** Local scheduling remains a single app-local foreground schedule, not Realm

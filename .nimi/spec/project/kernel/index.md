@@ -23,6 +23,7 @@ Realm Agent Studio is the owner operation center for user-owned public Realm Age
 | `CORE` | Cross-cutting authority and posture invariants | `core-rules.md` |
 | `SCOPE` | Product scope, in/out scope, first-version depth | `product-scope.md` |
 | `AGENT` | Realm Agent object composition, truth anchor, owner boundary, creation | `realm-agent-object.md` |
+| `GRAPH` | Agent Creation Graph source ingestion, AI drafting, owner review, and write planning | `agent-creation-graph.md` |
 | `SETTING` | Agent setting field admission map and write-path rules | `agent-setting-field-map.md` |
 | `ASSET` | Asset / Binding candidate lifecycle and admitted write paths | `asset-and-binding.md` |
 | `POST` | Post publishing world boundary, attachment envelope, human review | `post-publishing.md` |
@@ -39,6 +40,7 @@ The canonical rule catalog enumerating every admitted rule ID lives in [`tables/
 - `GET /api/me/agents` is the Studio canonical owner my-agents portfolio list surface.
 - `GET /api/me/agents/{agentId}` is the Studio canonical owner my-agents detail surface.
 - `POST /api/agent` / `AgentsService.agentControllerCreate` is the Studio owner-scoped Realm Agent create surface.
+- Agent Creation Graph is the Studio canonical candidate/review model for intelligent creation and maintenance; it is not Realm truth and cannot replace admitted Realm write success.
 - `GET /api/agent/handles/check` / `AgentsService.agentControllerCheckHandle` is the Studio create preflight handle availability surface; it writes no truth and must not replace Realm create confirmation.
 - `GET/PATCH /api/me/agents/{agentId}/settings` is the Studio owner-scoped settings read/write surface; the write surface compiles owner-reviewed structured settings into Realm profile writes and versioned `AgentRule` truth writes and is not raw `AgentRule` CRUD.
 - `POST /api/agent/accounts/{id}/avatar` / `AgentsService.agentControllerSelectAvatar` is the Studio owner-scoped avatar URL selection surface; it is not a Resource/Binding upload path.
@@ -51,14 +53,15 @@ The canonical rule catalog enumerating every admitted rule ID lives in [`tables/
 1. `core-rules.md` — cross-cutting authority and posture invariants.
 2. `product-scope.md`
 3. `realm-agent-object.md`
-4. `agent-setting-field-map.md`
-5. `asset-and-binding.md`
-6. `post-publishing.md`
-7. `runtime-ai-consumption.md`
-8. `metrics-and-realm-gaps.md`
-9. `failure-semantics.md`
-10. `storybook.md`
-11. `product-acceptance-and-execution-plan.md`
+4. `agent-creation-graph.md`
+5. `agent-setting-field-map.md`
+6. `asset-and-binding.md`
+7. `post-publishing.md`
+8. `runtime-ai-consumption.md`
+9. `metrics-and-realm-gaps.md`
+10. `failure-semantics.md`
+11. `storybook.md`
+12. `product-acceptance-and-execution-plan.md`
 
 ## Kernel Tables
 
