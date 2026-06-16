@@ -28,10 +28,25 @@ import {
   type AgentSeedGenerationResult,
 } from './agent-seed-generator.js';
 import {
+  acceptAgentCreationGraphForRealmCreate,
+  agentCreationGraphSourceModeLabel,
+  buildAgentCreationGraphFromDraft,
+  validateAgentCreationGraphForRealmCreate,
+  type AgentCreationGraph,
+  type AgentCreationGraphCreateReview,
+  type AgentCreationGraphSourceMode,
+} from './agent-creation-graph.js';
+import {
   defaultReferenceImagePromptFromDraft,
   generateAgentReferenceImage,
   type AgentReferenceImageResult,
 } from './agent-reference-image.js';
+import {
+  mapCharacterCardToCreateDraft,
+  mapCharacterCardToGraphSourceFields,
+  parseDownloadedCharacterCardFile,
+  type CharacterCardImportResult,
+} from './character-card-import.js';
 
 export type CreatedRealmAgentContext = {
   agentId: string;
@@ -152,10 +167,202 @@ function ReadinessPreview({
   );
 }
 
+const SOURCE_MODE_OPTIONS: Array<{
+  mode: AgentCreationGraphSourceMode;
+  title: string;
+  description: string;
+  enabled: boolean;
+  badge: string;
+}> = [
+  {
+    mode: 'description',
+    title: 'Describe',
+    description: 'Generate a reviewed graph from an owner prompt.',
+    enabled: true,
+    badge: 'W2',
+  },
+  {
+    mode: 'manual',
+    title: 'Manual',
+    description: 'Build the graph from explicit owner-entered fields.',
+    enabled: true,
+    badge: 'W2',
+  },
+  {
+    mode: 'downloaded-character-card',
+    title: 'CharacterCard',
+    description: 'Import downloaded JSON or PNG card metadata.',
+    enabled: true,
+    badge: 'W3',
+  },
+  {
+    mode: 'existing-agent-remix',
+    title: 'Remix Agent',
+    description: 'Start from an existing owned Realm Agent.',
+    enabled: false,
+    badge: 'W4',
+  },
+];
+
+function SourceModeChooser({
+  value,
+  onSelect,
+}: {
+  value: AgentCreationGraphSourceMode;
+  onSelect: (mode: AgentCreationGraphSourceMode) => void;
+}) {
+  return (
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      {SOURCE_MODE_OPTIONS.map((option) => {
+        const active = option.mode === value;
+        return (
+          <button
+            key={option.mode}
+            type="button"
+            disabled={!option.enabled}
+            onClick={() => onSelect(option.mode)}
+            style={{
+              minHeight: 116,
+              padding: 14,
+              borderRadius: 8,
+              border: `1px solid ${active ? 'var(--nimi-action-primary-bg)' : 'var(--nimi-border-subtle)'}`,
+              background: active
+                ? 'color-mix(in srgb, var(--nimi-action-primary-bg) 12%, var(--nimi-surface-card))'
+                : 'var(--nimi-surface-card)',
+              color: option.enabled ? 'var(--nimi-text-primary)' : 'var(--nimi-text-muted)',
+              textAlign: 'left',
+              cursor: option.enabled ? 'pointer' : 'not-allowed',
+              opacity: option.enabled ? 1 : 0.58,
+            }}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span style={{ fontWeight: 650 }}>{option.title}</span>
+              <StatusBadge tone={option.enabled ? 'info' : 'neutral'}>{option.badge}</StatusBadge>
+            </div>
+            <p className="m-0 mt-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
+              {option.description}
+            </p>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function GraphStatusBadge({ status }: { status: AgentCreationGraph['normalizedGraph']['sections'][number]['status'] }) {
+  if (status === 'ready') return <StatusBadge tone="success">ready</StatusBadge>;
+  if (status === 'blocked') return <StatusBadge tone="warning">blocked</StatusBadge>;
+  return <StatusBadge tone="neutral">needs decision</StatusBadge>;
+}
+
+function GraphReviewBoard({
+  graph,
+  review,
+  onAccept,
+}: {
+  graph: AgentCreationGraph;
+  review: AgentCreationGraphCreateReview;
+  onAccept: () => void;
+}) {
+  return (
+    <Surface tone="card" padding="md">
+      <div className="grid gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="font-medium">Agent Creation Graph</div>
+              <StatusBadge tone={review.ready ? 'success' : review.canAccept ? 'info' : 'warning'}>
+                {review.ready ? 'accepted' : review.canAccept ? 'review required' : 'blocked'}
+              </StatusBadge>
+            </div>
+            <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
+              {agentCreationGraphSourceModeLabel(graph.sourcePackage.mode)} · {graph.sourcePackage.label}
+            </p>
+          </div>
+          <Button tone="secondary" size="sm" disabled={!review.canAccept || review.ready} onClick={onAccept}>
+            {review.ready ? 'Graph accepted' : 'Accept graph'}
+          </Button>
+        </div>
+
+        {review.shapeErrors.length > 0 ? (
+          <InlineAlert tone="danger">{review.shapeErrors.join('; ')}</InlineAlert>
+        ) : review.reviewErrors.length > 0 ? (
+          <InlineAlert tone="warning">{review.reviewErrors.join('; ')}</InlineAlert>
+        ) : (
+          <InlineAlert tone="success">Graph review is accepted for this exact draft fingerprint.</InlineAlert>
+        )}
+
+        <div className="grid gap-2">
+          <div className="font-medium">Source mapping</div>
+          {graph.sourcePackage.fields.length > 0 ? (
+            <div className="grid gap-2">
+              {graph.sourcePackage.fields.slice(0, 6).map((item) => (
+                <div
+                  key={item.key}
+                  className="grid gap-1 rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-raised)] p-2 text-[length:var(--nimi-type-body-sm-size)]"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium">{item.label}</span>
+                    <StatusBadge tone={item.status === 'mapped' ? 'success' : 'neutral'}>{item.status}</StatusBadge>
+                  </div>
+                  <div className="ras-break-anywhere text-[var(--nimi-text-muted)]">{item.value}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <InlineAlert tone="warning">No source fields have been mapped into the graph yet.</InlineAlert>
+          )}
+        </div>
+
+        <div className="grid gap-2">
+          <div className="font-medium">Review sections</div>
+          <div className="grid gap-2">
+            {graph.normalizedGraph.sections.map((section) => (
+              <div
+                key={section.key}
+                className="rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-raised)] p-2"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">{section.title}</span>
+                  <GraphStatusBadge status={section.status} />
+                </div>
+                <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
+                  {section.summary}
+                </p>
+                {section.missing.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {section.missing.slice(0, 4).map((item) => (
+                      <StatusBadge key={item} tone="neutral">{item}</StatusBadge>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <TechnicalReviewDetails>
+          <pre className="ras-json-preview m-0 max-h-72 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-card)] p-3 text-xs">
+            {JSON.stringify({
+              sourcePackage: graph.sourcePackage,
+              writePlan: graph.writePlan,
+              provenance: graph.provenance,
+            }, null, 2)}
+          </pre>
+        </TechnicalReviewDetails>
+      </div>
+    </Surface>
+  );
+}
+
 type CreateStage = 'seed' | 'edit';
 
 export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: CreateRealmAgentWorkspaceProps) {
   const [stage, setStage] = useState<CreateStage>('seed');
+  const [sourceMode, setSourceMode] = useState<AgentCreationGraphSourceMode>('description');
+  const [graphAcceptedFingerprint, setGraphAcceptedFingerprint] = useState<string | null>(null);
+  const [characterCardImportResult, setCharacterCardImportResult] = useState<CharacterCardImportResult | null>(null);
+  const [isImportingCharacterCard, setIsImportingCharacterCard] = useState(false);
   const [seedDescription, setSeedDescription] = useState<string>('');
   const [seedResult, setSeedResult] = useState<AgentSeedGenerationResult | null>(null);
   const [isGeneratingSeed, setIsGeneratingSeed] = useState(false);
@@ -190,6 +397,23 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
     enabled: normalizedDraft.handle.length > 0,
   });
   const handleAvailability = handleAvailabilityQuery.data?.ok ? handleAvailabilityQuery.data.availability : null;
+  const creationGraph = useMemo(() => buildAgentCreationGraphFromDraft(draft, {
+    sourceMode,
+    sourceLabel: sourceMode === 'description'
+      ? (draft.originalDescription || seedDescription || 'Owner description')
+      : sourceMode === 'downloaded-character-card' && characterCardImportResult?.ok
+        ? `CharacterCard: ${characterCardImportResult.card.data.name} (${characterCardImportResult.card.sourceName})`
+      : agentCreationGraphSourceModeLabel(sourceMode),
+    runtimeRationale: seedResult?.ok ? seedResult.rationale : '',
+    extraSourceFields: sourceMode === 'downloaded-character-card' && characterCardImportResult?.ok
+      ? mapCharacterCardToGraphSourceFields(characterCardImportResult.card)
+      : [],
+    acceptedForCreateFingerprint: graphAcceptedFingerprint,
+  }), [characterCardImportResult, draft, graphAcceptedFingerprint, seedDescription, seedResult, sourceMode]);
+  const creationGraphReview = useMemo(
+    () => validateAgentCreationGraphForRealmCreate(creationGraph, graphAcceptedFingerprint),
+    [creationGraph, graphAcceptedFingerprint],
+  );
 
   useEffect(() => {
     if (!draft.selectedWorldId && oasisWorld) {
@@ -197,11 +421,62 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
     }
   }, [draft.selectedWorldId, oasisWorld]);
 
-  function updateDraft(patch: Partial<CreateRealmAgentDraftInput>) {
-    setDraft((current) => ({ ...current, ...patch }));
+  function resetCreateOutcome() {
     setLocalSubmitErrors([]);
     setSubmitResult(null);
     setCreatedContext(null);
+  }
+
+  function updateDraft(patch: Partial<CreateRealmAgentDraftInput>) {
+    setDraft((current) => ({ ...current, ...patch }));
+    setGraphAcceptedFingerprint(null);
+    resetCreateOutcome();
+  }
+
+  function selectSourceMode(mode: AgentCreationGraphSourceMode) {
+    setSourceMode(mode);
+    setGraphAcceptedFingerprint(null);
+    resetCreateOutcome();
+    if (mode !== 'description') setSeedResult(null);
+    if (mode !== 'downloaded-character-card') setCharacterCardImportResult(null);
+  }
+
+  async function importCharacterCardFile(file: File | null) {
+    if (!file) return;
+    setIsImportingCharacterCard(true);
+    setSourceMode('downloaded-character-card');
+    setGraphAcceptedFingerprint(null);
+    setCharacterCardImportResult(null);
+    setSeedResult(null);
+    resetCreateOutcome();
+    try {
+      const result = await parseDownloadedCharacterCardFile(file);
+      setCharacterCardImportResult(result);
+      if (result.ok) {
+        const patch = mapCharacterCardToCreateDraft(result.card);
+        setSeedResult(null);
+        setDraft((current) => ({
+          ...current,
+          handle: patch.handle || current.handle,
+          displayName: patch.displayName || current.displayName,
+          concept: patch.concept || current.concept,
+          description: patch.description || current.description,
+          ruleText: patch.ruleText || current.ruleText,
+          dnaPrimary: patch.dnaPrimary || current.dnaPrimary,
+          dnaSecondary: patch.dnaSecondary && patch.dnaSecondary.length > 0 ? patch.dnaSecondary : current.dnaSecondary,
+          originalDescription: patch.originalDescription || current.originalDescription,
+        }));
+        setReferenceImagePrompt(defaultReferenceImagePromptFromDraft({
+          description: patch.originalDescription || '',
+          displayName: patch.displayName || '',
+          concept: patch.concept || '',
+          dnaPrimary: patch.dnaPrimary || '',
+        }));
+        setStage('edit');
+      }
+    } finally {
+      setIsImportingCharacterCard(false);
+    }
   }
 
   const createMutation = useMutation<RealmAgentCreateWithProfileSettingsResult, Error, ReviewedCreateRealmAgentPayload>({
@@ -226,6 +501,11 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
   });
 
   function submitCreate() {
+    if (!creationGraphReview.ready) {
+      setLocalSubmitErrors(creationGraphReview.errors);
+      setSubmitResult(null);
+      return;
+    }
     const readiness = validateCreateRealmAgentReadiness(draft, { selectableWorldIds, handleAvailability });
     if (!readiness.ready) {
       setLocalSubmitErrors(readiness.errors);
@@ -240,6 +520,10 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
   async function runSeedGeneration() {
     setIsGeneratingSeed(true);
     setSeedResult(null);
+    setSourceMode('description');
+    setGraphAcceptedFingerprint(null);
+    setCharacterCardImportResult(null);
+    resetCreateOutcome();
     try {
       const result = await generateAgentSeedFromDescription(seedDescription);
       setSeedResult(result);
@@ -272,6 +556,11 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
   }
 
   function skipSeedAndCreateManually() {
+    setSourceMode('manual');
+    setGraphAcceptedFingerprint(null);
+    setSeedResult(null);
+    setCharacterCardImportResult(null);
+    resetCreateOutcome();
     setDraft((current) => ({
       ...current,
       originalDescription: seedDescription.trim() || current.originalDescription,
@@ -287,8 +576,8 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
 
   function returnToSeedStage() {
     setStage('seed');
-    setSubmitResult(null);
-    setLocalSubmitErrors([]);
+    setGraphAcceptedFingerprint(null);
+    resetCreateOutcome();
   }
 
   async function runReferenceImageGeneration() {
@@ -305,6 +594,8 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
       const result = await generateAgentReferenceImage({ prompt });
       setReferenceImageResult(result);
       if (result.ok) {
+        setGraphAcceptedFingerprint(null);
+        resetCreateOutcome();
         setDraft((current) => ({ ...current, referenceImageUrl: result.referenceImageUrl }));
       }
     } finally {
@@ -313,6 +604,8 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
   }
 
   function clearReferenceImage() {
+    setGraphAcceptedFingerprint(null);
+    resetCreateOutcome();
     setDraft((current) => ({ ...current, referenceImageUrl: '' }));
     setReferenceImageResult(null);
   }
@@ -320,7 +613,7 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
   const readiness = validateCreateRealmAgentReadiness(draft, { selectableWorldIds, handleAvailability });
   const handleCheckBlocking = Boolean(normalizedDraft.handle)
     && (handleAvailabilityQuery.isLoading || handleAvailabilityQuery.isError || !handleAvailability?.available);
-  const createDisabled = createMutation.isPending || worldsQuery.isLoading || worlds.length === 0 || !selectedWorld || !readiness.ready || handleCheckBlocking;
+  const createDisabled = createMutation.isPending || worldsQuery.isLoading || worlds.length === 0 || !selectedWorld || !readiness.ready || !creationGraphReview.ready || handleCheckBlocking;
 
   if (stage === 'seed') {
     return (
@@ -328,42 +621,102 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
         <div className="grid min-w-0 gap-5">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
             <h2 className="m-0 text-xl font-semibold">Create Realm Agent</h2>
-            <StatusBadge tone="info">AI seed</StatusBadge>
-            <StatusBadge tone="neutral">optional</StatusBadge>
+            <StatusBadge tone="info">Creation Graph</StatusBadge>
+            <StatusBadge tone="neutral">source first</StatusBadge>
           </div>
           <p className="m-0 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-            Describe your agent in one sentence. Studio asks Runtime's text model to draft handle, display name, personality DNA, and public copy — you'll review and edit each field before submit.
+            Choose a source, build a reviewed graph, then submit only admitted Realm fields after handle and world checks pass.
           </p>
-          <FieldShell
-            label="One-line agent description"
-            message="Example: 一个20岁冷酷的中国唐代杀手女孩"
-          >
-            <TextareaField
-              value={seedDescription}
-              placeholder="一个20岁冷酷的中国唐代杀手女孩"
-              onChange={(event) => setSeedDescription(event.currentTarget.value)}
-            />
-          </FieldShell>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            <Button
-              tone="primary"
-              disabled={!seedDescription.trim() || isGeneratingSeed}
-              loading={isGeneratingSeed}
-              onClick={() => void runSeedGeneration()}
-            >
-              Generate draft from description
-            </Button>
-            <Button tone="ghost" onClick={skipSeedAndCreateManually}>
-              Skip — fill manually
-            </Button>
-          </div>
+          <SourceModeChooser value={sourceMode} onSelect={selectSourceMode} />
+          {sourceMode === 'existing-agent-remix' ? (
+            <InlineAlert tone="warning">
+              {agentCreationGraphSourceModeLabel(sourceMode)} is admitted in the spec but implemented in the next dependent wave.
+            </InlineAlert>
+          ) : null}
+          {sourceMode === 'description' ? (
+            <>
+              <FieldShell
+                label="One-line agent description"
+                message="Example: 一个20岁冷酷的中国唐代杀手女孩"
+              >
+                <TextareaField
+                  value={seedDescription}
+                  placeholder="一个20岁冷酷的中国唐代杀手女孩"
+                  onChange={(event) => setSeedDescription(event.currentTarget.value)}
+                />
+              </FieldShell>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                <Button
+                  tone="primary"
+                  disabled={!seedDescription.trim() || isGeneratingSeed}
+                  loading={isGeneratingSeed}
+                  onClick={() => void runSeedGeneration()}
+                >
+                  Generate graph from description
+                </Button>
+              </div>
+            </>
+          ) : null}
+          {sourceMode === 'manual' ? (
+            <Surface tone="card" padding="md">
+              <div className="grid gap-3">
+                <div className="font-medium">Manual advanced entry</div>
+                <p className="m-0 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
+                  Start with an empty owner-reviewed graph and fill admitted create fields by hand.
+                </p>
+                <div>
+                  <Button tone="primary" onClick={skipSeedAndCreateManually}>
+                    Start manual graph
+                  </Button>
+                </div>
+              </div>
+            </Surface>
+          ) : null}
+          {sourceMode === 'downloaded-character-card' ? (
+            <Surface tone="card" padding="md">
+              <div className="grid gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="font-medium">Downloaded CharacterCard</div>
+                  <StatusBadge tone="info">local file</StatusBadge>
+                </div>
+                <FieldShell
+                  label="CharacterCard JSON or PNG"
+                  message="Supported: local JSON card data, or PNG with chara tEXt metadata. Studio does not fetch chub.ai URLs."
+                >
+                  <input
+                    type="file"
+                    accept=".json,.png,application/json,image/png"
+                    disabled={isImportingCharacterCard}
+                    onChange={(event) => {
+                      const file = event.currentTarget.files?.[0] || null;
+                      void importCharacterCardFile(file);
+                      event.currentTarget.value = '';
+                    }}
+                  />
+                </FieldShell>
+                {isImportingCharacterCard ? (
+                  <InlineAlert tone="info">Importing local CharacterCard.</InlineAlert>
+                ) : null}
+                {characterCardImportResult && !characterCardImportResult.ok ? (
+                  <InlineAlert tone="danger">
+                    CharacterCard import failed: {characterCardImportResult.message}
+                  </InlineAlert>
+                ) : null}
+                {characterCardImportResult?.ok ? (
+                  <InlineAlert tone="success">
+                    Imported {characterCardImportResult.card.data.name} from {characterCardImportResult.card.sourceFormat.toUpperCase()}.
+                  </InlineAlert>
+                ) : null}
+              </div>
+            </Surface>
+          ) : null}
           {seedResult && !seedResult.ok ? (
             <InlineAlert tone="danger">
               Seed generation failed: {seedResult.message}
             </InlineAlert>
           ) : null}
           <InlineAlert tone="neutral">
-            <strong>Privacy:</strong> the description is sent to the Runtime layer only after the Studio route resolver binds a concrete text.generate route. Generated output is a candidate draft only — nothing reaches Realm until you click Create.
+            <strong>Boundary:</strong> Runtime output and imported card data are graph candidate material. Nothing reaches Realm until the graph is accepted, handle and world gates pass, and Create returns a canonical id.
           </InlineAlert>
         </div>
       </Surface>
@@ -382,12 +735,17 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
               <StatusBadge tone="success">AI seeded</StatusBadge>
             ) : null}
             <Button tone="ghost" size="sm" onClick={returnToSeedStage}>
-              ← Restart from one-liner
+              Change source
             </Button>
           </div>
           <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-            Create a user-owned Realm Agent by selecting a world, defining public identity, and reviewing the request before submit.
+            Create a user-owned Realm Agent by reviewing the graph, selecting a world, defining public identity, and submitting only admitted Realm fields.
           </p>
+          {characterCardImportResult?.ok ? (
+            <InlineAlert tone="info" className="mt-3">
+              <strong>CharacterCard source:</strong> {characterCardImportResult.card.data.name} · {characterCardImportResult.card.spec} {characterCardImportResult.card.specVersion}
+            </InlineAlert>
+          ) : null}
           {seedResult?.ok && seedResult.rationale ? (
             <InlineAlert tone="info" className="mt-3">
               <strong>AI draft rationale:</strong> {seedResult.rationale}
@@ -533,6 +891,11 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
             {!readiness.ready ? (
               <InlineAlert tone="warning">{readiness.errors.join('; ')}</InlineAlert>
             ) : null}
+            {!creationGraphReview.ready ? (
+              <InlineAlert tone={creationGraphReview.canAccept ? 'warning' : 'danger'}>
+                {creationGraphReview.errors.join('; ')}
+              </InlineAlert>
+            ) : null}
             {localSubmitErrors.length > 0 ? (
               <InlineAlert tone="danger">Create validation failed: {localSubmitErrors.join('; ')}</InlineAlert>
             ) : null}
@@ -561,7 +924,7 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
                 ) : null}
                 <div className="mt-3 flex flex-wrap gap-3">
                   <Button tone="secondary" onClick={() => onOpenCreatedAgent?.(createdContext.agentId, 'detail')}>
-                    Open created detail
+                    Open Agent Cockpit
                   </Button>
                   <Button tone="ghost" onClick={() => onOpenCreatedAgent?.(createdContext.agentId, 'settings')}>
                     Open settings
@@ -648,6 +1011,11 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
         </div>
 
         <div className="grid min-w-0 content-start gap-4">
+          <GraphReviewBoard
+            graph={creationGraph}
+            review={creationGraphReview}
+            onAccept={() => setGraphAcceptedFingerprint(acceptAgentCreationGraphForRealmCreate(creationGraph))}
+          />
           <Surface tone="card" padding="md">
             <div className="flex flex-wrap items-center gap-2">
               <div className="font-medium">Selected world preview</div>
