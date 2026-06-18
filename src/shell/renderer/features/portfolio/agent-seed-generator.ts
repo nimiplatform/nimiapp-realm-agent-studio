@@ -2,6 +2,7 @@ import { createStudioRuntimeClient } from '@renderer/data/runtime-client.js';
 import {
   DNA_PRIMARY_ARCHETYPES,
   DNA_SECONDARY_TRAITS,
+  createRealmAgentHandleCandidate,
   type CreateRealmAgentDraftInput,
   type DnaPrimaryArchetype,
   type DnaSecondaryTrait,
@@ -97,7 +98,7 @@ function buildAgentSeedPayload(description: string): {
             'Required keys: handle, displayName, concept, description, ruleText, dnaPrimary, dnaSecondary, rationale.',
             '',
             '— Field rules —',
-            'handle: short kebab-case latin suggestion (3-20 chars), no leading @, lowercase letters/digits/hyphens only.',
+            'handle: Realm Agent base handle suggestion, 4-16 chars, no @ or ~ prefix, lowercase letters/digits/underscores only.',
             'displayName: 2-32 chars; match the user\'s described language (Chinese, English, etc).',
             'concept: 1-2 sentences naming the core creative concept.',
             'description: 1 short public profile description (≤500 chars).',
@@ -152,13 +153,7 @@ function readDnaSecondary(value: unknown): DnaSecondaryTrait[] {
 }
 
 function normalizeHandleSuggestion(raw: unknown): string {
-  return readString(raw)
-    .replace(/^@+/, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 32);
+  return createRealmAgentHandleCandidate(readString(raw), 'agent_seed');
 }
 
 export function parseAgentSeedOutput(raw: string): { seed: GeneratedAgentSeed; rationale: string } {

@@ -7,6 +7,10 @@ export function AgentCreatePage() {
   return (
     <CreateRealmAgentWorkspace
       onOpenCreatedAgent={(agentId, target) => {
+        if (target === 'launch') {
+          navigate(`/portfolio/${agentId}/launch`);
+          return;
+        }
         if (target === 'settings') {
           navigate(`/portfolio/${agentId}/settings`);
           return;

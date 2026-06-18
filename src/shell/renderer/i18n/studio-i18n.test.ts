@@ -21,9 +21,9 @@ describe('studio i18n resources', () => {
   it('translates typed Studio copy keys through the active language', async () => {
     ensureStudioI18nInitialized();
     await studioI18n.changeLanguage('zh');
-    expect(translateStudioCopy('shell.nav.create')).toBe('创建');
+    expect(translateStudioCopy('shell.nav.create')).toBe('创建 Agent');
 
     await studioI18n.changeLanguage('en');
-    expect(translateStudioCopy('shell.nav.create')).toBe('Create');
+    expect(translateStudioCopy('shell.nav.create')).toBe('Create Agent');
   });
 });

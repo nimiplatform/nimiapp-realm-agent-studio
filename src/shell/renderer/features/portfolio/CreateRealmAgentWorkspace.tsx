@@ -1,17 +1,29 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, EmptyState, FieldShell, InlineAlert, SelectField, StatusBadge, Surface, TextareaField, TextField } from '@nimiplatform/kit/ui';
 import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Check,
+  ChevronRight,
+  FileUp,
+  Image as ImageIcon,
+  Lock,
+  PencilLine,
+  RefreshCw,
+  Sparkles,
+  Users,
+} from 'lucide-react';
+import {
   DNA_PRIMARY_ARCHETYPES,
-  DNA_SECONDARY_MAX_RECOMMENDED,
-  DNA_SECONDARY_TRAITS,
+  createRealmAgentHandleCandidate,
   normalizeCreateRealmAgentDraft,
   selectOasisDefaultWorld,
   validateCreateRealmAgentReadiness,
   type CreateRealmAgentDraftInput,
   type DnaPrimaryArchetype,
-  type DnaSecondaryTrait,
-  type NormalizedRealmAgentHandleAvailability,
   type ReviewedCreateRealmAgentPayload,
   type SelectableRealmWorld,
 } from './create-agent-draft.js';
@@ -19,35 +31,32 @@ import {
   checkCreateRealmAgentHandleAvailability,
   createReviewedRealmAgentWithProfileSettings,
   getCreateRealmAgentWorldPreview,
+  listOwnerPortfolioAgents,
   listCreateRealmAgentSelectableWorlds,
-  type RealmAgentHandleAvailabilityResult,
   type RealmAgentCreateWithProfileSettingsResult,
+  type RealmAgentHandleAvailabilityResult,
 } from './portfolio-client.js';
-import {
-  generateAgentSeedFromDescription,
-  type AgentSeedGenerationResult,
-} from './agent-seed-generator.js';
+import type { OwnerPortfolioAgent } from './portfolio-data.js';
+import { generateAgentSeedFromDescription, type AgentSeedGenerationResult } from './agent-seed-generator.js';
 import {
   acceptAgentCreationGraphForRealmCreate,
   agentCreationGraphSourceModeLabel,
   buildAgentCreationGraphFromDraft,
   validateAgentCreationGraphForRealmCreate,
-  type AgentCreationGraph,
-  type AgentCreationGraphCreateReview,
-  type AgentCreationGraphSectionKey,
+  type AgentCreationGraphSourceField,
   type AgentCreationGraphSourceMode,
 } from './agent-creation-graph.js';
-import {
-  defaultReferenceImagePromptFromDraft,
-  generateAgentReferenceImage,
-  type AgentReferenceImageResult,
-} from './agent-reference-image.js';
 import {
   mapCharacterCardToCreateDraft,
   mapCharacterCardToGraphSourceFields,
   parseDownloadedCharacterCardFile,
   type CharacterCardImportResult,
 } from './character-card-import.js';
+import {
+  defaultReferenceImagePromptFromDraft,
+  generateAgentReferenceImage,
+  type AgentReferenceImageResult,
+} from './agent-reference-image.js';
 import { useStudioI18n } from '../../i18n/use-studio-i18n.js';
 import type { StudioCopyKey } from '../../i18n/studio-copy.js';
 import type { StudioTranslateOptions } from '../../i18n/studio-i18n.js';
@@ -62,105 +71,84 @@ export type CreatedRealmAgentContext = {
 
 type CreateRealmAgentWorkspaceProps = {
   onCreated?: (context: CreatedRealmAgentContext) => void;
-  onOpenCreatedAgent?: (agentId: string, target: 'detail' | 'settings') => void;
+  onOpenCreatedAgent?: (agentId: string, target: 'detail' | 'settings' | 'launch') => void;
 };
 
 type StudioTranslator = (key: StudioCopyKey, options?: StudioTranslateOptions) => string;
+type CreateStep = 'source' | 'draft' | 'review' | 'confirm';
+type ReviewFieldKey = 'handle' | 'displayName' | 'description' | 'dnaPrimary' | 'world';
+type ReviewStatus = 'accepted' | 'needs-review' | 'blocked';
 
-const GRAPH_SOURCE_MODE_KEYS: Record<AgentCreationGraphSourceMode, StudioCopyKey> = {
-  description: 'create.graph.sourceMode.description',
-  manual: 'create.graph.sourceMode.manual',
-  'downloaded-character-card': 'create.graph.sourceMode.downloadedCharacterCard',
-  'existing-agent-remix': 'create.graph.sourceMode.existingAgentRemix',
+type DraftDirection = {
+  id: string;
+  labelKey: StudioCopyKey;
+  sourceLabelKey: StudioCopyKey;
+  displayName: string;
+  identitySummary: string;
+  dnaPrimary: DnaPrimaryArchetype | '';
+  toneTags: string[];
+  behaviorBoundary: string;
+  publicDescription: string;
 };
 
-const GRAPH_FIELD_STATUS_KEYS: Record<AgentCreationGraph['sourcePackage']['fields'][number]['status'], StudioCopyKey> = {
-  mapped: 'create.graph.fieldStatus.mapped',
-  candidateOnly: 'create.graph.fieldStatus.candidateOnly',
-  unmapped: 'create.graph.fieldStatus.unmapped',
-  rejected: 'create.graph.fieldStatus.rejected',
+type ReviewField = {
+  key: ReviewFieldKey;
+  labelKey: StudioCopyKey;
+  status: ReviewStatus;
+  reasonKey: StudioCopyKey;
+  issue: string | null;
 };
 
-const GRAPH_SOURCE_FIELD_KEYS: Record<string, StudioCopyKey> = {
-  ownerDescription: 'create.graph.sourceField.ownerDescription',
-  displayName: 'create.graph.sourceField.displayName',
-  handle: 'create.graph.sourceField.handle',
-  concept: 'create.graph.sourceField.concept',
-  description: 'create.graph.sourceField.description',
-  ruleText: 'create.graph.sourceField.ruleText',
-  referenceImageUrl: 'create.graph.sourceField.referenceImageUrl',
-  runtimeRationale: 'create.graph.sourceField.runtimeRationale',
-  'card.name': 'create.graph.sourceField.cardName',
-  'card.description': 'create.graph.sourceField.cardDescription',
-  'card.personality': 'create.graph.sourceField.cardPersonality',
-  'card.scenario': 'create.graph.sourceField.cardScenario',
-  'card.first_mes': 'create.graph.sourceField.cardFirstMessage',
-  'card.mes_example': 'create.graph.sourceField.cardExampleMessages',
-  'card.tags': 'create.graph.sourceField.cardTags',
-  'card.alternate_greetings': 'create.graph.sourceField.cardAlternateGreetings',
-  'card.creator_notes': 'create.graph.sourceField.cardCreatorNotes',
-  'card.system_prompt': 'create.graph.sourceField.cardSystemPrompt',
-  'card.post_history_instructions': 'create.graph.sourceField.cardPostHistoryInstructions',
-  'card.character_book': 'create.graph.sourceField.cardCharacterBook',
-  'card.extensions': 'create.graph.sourceField.cardExtensions',
-  'card.unknown': 'create.graph.sourceField.cardUnknown',
+type ConfirmPreviewField = {
+  key: string;
+  labelKey: StudioCopyKey;
+  value: string;
+  emphasized?: boolean;
 };
 
-const GRAPH_SECTION_TITLE_KEYS: Record<AgentCreationGraphSectionKey, StudioCopyKey> = {
-  identity: 'create.graph.section.identity.title',
-  dna: 'create.graph.section.dna.title',
-  behavior: 'create.graph.section.behavior.title',
-  worldview: 'create.graph.section.worldview.title',
-  greeting: 'create.graph.section.greeting.title',
-  communicationVoice: 'create.graph.section.communicationVoice.title',
-  contentVoice: 'create.graph.section.contentVoice.title',
-  visualBrief: 'create.graph.section.visualBrief.title',
-  voiceBrief: 'create.graph.section.voiceBrief.title',
-  postBrief: 'create.graph.section.postBrief.title',
-  sourceProvenance: 'create.graph.section.sourceProvenance.title',
-  missingDecisions: 'create.graph.section.missingDecisions.title',
-  riskNotes: 'create.graph.section.riskNotes.title',
-  writePlan: 'create.graph.section.writePlan.title',
-};
+const SOURCE_MODE_OPTIONS: Array<{
+  mode: AgentCreationGraphSourceMode;
+  titleKey: StudioCopyKey;
+  descriptionKey: StudioCopyKey;
+}> = [
+  {
+    mode: 'description',
+    titleKey: 'create.source.description.title',
+    descriptionKey: 'create.source.description.description',
+  },
+  {
+    mode: 'manual',
+    titleKey: 'create.source.manual.title',
+    descriptionKey: 'create.source.manual.description',
+  },
+  {
+    mode: 'downloaded-character-card',
+    titleKey: 'create.source.characterCard.title',
+    descriptionKey: 'create.source.characterCard.description',
+  },
+  {
+    mode: 'existing-agent-remix',
+    titleKey: 'create.source.remix.title',
+    descriptionKey: 'create.source.remix.description',
+  },
+];
 
-const GRAPH_SECTION_SUMMARY_KEYS: Record<string, StudioCopyKey> = {
-  'Public identity fields are ready for owner review.': 'create.graph.section.identity.ready',
-  'Public identity fields are not ready.': 'create.graph.section.identity.missing',
-  'Realm archetype input is selected.': 'create.graph.section.dna.ready',
-  'Realm archetype input is missing.': 'create.graph.section.dna.missing',
-  'Visible behavior notes will stay owner-reviewed.': 'create.graph.section.behavior.ready',
-  'No behavior notes were supplied.': 'create.graph.section.behavior.missing',
-  'Concept can anchor the public agent worldview.': 'create.graph.section.worldview.ready',
-  'Concept is missing.': 'create.graph.section.worldview.missing',
-  'Greeting remains a follow-up owner settings candidate after create.': 'create.graph.section.greeting.summary',
-  'Voice can be inferred for review from concept and behavior notes.': 'create.graph.section.communicationVoice.ready',
-  'Voice needs owner input.': 'create.graph.section.communicationVoice.missing',
-  'Content voice is retained as a post-studio candidate, not a create write.': 'create.graph.section.contentVoice.summary',
-  'A reviewed reference image URL is ready as create input.': 'create.graph.section.visualBrief.ready',
-  'Visual brief remains optional candidate material.': 'create.graph.section.visualBrief.missing',
-  'Voice demo belongs to Identity Studio and remains candidate-only in create.': 'create.graph.section.voiceBrief.summary',
-  'Post ideas belong to Content Studio and remain candidate-only in create.': 'create.graph.section.postBrief.summary',
-  'Unresolved decisions are explicit and do not block create unless they are required Realm create fields.': 'create.graph.section.missingDecisions.summary',
-  'No hidden provider, model, lifecycle, private memory, or raw AgentRule fields are admitted.': 'create.graph.section.riskNotes.summary',
-  'Accepted fields map to admitted Realm write paths; blocked and deferred fields remain explicit.': 'create.graph.section.writePlan.summary',
-};
+const SOURCE_MODE_SWITCH_OPTIONS: Array<{
+  mode: AgentCreationGraphSourceMode;
+  labelKey: StudioCopyKey;
+}> = [
+  { mode: 'description', labelKey: 'create.modeSwitch.description' },
+  { mode: 'manual', labelKey: 'create.modeSwitch.manual' },
+  { mode: 'downloaded-character-card', labelKey: 'create.modeSwitch.characterCard' },
+  { mode: 'existing-agent-remix', labelKey: 'create.modeSwitch.remix' },
+];
 
-const GRAPH_MISSING_KEYS: Record<string, StudioCopyKey> = {
-  'display name': 'create.graph.missing.displayName',
-  handle: 'create.graph.missing.handle',
-  'DNA primary archetype': 'create.graph.missing.dnaPrimaryArchetype',
-  'behavior boundaries': 'create.graph.missing.behaviorBoundaries',
-  concept: 'create.graph.missing.concept',
-  'greeting candidate': 'create.graph.missing.greetingCandidate',
-  'communication voice': 'create.graph.missing.communicationVoice',
-  'content voice examples': 'create.graph.missing.contentVoiceExamples',
-  'avatar/profile cover visual brief': 'create.graph.missing.avatarProfileCoverVisualBrief',
-  'voice brief': 'create.graph.missing.voiceBrief',
-  'first post brief': 'create.graph.missing.firstPostBrief',
-  'profile description': 'create.graph.missing.profileDescription',
-  'visual reference': 'create.graph.missing.visualReference',
-  greeting: 'create.graph.missing.greeting',
-  'Realm create required fields': 'create.graph.missing.realmCreateRequiredFields',
+const REVIEW_LABEL_KEYS: Record<ReviewFieldKey, StudioCopyKey> = {
+  handle: 'create.review.field.handle',
+  displayName: 'create.review.field.displayName',
+  description: 'create.review.field.description',
+  dnaPrimary: 'create.review.field.dnaPrimary',
+  world: 'create.review.field.world',
 };
 
 const CREATE_FIXED_MESSAGE_KEYS: Record<string, StudioCopyKey> = {
@@ -186,86 +174,19 @@ const CREATE_FIXED_MESSAGE_KEYS: Record<string, StudioCopyKey> = {
   'Runtime imageGenerate produced a local artifact but no http(s) URL that Realm can store as a public reference image.': 'create.error.referenceLocalArtifactNoUrl',
 };
 
-function translateGraphSourceMode(mode: AgentCreationGraphSourceMode, t: StudioTranslator): string {
-  return t(GRAPH_SOURCE_MODE_KEYS[mode]);
-}
-
-function translateGraphSourceLabel(label: string, t: StudioTranslator): string {
-  const rawSourceLabels: Record<string, StudioCopyKey> = {
-    'Owner description': 'create.graph.sourceMode.description',
-    'Manual advanced entry': 'create.graph.sourceMode.manual',
-    'Downloaded CharacterCard': 'create.graph.sourceMode.downloadedCharacterCard',
-    'Existing owned Realm Agent': 'create.graph.sourceMode.existingAgentRemix',
-  };
-  const key = rawSourceLabels[label];
-  return key ? t(key) : label;
-}
-
-function translateGraphSourceField(
-  field: AgentCreationGraph['sourcePackage']['fields'][number],
-  t: StudioTranslator,
-): string {
-  const key = GRAPH_SOURCE_FIELD_KEYS[field.key];
-  return key ? t(key) : field.label;
-}
-
-function translateGraphSectionTitle(sectionKey: AgentCreationGraphSectionKey, t: StudioTranslator): string {
-  return t(GRAPH_SECTION_TITLE_KEYS[sectionKey]);
-}
-
-function translateGraphSectionSummary(
-  section: AgentCreationGraph['normalizedGraph']['sections'][number],
-  graph: AgentCreationGraph,
-  t: StudioTranslator,
-): string {
-  if (section.key === 'sourceProvenance') {
-    return t('create.graph.section.sourceProvenance.summary', {
-      source: translateGraphSourceLabel(graph.sourcePackage.label, t),
-    });
-  }
-  const key = GRAPH_SECTION_SUMMARY_KEYS[section.summary];
-  return key ? t(key) : section.summary;
-}
-
-function translateGraphMissingItem(item: string, t: StudioTranslator): string {
-  const key = GRAPH_MISSING_KEYS[item];
-  return key ? t(key) : item;
-}
-
-function translateGraphReviewError(error: string, t: StudioTranslator): string {
-  if (error === 'Agent Creation Graph missing (R-RAS-GRAPH-003).') return t('create.graph.error.graphMissing');
-  if (error === 'Agent Creation Graph write plan missing Realm create target (R-RAS-GRAPH-017).') return t('create.graph.error.writePlanMissing');
-  if (error === 'Agent Creation Graph write plan is blocked for Realm create (R-RAS-GRAPH-017).') return t('create.graph.error.writePlanBlocked');
-  if (error === 'Agent Creation Graph review missing or stale (R-RAS-GRAPH-019).') return t('create.graph.error.reviewMissing');
-
-  const missingSection = error.match(/^Agent Creation Graph section missing: (.+) \(R-RAS-GRAPH-016\)\.$/);
-  if (missingSection) {
-    return t('create.graph.error.sectionMissing', { section: missingSection[1] });
-  }
-
-  const blockedSection = error.match(/^Agent Creation Graph (.+) section is blocked \(R-RAS-GRAPH-027\)\.$/);
-  if (blockedSection) {
-    return t('create.graph.error.sectionBlocked', { section: blockedSection[1] });
-  }
-
-  return error;
-}
-
-function translateGraphReviewErrors(errors: string[], t: StudioTranslator): string {
-  return errors.map((error) => translateGraphReviewError(error, t)).join('; ');
-}
-
 function translateCreateFixedMessage(message: string, t: StudioTranslator): string {
   const handleUnavailable = message.match(/^handle unavailable: (.+)$/);
-  if (handleUnavailable) {
-    return t('create.error.handleUnavailable', { message: handleUnavailable[1] });
-  }
+  if (handleUnavailable) return t('create.error.handleUnavailable', { message: handleUnavailable[1] });
   const key = CREATE_FIXED_MESSAGE_KEYS[message];
   return key ? t(key) : message;
 }
 
 function translateCreateFixedMessages(messages: string[], t: StudioTranslator): string {
   return messages.map((message) => translateCreateFixedMessage(message, t)).join('; ');
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error && error.message.trim() ? error.message.trim() : '';
 }
 
 function createEmptyDraft(): CreateRealmAgentDraftInput {
@@ -283,326 +204,156 @@ function createEmptyDraft(): CreateRealmAgentDraftInput {
   };
 }
 
-const DNA_PRIMARY_DESCRIPTION_KEYS: Record<DnaPrimaryArchetype, StudioCopyKey> = {
-  CARING: 'create.dna.primary.CARING',
-  PLAYFUL: 'create.dna.primary.PLAYFUL',
-  INTELLECTUAL: 'create.dna.primary.INTELLECTUAL',
-  CONFIDENT: 'create.dna.primary.CONFIDENT',
-  MYSTERIOUS: 'create.dna.primary.MYSTERIOUS',
-  ROMANTIC: 'create.dna.primary.ROMANTIC',
-};
-
-const DNA_SECONDARY_DESCRIPTION_KEYS: Record<DnaSecondaryTrait, StudioCopyKey> = {
-  HUMOROUS: 'create.dna.secondary.HUMOROUS',
-  SARCASTIC: 'create.dna.secondary.SARCASTIC',
-  GENTLE: 'create.dna.secondary.GENTLE',
-  DIRECT: 'create.dna.secondary.DIRECT',
-  OPTIMISTIC: 'create.dna.secondary.OPTIMISTIC',
-  REALISTIC: 'create.dna.secondary.REALISTIC',
-  DRAMATIC: 'create.dna.secondary.DRAMATIC',
-  PASSIONATE: 'create.dna.secondary.PASSIONATE',
-  REBELLIOUS: 'create.dna.secondary.REBELLIOUS',
-  INNOCENT: 'create.dna.secondary.INNOCENT',
-  WISE: 'create.dna.secondary.WISE',
-  ECCENTRIC: 'create.dna.secondary.ECCENTRIC',
-};
-
 function worldOptionLabel(world: SelectableRealmWorld): string {
-  const type = world.type ? ` · ${world.type}` : '';
-  return `${world.name}${type}`;
+  return world.type ? `${world.name} 路 ${world.type}` : world.name;
 }
 
-function TechnicalReviewDetails({ children }: { children: ReactNode }) {
+function sourceModeIcon(mode: AgentCreationGraphSourceMode): ReactNode {
+  if (mode === 'manual') return <PencilLine size={30} strokeWidth={1.8} />;
+  if (mode === 'downloaded-character-card') return <FileUp size={30} strokeWidth={1.8} />;
+  if (mode === 'existing-agent-remix') return <Users size={30} strokeWidth={1.8} />;
+  return <Sparkles size={30} strokeWidth={1.8} />;
+}
+
+function directionToneTags(draft: CreateRealmAgentDraftInput): string[] {
+  const normalized = normalizeCreateRealmAgentDraft(draft);
+  if (normalized.dnaSecondary.length > 0) return normalized.dnaSecondary.slice(0, 3);
+  if (normalized.dnaPrimary) return [normalized.dnaPrimary];
+  return ['owner-reviewed'];
+}
+
+function buildDirections(draft: CreateRealmAgentDraftInput, seedResult: AgentSeedGenerationResult | null): DraftDirection[] {
+  const normalized = normalizeCreateRealmAgentDraft(draft);
+  const baseName = normalized.displayName || 'Untitled Realm Agent';
+  const baseSummary = normalized.concept || normalized.originalDescription || normalized.description || 'Owner-provided public Agent IP direction.';
+  const baseDescription = normalized.description || normalized.concept || normalized.originalDescription || '';
+  const base: DraftDirection = {
+    id: 'selected',
+    labelKey: seedResult?.ok ? 'create.draft.direction.generated' : 'create.draft.direction.local',
+    sourceLabelKey: seedResult?.ok ? 'create.draft.aiCandidate' : 'create.draft.localDraft',
+    displayName: baseName,
+    identitySummary: baseSummary,
+    dnaPrimary: normalized.dnaPrimary,
+    toneTags: directionToneTags(draft),
+    behaviorBoundary: normalized.ruleText || 'Public behavior stays owner-reviewed; private LocalAgent memory is excluded.',
+    publicDescription: baseDescription,
+  };
+
+  const directions = [
+    base,
+    {
+      ...base,
+      id: 'public-ip',
+      labelKey: 'create.draft.direction.publicIp',
+      sourceLabelKey: 'create.draft.localDraft',
+      identitySummary: `${baseSummary} The public profile emphasizes durable Realm presence and clear owner boundaries.`,
+      behaviorBoundary: 'Keep public-facing behavior explicit, reviewable, and separated from runtime-private state.',
+    },
+    {
+      ...base,
+      id: 'content-ready',
+      labelKey: 'create.draft.direction.contentReady',
+      sourceLabelKey: 'create.draft.localDraft',
+      publicDescription: baseDescription || baseSummary,
+      behaviorBoundary: 'Defer first post, content voice, visual identity, and voice demo to Cockpit after creation.',
+    },
+  ] satisfies DraftDirection[];
+  return directions.slice(0, 3);
+}
+
+function applyDirectionToDraft(direction: DraftDirection, current: CreateRealmAgentDraftInput): CreateRealmAgentDraftInput {
+  return {
+    ...current,
+    displayName: direction.displayName,
+    concept: direction.identitySummary,
+    description: direction.publicDescription || direction.identitySummary,
+    dnaPrimary: direction.dnaPrimary || current.dnaPrimary,
+    ruleText: '',
+    referenceImageUrl: '',
+  };
+}
+
+function createHandleCandidate(draft: CreateRealmAgentDraftInput, sourceMode: AgentCreationGraphSourceMode): string {
+  const normalized = normalizeCreateRealmAgentDraft(draft);
+  const source = normalized.displayName || normalized.description || normalized.originalDescription || sourceMode;
+  return createRealmAgentHandleCandidate(source);
+}
+
+function statusTone(status: ReviewStatus): 'success' | 'warning' | 'danger' {
+  if (status === 'accepted') return 'success';
+  if (status === 'blocked') return 'danger';
+  return 'warning';
+}
+
+function statusLabelKey(status: ReviewStatus): StudioCopyKey {
+  if (status === 'accepted') return 'create.review.status.accepted';
+  if (status === 'blocked') return 'create.review.status.blocked';
+  return 'create.review.status.needsReview';
+}
+
+function TechnicalDetails({ children }: { children: ReactNode }) {
   const { t } = useStudioI18n();
   return (
     <details className="ras-technical-details">
       <summary>{t('create.technicalDetails')}</summary>
-      <div className="mt-3">
-        {children}
-      </div>
+      <div className="mt-3">{children}</div>
     </details>
   );
 }
 
-function ReadinessPreview({
-  draft,
-  selectableWorldIds,
-  handleAvailability,
-}: {
-  draft: CreateRealmAgentDraftInput;
-  selectableWorldIds: string[];
-  handleAvailability: NormalizedRealmAgentHandleAvailability | null;
-}) {
-  const { t } = useStudioI18n();
-  const normalizedDraft = normalizeCreateRealmAgentDraft(draft);
-  const readiness = validateCreateRealmAgentReadiness(draft, { selectableWorldIds, handleAvailability });
-
-  return (
-    <div className="grid gap-4">
-      <Surface tone="card" padding="md">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="font-medium">{t('create.visiblePublicFields')}</div>
-          <StatusBadge tone="info">{t('create.localDraft')}</StatusBadge>
-        </div>
-        <dl className="mt-3 grid gap-2 text-[length:var(--nimi-type-body-sm-size)]">
-          <div className="grid gap-1 sm:grid-cols-[140px_1fr]">
-            <dt className="text-[var(--nimi-text-muted)]">{t('create.handleField')}</dt>
-            <dd className="ras-break-anywhere m-0">@{normalizedDraft.handle || t('common.notSet')}</dd>
-          </div>
-          <div className="grid gap-1 sm:grid-cols-[140px_1fr]">
-            <dt className="text-[var(--nimi-text-muted)]">{t('create.displayNameLabel')}</dt>
-            <dd className="ras-break-anywhere m-0">{normalizedDraft.displayName || t('common.notSet')}</dd>
-          </div>
-          <div className="grid gap-1 sm:grid-cols-[140px_1fr]">
-            <dt className="text-[var(--nimi-text-muted)]">{t('create.profileDescriptionLabel')}</dt>
-            <dd className="ras-break-anywhere m-0">{normalizedDraft.description || t('common.notSet')}</dd>
-          </div>
-          <div className="grid gap-1 sm:grid-cols-[140px_1fr]">
-            <dt className="text-[var(--nimi-text-muted)]">{t('create.worldIdField')}</dt>
-            <dd className="ras-break-anywhere m-0">{normalizedDraft.selectedWorldId || t('common.notSet')}</dd>
-          </div>
-        </dl>
-      </Surface>
-
-      {readiness.ready ? null : (
-        <InlineAlert tone="warning">{translateCreateFixedMessages(readiness.errors, t)}</InlineAlert>
-      )}
-      <TechnicalReviewDetails>
-        <pre className="ras-json-preview m-0 min-h-56 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-card)] p-3 text-xs">
-          {readiness.payload ? JSON.stringify(readiness.payload, null, 2) : t('create.completeForPreview')}
-        </pre>
-      </TechnicalReviewDetails>
-    </div>
-  );
-}
-
-const SOURCE_MODE_OPTIONS: Array<{
-  mode: AgentCreationGraphSourceMode;
-  titleKey: StudioCopyKey;
-  descriptionKey: StudioCopyKey;
-  enabled: boolean;
-  badge: string;
-}> = [
-  {
-    mode: 'description',
-    titleKey: 'create.source.description.title',
-    descriptionKey: 'create.source.description.description',
-    enabled: true,
-    badge: 'W2',
-  },
-  {
-    mode: 'manual',
-    titleKey: 'create.source.manual.title',
-    descriptionKey: 'create.source.manual.description',
-    enabled: true,
-    badge: 'W2',
-  },
-  {
-    mode: 'downloaded-character-card',
-    titleKey: 'create.source.characterCard.title',
-    descriptionKey: 'create.source.characterCard.description',
-    enabled: true,
-    badge: 'W3',
-  },
-  {
-    mode: 'existing-agent-remix',
-    titleKey: 'create.source.remix.title',
-    descriptionKey: 'create.source.remix.description',
-    enabled: false,
-    badge: 'W4',
-  },
-];
-
-function SourceModeChooser({
-  value,
-  onSelect,
-}: {
-  value: AgentCreationGraphSourceMode;
-  onSelect: (mode: AgentCreationGraphSourceMode) => void;
-}) {
-  const { t } = useStudioI18n();
-  return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-      {SOURCE_MODE_OPTIONS.map((option) => {
-        const active = option.mode === value;
-        return (
-          <button
-            key={option.mode}
-            type="button"
-            disabled={!option.enabled}
-            onClick={() => onSelect(option.mode)}
-            style={{
-              minHeight: 116,
-              padding: 14,
-              borderRadius: 8,
-              border: `1px solid ${active ? 'var(--nimi-action-primary-bg)' : 'var(--nimi-border-subtle)'}`,
-              background: active
-                ? 'color-mix(in srgb, var(--nimi-action-primary-bg) 12%, var(--nimi-surface-card))'
-                : 'var(--nimi-surface-card)',
-              color: option.enabled ? 'var(--nimi-text-primary)' : 'var(--nimi-text-muted)',
-              textAlign: 'left',
-              cursor: option.enabled ? 'pointer' : 'not-allowed',
-              opacity: option.enabled ? 1 : 0.58,
-            }}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span style={{ fontWeight: 650 }}>{t(option.titleKey)}</span>
-              <StatusBadge tone={option.enabled ? 'info' : 'neutral'}>{option.badge}</StatusBadge>
-            </div>
-            <p className="m-0 mt-2 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-              {t(option.descriptionKey)}
-            </p>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function GraphStatusBadge({ status }: { status: AgentCreationGraph['normalizedGraph']['sections'][number]['status'] }) {
-  const { t } = useStudioI18n();
-  if (status === 'ready') return <StatusBadge tone="success">{t('create.graph.status.ready')}</StatusBadge>;
-  if (status === 'blocked') return <StatusBadge tone="warning">{t('create.graph.status.blocked')}</StatusBadge>;
-  return <StatusBadge tone="neutral">{t('create.graph.status.needsDecision')}</StatusBadge>;
-}
-
-function GraphReviewBoard({
-  graph,
-  review,
-  onAccept,
-}: {
-  graph: AgentCreationGraph;
-  review: AgentCreationGraphCreateReview;
-  onAccept: () => void;
-}) {
-  const { t } = useStudioI18n();
-  return (
-    <Surface tone="card" padding="md">
-      <div className="grid gap-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="font-medium">{t('create.graph.title')}</div>
-              <StatusBadge tone={review.ready ? 'success' : review.canAccept ? 'info' : 'warning'}>
-                {review.ready ? t('create.graph.accepted') : review.canAccept ? t('create.graph.reviewRequired') : t('create.graph.blocked')}
-              </StatusBadge>
-            </div>
-            <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-              {translateGraphSourceMode(graph.sourcePackage.mode, t)} · {translateGraphSourceLabel(graph.sourcePackage.label, t)}
-            </p>
-          </div>
-          <Button tone="secondary" size="sm" disabled={!review.canAccept || review.ready} onClick={onAccept}>
-            {review.ready ? t('create.graph.graphAccepted') : t('create.graph.acceptGraph')}
-          </Button>
-        </div>
-
-        {review.shapeErrors.length > 0 ? (
-          <InlineAlert tone="danger">{translateGraphReviewErrors(review.shapeErrors, t)}</InlineAlert>
-        ) : review.reviewErrors.length > 0 ? (
-          <InlineAlert tone="warning">{translateGraphReviewErrors(review.reviewErrors, t)}</InlineAlert>
-        ) : (
-          <InlineAlert tone="success">{t('create.graph.acceptedAlert')}</InlineAlert>
-        )}
-
-        <div className="grid gap-2">
-          <div className="font-medium">{t('create.graph.sourceMapping')}</div>
-          {graph.sourcePackage.fields.length > 0 ? (
-            <div className="grid gap-2">
-              {graph.sourcePackage.fields.slice(0, 6).map((item) => (
-                <div
-                  key={item.key}
-                  className="grid gap-1 rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-raised)] p-2 text-[length:var(--nimi-type-body-sm-size)]"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-medium">{translateGraphSourceField(item, t)}</span>
-                    <StatusBadge tone={item.status === 'mapped' ? 'success' : 'neutral'}>{t(GRAPH_FIELD_STATUS_KEYS[item.status])}</StatusBadge>
-                  </div>
-                  <div className="ras-break-anywhere text-[var(--nimi-text-muted)]">{item.value}</div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <InlineAlert tone="warning">{t('create.graph.noSourceFields')}</InlineAlert>
-          )}
-        </div>
-
-        <div className="grid gap-2">
-          <div className="font-medium">{t('create.graph.reviewSections')}</div>
-          <div className="grid gap-2">
-            {graph.normalizedGraph.sections.map((section) => (
-              <div
-                key={section.key}
-                className="rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-raised)] p-2"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium">{translateGraphSectionTitle(section.key, t)}</span>
-                  <GraphStatusBadge status={section.status} />
-                </div>
-                <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                  {translateGraphSectionSummary(section, graph, t)}
-                </p>
-                {section.missing.length > 0 ? (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {section.missing.slice(0, 4).map((item) => (
-                      <StatusBadge key={item} tone="neutral">{translateGraphMissingItem(item, t)}</StatusBadge>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <TechnicalReviewDetails>
-          <pre className="ras-json-preview m-0 max-h-72 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-card)] p-3 text-xs">
-            {JSON.stringify({
-              sourcePackage: graph.sourcePackage,
-              writePlan: graph.writePlan,
-              provenance: graph.provenance,
-            }, null, 2)}
-          </pre>
-        </TechnicalReviewDetails>
-      </div>
-    </Surface>
-  );
-}
-
-type CreateStage = 'seed' | 'edit';
-
 export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: CreateRealmAgentWorkspaceProps) {
   const { t } = useStudioI18n();
-  const [stage, setStage] = useState<CreateStage>('seed');
+  const [step, setStep] = useState<CreateStep>('source');
   const [sourceMode, setSourceMode] = useState<AgentCreationGraphSourceMode>('description');
-  const [graphAcceptedFingerprint, setGraphAcceptedFingerprint] = useState<string | null>(null);
-  const [characterCardImportResult, setCharacterCardImportResult] = useState<CharacterCardImportResult | null>(null);
-  const [isImportingCharacterCard, setIsImportingCharacterCard] = useState(false);
   const [seedDescription, setSeedDescription] = useState<string>('');
   const [seedResult, setSeedResult] = useState<AgentSeedGenerationResult | null>(null);
   const [isGeneratingSeed, setIsGeneratingSeed] = useState(false);
-  const [referenceImagePrompt, setReferenceImagePrompt] = useState<string>('');
-  const [referenceImageResult, setReferenceImageResult] = useState<AgentReferenceImageResult | null>(null);
-  const [isGeneratingReferenceImage, setIsGeneratingReferenceImage] = useState(false);
+  const [isImportingCharacterCard, setIsImportingCharacterCard] = useState(false);
+  const [isCharacterCardDragActive, setIsCharacterCardDragActive] = useState(false);
+  const [characterCardImportResult, setCharacterCardImportResult] = useState<CharacterCardImportResult | null>(null);
+  const [graphSourceFields, setGraphSourceFields] = useState<AgentCreationGraphSourceField[]>([]);
   const [draft, setDraft] = useState<CreateRealmAgentDraftInput>(() => createEmptyDraft());
+  const [graphAcceptedFingerprint, setGraphAcceptedFingerprint] = useState<string | null>(null);
   const [submitResult, setSubmitResult] = useState<RealmAgentCreateWithProfileSettingsResult | null>(null);
   const [createdContext, setCreatedContext] = useState<CreatedRealmAgentContext | null>(null);
   const [localSubmitErrors, setLocalSubmitErrors] = useState<string[]>([]);
+  const [manualContinueAttempted, setManualContinueAttempted] = useState(false);
+  const [imagePrompt, setImagePrompt] = useState('');
+  const [imagePromptEdited, setImagePromptEdited] = useState(false);
+  const [isGeneratingReference, setIsGeneratingReference] = useState(false);
+  const [referenceImageResult, setReferenceImageResult] = useState<AgentReferenceImageResult | null>(null);
   const queryClient = useQueryClient();
+
   const worldsQuery = useQuery({
     queryKey: ['realm-agent-studio', 'create-agent-worlds'],
     queryFn: () => listCreateRealmAgentSelectableWorlds(),
   });
-
+  const remixAgentsQuery = useQuery({
+    queryKey: ['realm-agent-studio', 'create-agent-remix-agents'],
+    queryFn: () => listOwnerPortfolioAgents(),
+    enabled: sourceMode === 'existing-agent-remix',
+  });
   const worlds = worldsQuery.data || [];
   const selectableWorldIds = useMemo(() => worlds.map((world) => world.id), [worlds]);
   const oasisWorld = useMemo(() => selectOasisDefaultWorld(worlds), [worlds]);
   const selectedWorld = worlds.find((world) => world.id === draft.selectedWorldId) || null;
-  const selectedWorldId = draft.selectedWorldId;
   const normalizedDraft = useMemo(() => normalizeCreateRealmAgentDraft(draft), [draft]);
+  const activeSourceModeOption = SOURCE_MODE_OPTIONS.find((option) => option.mode === sourceMode) ?? {
+    mode: 'description' as const,
+    titleKey: 'create.source.description.title' as const,
+    descriptionKey: 'create.source.description.description' as const,
+  };
+  const sourcePanelTitle = sourceMode === 'description'
+    ? t('create.aiStartTitle')
+    : t(activeSourceModeOption.titleKey);
+  const sourcePanelDescription = sourceMode === 'description'
+    ? t('create.aiStartDescription')
+    : t(activeSourceModeOption.descriptionKey);
 
   const worldPreviewQuery = useQuery({
-    queryKey: ['realm-agent-studio', 'create-agent-world-preview', selectedWorldId],
-    queryFn: () => getCreateRealmAgentWorldPreview(selectedWorldId),
-    enabled: selectedWorldId.length > 0 && Boolean(selectedWorld),
+    queryKey: ['realm-agent-studio', 'create-agent-world-preview', draft.selectedWorldId],
+    queryFn: () => getCreateRealmAgentWorldPreview(draft.selectedWorldId),
+    enabled: draft.selectedWorldId.length > 0 && Boolean(selectedWorld),
   });
   const handleAvailabilityQuery = useQuery<RealmAgentHandleAvailabilityResult>({
     queryKey: ['realm-agent-studio', 'create-agent-handle-availability', normalizedDraft.handle],
@@ -610,23 +361,65 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
     enabled: normalizedDraft.handle.length > 0,
   });
   const handleAvailability = handleAvailabilityQuery.data?.ok ? handleAvailabilityQuery.data.availability : null;
+
   const creationGraph = useMemo(() => buildAgentCreationGraphFromDraft(draft, {
     sourceMode,
-    sourceLabel: sourceMode === 'description'
-      ? (draft.originalDescription || seedDescription || agentCreationGraphSourceModeLabel(sourceMode))
-      : sourceMode === 'downloaded-character-card' && characterCardImportResult?.ok
-        ? `CharacterCard: ${characterCardImportResult.card.data.name} (${characterCardImportResult.card.sourceName})`
-      : agentCreationGraphSourceModeLabel(sourceMode),
+    sourceLabel: characterCardImportResult?.ok
+      ? characterCardImportResult.card.data.name
+      : draft.originalDescription || seedDescription || agentCreationGraphSourceModeLabel(sourceMode),
     runtimeRationale: seedResult?.ok ? seedResult.rationale : '',
-    extraSourceFields: sourceMode === 'downloaded-character-card' && characterCardImportResult?.ok
-      ? mapCharacterCardToGraphSourceFields(characterCardImportResult.card)
-      : [],
+    extraSourceFields: graphSourceFields,
     acceptedForCreateFingerprint: graphAcceptedFingerprint,
-  }), [characterCardImportResult, draft, graphAcceptedFingerprint, seedDescription, seedResult, sourceMode]);
+  }), [characterCardImportResult, draft, graphAcceptedFingerprint, graphSourceFields, seedDescription, seedResult, sourceMode]);
   const creationGraphReview = useMemo(
     () => validateAgentCreationGraphForRealmCreate(creationGraph, graphAcceptedFingerprint),
     [creationGraph, graphAcceptedFingerprint],
   );
+  const directions = useMemo(() => buildDirections(draft, seedResult), [draft, seedResult]);
+  const readiness = validateCreateRealmAgentReadiness(draft, { selectableWorldIds, handleAvailability });
+  const defaultReferenceImagePrompt = useMemo(() => defaultReferenceImagePromptFromDraft({
+    description: normalizedDraft.description,
+    displayName: normalizedDraft.displayName,
+    concept: normalizedDraft.concept,
+    dnaPrimary: normalizedDraft.dnaPrimary,
+  }), [normalizedDraft.concept, normalizedDraft.description, normalizedDraft.displayName, normalizedDraft.dnaPrimary]);
+  const referencePreviewUrl = referenceImageResult?.ok
+    ? referenceImageResult.previewUrl || referenceImageResult.referenceImageUrl
+    : normalizedDraft.referenceImageUrl;
+  const confirmPreviewFields = useMemo<ConfirmPreviewField[]>(() => [
+    {
+      key: 'displayName',
+      labelKey: 'create.preview.field.displayName',
+      value: normalizedDraft.displayName || t('common.notSet'),
+      emphasized: true,
+    },
+    {
+      key: 'handle',
+      labelKey: 'create.preview.field.handle',
+      value: normalizedDraft.handle ? `@${normalizedDraft.handle}` : t('common.notSet'),
+      emphasized: true,
+    },
+    {
+      key: 'world',
+      labelKey: 'create.preview.field.world',
+      value: selectedWorld?.name || t('common.notSet'),
+    },
+    {
+      key: 'archetype',
+      labelKey: 'create.preview.field.archetype',
+      value: normalizedDraft.dnaPrimary || t('common.notSet'),
+    },
+    {
+      key: 'description',
+      labelKey: 'create.preview.field.description',
+      value: normalizedDraft.description || normalizedDraft.concept || t('common.notSet'),
+    },
+    ...(normalizedDraft.referenceImageUrl ? [{
+      key: 'referenceImage',
+      labelKey: 'create.preview.field.referenceImage' as const,
+      value: normalizedDraft.referenceImageUrl,
+    }] : []),
+  ], [normalizedDraft, selectedWorld, t]);
 
   useEffect(() => {
     if (!draft.selectedWorldId && oasisWorld) {
@@ -634,64 +427,316 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
     }
   }, [draft.selectedWorldId, oasisWorld]);
 
-  function resetCreateOutcome() {
+  useEffect(() => {
+    if (!imagePromptEdited) {
+      setImagePrompt(defaultReferenceImagePrompt);
+    }
+  }, [defaultReferenceImagePrompt, imagePromptEdited]);
+
+  useEffect(() => {
+    if (!createdContext || !onOpenCreatedAgent) return undefined;
+    const openTimer = window.setTimeout(() => {
+      onOpenCreatedAgent(createdContext.agentId, 'launch');
+    }, 1600);
+    return () => window.clearTimeout(openTimer);
+  }, [createdContext, onOpenCreatedAgent]);
+
+  function resetOutcome() {
     setLocalSubmitErrors([]);
+    setManualContinueAttempted(false);
     setSubmitResult(null);
     setCreatedContext(null);
   }
 
-  function updateDraft(patch: Partial<CreateRealmAgentDraftInput>) {
-    setDraft((current) => ({ ...current, ...patch }));
+  function resetSourceArtifacts(nextMode: AgentCreationGraphSourceMode) {
+    setSourceMode(nextMode);
+    setSeedResult(null);
+    setCharacterCardImportResult(null);
+    setGraphSourceFields([]);
     setGraphAcceptedFingerprint(null);
-    resetCreateOutcome();
+    setLocalSubmitErrors([]);
+    setSubmitResult(null);
+    setCreatedContext(null);
+    setImagePromptEdited(false);
+    setReferenceImageResult(null);
   }
 
-  function selectSourceMode(mode: AgentCreationGraphSourceMode) {
-    setSourceMode(mode);
+  function selectSourceMode(nextMode: AgentCreationGraphSourceMode) {
+    if (nextMode === sourceMode) return;
+    resetSourceArtifacts(nextMode);
+    if (nextMode === 'manual') {
+      setDraft((current) => ({
+        ...current,
+        originalDescription: 'Manual entry',
+      }));
+    }
+  }
+
+  function invalidateReview(_keys: ReviewFieldKey[]) {
+    void _keys;
     setGraphAcceptedFingerprint(null);
-    resetCreateOutcome();
-    if (mode !== 'description') setSeedResult(null);
-    if (mode !== 'downloaded-character-card') setCharacterCardImportResult(null);
+    resetOutcome();
+  }
+
+  function updateDraft(patch: Partial<CreateRealmAgentDraftInput>, keys: ReviewFieldKey[]) {
+    setDraft((current) => ({ ...current, ...patch }));
+    invalidateReview(keys);
+  }
+
+  async function runSeedGeneration() {
+    setIsGeneratingSeed(true);
+    setSeedResult(null);
+    invalidateReview(['handle', 'displayName', 'description', 'dnaPrimary']);
+    try {
+      const result = await generateAgentSeedFromDescription(seedDescription);
+      setSeedResult(result);
+      if (result.ok) {
+        setDraft((current) => ({
+          ...current,
+          handle: result.seed.handle || current.handle,
+          displayName: result.seed.displayName || current.displayName,
+          concept: result.seed.concept || current.concept,
+          description: result.seed.description || current.description,
+          ruleText: '',
+          dnaPrimary: result.seed.dnaPrimary || current.dnaPrimary,
+          dnaSecondary: result.seed.dnaSecondary.length > 0 ? result.seed.dnaSecondary : current.dnaSecondary,
+          referenceImageUrl: '',
+          originalDescription: seedDescription.trim(),
+        }));
+        setImagePromptEdited(false);
+        setReferenceImageResult(null);
+        setStep('draft');
+      }
+    } finally {
+      setIsGeneratingSeed(false);
+    }
+  }
+
+  function continueManualEntry() {
+    setManualContinueAttempted(true);
+    if (!allRequiredAccepted || !creationGraphReview.canAccept) return;
+    continueToConfirm();
   }
 
   async function importCharacterCardFile(file: File | null) {
     if (!file) return;
+    setIsCharacterCardDragActive(false);
+    resetSourceArtifacts('downloaded-character-card');
     setIsImportingCharacterCard(true);
-    setSourceMode('downloaded-character-card');
-    setGraphAcceptedFingerprint(null);
-    setCharacterCardImportResult(null);
-    setSeedResult(null);
-    resetCreateOutcome();
     try {
       const result = await parseDownloadedCharacterCardFile(file);
       setCharacterCardImportResult(result);
       if (result.ok) {
-        const patch = mapCharacterCardToCreateDraft(result.card);
-        setSeedResult(null);
+        setGraphSourceFields(mapCharacterCardToGraphSourceFields(result.card));
         setDraft((current) => ({
           ...current,
-          handle: patch.handle || current.handle,
-          displayName: patch.displayName || current.displayName,
-          concept: patch.concept || current.concept,
-          description: patch.description || current.description,
-          ruleText: patch.ruleText || current.ruleText,
-          dnaPrimary: patch.dnaPrimary || current.dnaPrimary,
-          dnaSecondary: patch.dnaSecondary && patch.dnaSecondary.length > 0 ? patch.dnaSecondary : current.dnaSecondary,
-          originalDescription: patch.originalDescription || current.originalDescription,
+          ...mapCharacterCardToCreateDraft(result.card),
         }));
-        setReferenceImagePrompt(defaultReferenceImagePromptFromDraft({
-          description: patch.originalDescription || '',
-          displayName: patch.displayName || '',
-          concept: patch.concept || '',
-          dnaPrimary: patch.dnaPrimary || '',
-        }));
-        setStage('edit');
+        setImagePromptEdited(false);
+        setReferenceImageResult(null);
+        invalidateReview(['handle', 'displayName', 'description', 'dnaPrimary']);
+        setStep('draft');
       }
     } finally {
       setIsImportingCharacterCard(false);
     }
   }
 
+  function handleCharacterCardDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (isImportingCharacterCard) return;
+    const file = event.dataTransfer.files?.[0] || null;
+    void importCharacterCardFile(file);
+  }
+
+  function remixFromAgent(agent: OwnerPortfolioAgent) {
+    resetSourceArtifacts('existing-agent-remix');
+    const baseDescription = [
+      agent.displayName,
+      agent.worldName ? `World: ${agent.worldName}` : '',
+      agent.realmState ? `Realm state: ${agent.realmState}` : '',
+    ].filter(Boolean).join('\n');
+    const nextDraft = {
+      ...createEmptyDraft(),
+      handle: createHandleCandidate({
+        ...createEmptyDraft(),
+        displayName: `${agent.handle} remix`,
+        description: baseDescription,
+      }, 'existing-agent-remix'),
+      displayName: `${agent.displayName} Remix`,
+      concept: baseDescription || `Public remix direction from @${agent.handle}.`,
+      description: baseDescription || agent.displayName,
+      selectedWorldId: draft.selectedWorldId,
+      originalDescription: `Existing owned Realm Agent: @${agent.handle}`,
+    };
+    setDraft(nextDraft);
+    setImagePromptEdited(false);
+    setReferenceImageResult(null);
+    setGraphSourceFields([
+      {
+        key: 'remix.agent',
+        label: 'Existing owned Realm Agent',
+        value: `@${agent.handle} / ${agent.displayName}`,
+        status: 'mapped',
+        targetSection: 'sourceProvenance',
+      },
+      ...(agent.worldName ? [{
+        key: 'remix.world',
+        label: 'Source agent world',
+        value: agent.worldName,
+        status: 'candidateOnly' as const,
+        targetSection: 'worldview' as const,
+      }] : []),
+    ]);
+    invalidateReview(['handle', 'displayName', 'description', 'dnaPrimary']);
+    setStep('draft');
+  }
+
+  function selectDirection(direction: DraftDirection) {
+    setDraft((current) => applyDirectionToDraft(direction, current));
+    setImagePromptEdited(false);
+    setReferenceImageResult(null);
+    invalidateReview(['displayName', 'description', 'dnaPrimary']);
+    setStep('review');
+  }
+
+  async function generateReferenceImageCandidate() {
+    setIsGeneratingReference(true);
+    setReferenceImageResult(null);
+    resetOutcome();
+    try {
+      const result = await generateAgentReferenceImage({
+        prompt: imagePrompt,
+        aspectRatio: '1:1',
+      });
+      setReferenceImageResult(result);
+      if (result.ok) {
+        updateDraft({ referenceImageUrl: result.referenceImageUrl }, []);
+      }
+    } finally {
+      setIsGeneratingReference(false);
+    }
+  }
+
+  function clearReferenceImageCandidate() {
+    setReferenceImageResult(null);
+    updateDraft({ referenceImageUrl: '' }, []);
+  }
+
+  function regenerateField(field: ReviewFieldKey) {
+    if (field === 'handle') {
+      updateDraft({ handle: createHandleCandidate(draft, sourceMode) }, ['handle']);
+      return;
+    }
+    if (field === 'displayName') {
+      const next = directions[1]?.displayName && directions[1].displayName !== draft.displayName
+        ? directions[1].displayName
+        : `${draft.displayName || 'Realm Agent'} Studio`;
+      updateDraft({ displayName: next }, ['displayName']);
+      return;
+    }
+    if (field === 'description') {
+      const next = directions[1]?.publicDescription
+        || directions[1]?.identitySummary
+        || directions[0]?.publicDescription
+        || directions[0]?.identitySummary
+        || draft.description;
+      updateDraft({ description: next, concept: directions[0]?.identitySummary || next }, ['description']);
+      return;
+    }
+    if (field === 'dnaPrimary') {
+      const currentIndex = DNA_PRIMARY_ARCHETYPES.indexOf(normalizedDraft.dnaPrimary as DnaPrimaryArchetype);
+      const next = currentIndex >= 0
+        ? DNA_PRIMARY_ARCHETYPES[(currentIndex + 1) % DNA_PRIMARY_ARCHETYPES.length]
+        : (directions[0]?.dnaPrimary || 'MYSTERIOUS');
+      updateDraft({ dnaPrimary: next }, ['dnaPrimary']);
+      return;
+    }
+    if (field === 'world' && oasisWorld) {
+      updateDraft({ selectedWorldId: oasisWorld.id }, ['world']);
+    }
+  }
+
+  function reviewStatus(field: ReviewFieldKey): ReviewStatus {
+    if (field === 'handle') {
+      if (!normalizedDraft.handle || handleAvailabilityQuery.isError || (handleAvailability && !handleAvailability.available)) return 'blocked';
+      if (handleAvailabilityQuery.isLoading || handleAvailabilityQuery.isFetching || !handleAvailability) return 'needs-review';
+      return 'accepted';
+    }
+    if (field === 'displayName') return normalizedDraft.displayName ? 'accepted' : 'blocked';
+    if (field === 'description') return normalizedDraft.description ? 'accepted' : 'blocked';
+    if (field === 'dnaPrimary') return normalizedDraft.dnaPrimary ? 'accepted' : 'blocked';
+    if (field === 'world') {
+      if (worldsQuery.isLoading) return 'needs-review';
+      if (!normalizedDraft.selectedWorldId || worldsQuery.isError || !selectedWorld) return 'blocked';
+      return 'accepted';
+    }
+    return 'blocked';
+  }
+
+  function reviewIssue(field: ReviewFieldKey): string | null {
+    if (field === 'handle') {
+      if (!normalizedDraft.handle) return t('create.error.handleMissing');
+      if (handleAvailabilityQuery.isLoading || handleAvailabilityQuery.isFetching) return t('create.review.issue.handleChecking');
+      if (handleAvailabilityQuery.isError) return t('create.error.handleAvailabilityFailed');
+      if (handleAvailability && !handleAvailability.available) {
+        return translateCreateFixedMessage(`handle unavailable: ${handleAvailability.message}`, t);
+      }
+      if (!handleAvailability) return t('create.error.handleAvailabilityMissing');
+      return null;
+    }
+    if (field === 'displayName') return normalizedDraft.displayName ? null : t('create.error.displayNameMissing');
+    if (field === 'description') return normalizedDraft.description ? null : t('create.error.conceptMissing');
+    if (field === 'dnaPrimary') return normalizedDraft.dnaPrimary ? null : t('create.error.dnaPrimaryMissing');
+    if (field === 'world') {
+      if (worldsQuery.isLoading) return t('create.review.issue.worldLoading');
+      if (worldsQuery.isError) return t('create.worldSelectionUnavailable', { message: errorMessage(worldsQuery.error) });
+      if (!normalizedDraft.selectedWorldId) return t('create.error.selectedWorldMissing');
+      if (!selectedWorld) return t('create.error.selectedWorldNotSourceBacked');
+    }
+    return null;
+  }
+
+  const reviewFields: ReviewField[] = [
+    {
+      key: 'handle',
+      labelKey: REVIEW_LABEL_KEYS.handle,
+      status: reviewStatus('handle'),
+      reasonKey: handleAvailability?.available ? 'create.review.reason.handleChecked' : 'create.review.reason.handleBlocked',
+      issue: reviewIssue('handle'),
+    },
+    {
+      key: 'displayName',
+      labelKey: REVIEW_LABEL_KEYS.displayName,
+      status: reviewStatus('displayName'),
+      reasonKey: normalizedDraft.displayName ? 'create.review.reason.ownerVisible' : 'create.review.reason.missing',
+      issue: reviewIssue('displayName'),
+    },
+    {
+      key: 'description',
+      labelKey: REVIEW_LABEL_KEYS.description,
+      status: reviewStatus('description'),
+      reasonKey: normalizedDraft.description ? 'create.review.reason.ownerVisible' : 'create.review.reason.missing',
+      issue: reviewIssue('description'),
+    },
+    {
+      key: 'dnaPrimary',
+      labelKey: REVIEW_LABEL_KEYS.dnaPrimary,
+      status: reviewStatus('dnaPrimary'),
+      reasonKey: normalizedDraft.dnaPrimary ? 'create.review.reason.ownerVisible' : 'create.review.reason.missing',
+      issue: reviewIssue('dnaPrimary'),
+    },
+    {
+      key: 'world',
+      labelKey: REVIEW_LABEL_KEYS.world,
+      status: reviewStatus('world'),
+      reasonKey: selectedWorld ? 'create.review.reason.worldSourceBacked' : 'create.review.reason.worldBlocked',
+      issue: reviewIssue('world'),
+    },
+  ];
+
+  const allRequiredAccepted = reviewFields.every((field) => field.status === 'accepted');
   const createMutation = useMutation<RealmAgentCreateWithProfileSettingsResult, Error, ReviewedCreateRealmAgentPayload>({
     mutationFn: (payload) => createReviewedRealmAgentWithProfileSettings(payload),
     onSuccess: (result) => {
@@ -712,569 +757,525 @@ export function CreateRealmAgentWorkspace({ onCreated, onOpenCreatedAgent }: Cre
       }
     },
   });
+  const createDisabled = createMutation.isPending
+    || !readiness.ready
+    || !allRequiredAccepted
+    || !creationGraphReview.ready
+    || Boolean(normalizedDraft.handle && (handleAvailabilityQuery.isLoading || handleAvailabilityQuery.isError || !handleAvailability?.available));
+
+  function continueToConfirm() {
+    if (!allRequiredAccepted || !creationGraphReview.canAccept) return;
+    setGraphAcceptedFingerprint(acceptAgentCreationGraphForRealmCreate(creationGraph));
+    setStep('confirm');
+  }
 
   function submitCreate() {
-    if (!creationGraphReview.ready) {
-      setLocalSubmitErrors(creationGraphReview.errors);
-      setSubmitResult(null);
+    if (!allRequiredAccepted || !creationGraphReview.ready) {
+      setLocalSubmitErrors([
+        ...reviewFields.filter((field) => field.status !== 'accepted').map((field) => t(field.labelKey)),
+        ...creationGraphReview.errors,
+      ]);
       return;
     }
-    const readiness = validateCreateRealmAgentReadiness(draft, { selectableWorldIds, handleAvailability });
-    if (!readiness.ready) {
-      setLocalSubmitErrors(readiness.errors);
-      setSubmitResult(null);
+    const nextReadiness = validateCreateRealmAgentReadiness(draft, { selectableWorldIds, handleAvailability });
+    if (!nextReadiness.ready) {
+      setLocalSubmitErrors(nextReadiness.errors);
       return;
     }
     setLocalSubmitErrors([]);
     setSubmitResult(null);
-    createMutation.mutate(readiness.payload);
+    createMutation.mutate(nextReadiness.payload);
   }
 
-  async function runSeedGeneration() {
-    setIsGeneratingSeed(true);
-    setSeedResult(null);
+  function resetCreateWorkflow() {
+    setStep('source');
     setSourceMode('description');
-    setGraphAcceptedFingerprint(null);
-    setCharacterCardImportResult(null);
-    resetCreateOutcome();
-    try {
-      const result = await generateAgentSeedFromDescription(seedDescription);
-      setSeedResult(result);
-      if (result.ok) {
-        // Merge generated fields into draft, preserve manually-typed defaults
-        // (selectedWorldId stays empty so OASIS auto-fill effect kicks in).
-        setDraft((current) => ({
-          ...current,
-          handle: result.seed.handle || current.handle,
-          displayName: result.seed.displayName || current.displayName,
-          concept: result.seed.concept || current.concept,
-          description: result.seed.description || current.description,
-          ruleText: result.seed.ruleText || current.ruleText,
-          dnaPrimary: result.seed.dnaPrimary || current.dnaPrimary,
-          dnaSecondary: result.seed.dnaSecondary.length > 0 ? result.seed.dnaSecondary : current.dnaSecondary,
-          originalDescription: seedDescription.trim(),
-        }));
-        // Seed the reference image prompt as well.
-        setReferenceImagePrompt(defaultReferenceImagePromptFromDraft({
-          description: seedDescription,
-          displayName: result.seed.displayName,
-          concept: result.seed.concept,
-          dnaPrimary: result.seed.dnaPrimary || '',
-        }));
-        setStage('edit');
-      }
-    } finally {
-      setIsGeneratingSeed(false);
-    }
-  }
-
-  function skipSeedAndCreateManually() {
-    setSourceMode('manual');
-    setGraphAcceptedFingerprint(null);
+    setSeedDescription('');
     setSeedResult(null);
+    setIsGeneratingSeed(false);
+    setIsImportingCharacterCard(false);
+    setIsCharacterCardDragActive(false);
     setCharacterCardImportResult(null);
-    resetCreateOutcome();
-    setDraft((current) => ({
-      ...current,
-      originalDescription: seedDescription.trim() || current.originalDescription,
-    }));
-    setReferenceImagePrompt(defaultReferenceImagePromptFromDraft({
-      description: seedDescription,
-      displayName: draft.displayName,
-      concept: draft.concept,
-      dnaPrimary: draft.dnaPrimary,
-    }));
-    setStage('edit');
-  }
-
-  function returnToSeedStage() {
-    setStage('seed');
+    setGraphSourceFields([]);
+    setDraft(createEmptyDraft());
     setGraphAcceptedFingerprint(null);
-    resetCreateOutcome();
-  }
-
-  async function runReferenceImageGeneration() {
-    setIsGeneratingReferenceImage(true);
-    setReferenceImageResult(null);
-    try {
-      const prompt = referenceImagePrompt.trim()
-        || defaultReferenceImagePromptFromDraft({
-          description: draft.originalDescription,
-          displayName: draft.displayName,
-          concept: draft.concept,
-          dnaPrimary: draft.dnaPrimary,
-        });
-      const result = await generateAgentReferenceImage({ prompt });
-      setReferenceImageResult(result);
-      if (result.ok) {
-        setGraphAcceptedFingerprint(null);
-        resetCreateOutcome();
-        setDraft((current) => ({ ...current, referenceImageUrl: result.referenceImageUrl }));
-      }
-    } finally {
-      setIsGeneratingReferenceImage(false);
-    }
-  }
-
-  function clearReferenceImage() {
-    setGraphAcceptedFingerprint(null);
-    resetCreateOutcome();
-    setDraft((current) => ({ ...current, referenceImageUrl: '' }));
+    setSubmitResult(null);
+    setCreatedContext(null);
+    setLocalSubmitErrors([]);
+    setManualContinueAttempted(false);
+    setImagePrompt('');
+    setImagePromptEdited(false);
+    setIsGeneratingReference(false);
     setReferenceImageResult(null);
   }
 
-  const readiness = validateCreateRealmAgentReadiness(draft, { selectableWorldIds, handleAvailability });
-  const handleCheckBlocking = Boolean(normalizedDraft.handle)
-    && (handleAvailabilityQuery.isLoading || handleAvailabilityQuery.isError || !handleAvailability?.available);
-  const createDisabled = createMutation.isPending || worldsQuery.isLoading || worlds.length === 0 || !selectedWorld || !readiness.ready || !creationGraphReview.ready || handleCheckBlocking;
-
-  if (stage === 'seed') {
-    return (
-      <Surface tone="panel" padding="lg" className="min-w-0">
-        <div className="grid min-w-0 gap-5">
-          <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <h2 className="m-0 text-xl font-semibold">{t('create.title')}</h2>
-            <StatusBadge tone="info">{t('create.creationGraph')}</StatusBadge>
-            <StatusBadge tone="neutral">{t('create.sourceFirst')}</StatusBadge>
+  function renderSourceModePanel() {
+    if (sourceMode === 'description') {
+      return (
+        <>
+          <div className="ras-create-prompt-field">
+            <TextareaField
+              aria-label={t('create.oneLineLabel')}
+              className="ras-create-prompt-field__shell"
+              textareaClassName="ras-create-prompt-field__textarea"
+              value={seedDescription}
+              placeholder={t('create.oneLinePlaceholder')}
+              onChange={(event) => setSeedDescription(event.currentTarget.value)}
+            />
+            <button
+              type="button"
+              className="ras-create-prompt-field__submit"
+              disabled={!seedDescription.trim() || isGeneratingSeed}
+              aria-label={t('create.generateFromDescription')}
+              onClick={() => void runSeedGeneration()}
+            >
+              {isGeneratingSeed ? (
+                <RefreshCw className="ras-create-prompt-field__spinner" size={22} strokeWidth={2} />
+              ) : (
+                <ArrowUp size={24} strokeWidth={2.2} />
+              )}
+            </button>
           </div>
-          <p className="m-0 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-            {t('create.seedDescription')}
-          </p>
-          <SourceModeChooser value={sourceMode} onSelect={selectSourceMode} />
-          {sourceMode === 'existing-agent-remix' ? (
-            <InlineAlert tone="warning">
-              {t('create.source.deferred', { source: translateGraphSourceMode(sourceMode, t) })}
-            </InlineAlert>
-          ) : null}
-          {sourceMode === 'description' ? (
-            <>
-              <FieldShell
-                label={t('create.oneLineLabel')}
-                message={t('create.oneLineExample')}
-              >
-                <TextareaField
-                  value={seedDescription}
-                  placeholder={t('create.oneLinePlaceholder')}
-                  onChange={(event) => setSeedDescription(event.currentTarget.value)}
-                />
-              </FieldShell>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                <Button
-                  tone="primary"
-                  disabled={!seedDescription.trim() || isGeneratingSeed}
-                  loading={isGeneratingSeed}
-                  onClick={() => void runSeedGeneration()}
-                >
-                  {t('create.generateFromDescription')}
-                </Button>
-              </div>
-            </>
-          ) : null}
-          {sourceMode === 'manual' ? (
-            <Surface tone="card" padding="md">
-              <div className="grid gap-3">
-                <div className="font-medium">{t('create.manualEntryTitle')}</div>
-                <p className="m-0 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                  {t('create.manualEntryDescription')}
-                </p>
+          {seedResult && !seedResult.ok ? <InlineAlert tone="danger">{t('create.seedGenerationFailed', { message: seedResult.message })}</InlineAlert> : null}
+        </>
+      );
+    }
+
+    if (sourceMode === 'manual') {
+      return (
+        <>
+          <InlineAlert tone="neutral">{t('create.manualEntryDescription')}</InlineAlert>
+          {renderManualEntryTable()}
+          <div className="ras-create-primary-panel__footer">
+            <strong>{t('create.review.autosavedProgress', { count: reviewFields.filter((field) => field.status === 'accepted').length, total: reviewFields.length })}</strong>
+            <Button tone="primary" trailingIcon={<ArrowRight size={16} strokeWidth={1.9} />} onClick={continueManualEntry}>
+              {t('create.review.continueConfirm')}
+            </Button>
+          </div>
+        </>
+      );
+    }
+
+    if (sourceMode === 'downloaded-character-card') {
+      return (
+        <>
+          <div className="ras-create-character-card-field">
+            <label
+              className="ras-create-character-card-dropzone"
+              data-drag-active={isCharacterCardDragActive || undefined}
+              data-disabled={isImportingCharacterCard || undefined}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                if (!isImportingCharacterCard) setIsCharacterCardDragActive(true);
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                if (!isImportingCharacterCard) setIsCharacterCardDragActive(true);
+              }}
+              onDragLeave={(event) => {
+                event.preventDefault();
+                if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+                setIsCharacterCardDragActive(false);
+              }}
+              onDrop={handleCharacterCardDrop}
+            >
+              <input
+                className="ras-create-character-card-dropzone__input"
+                type="file"
+                accept=".json,.png,application/json,image/png"
+                aria-label={t('create.characterCardDropzoneTitle')}
+                disabled={isImportingCharacterCard}
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0] || null;
+                  void importCharacterCardFile(file);
+                  event.currentTarget.value = '';
+                }}
+              />
+              <span className="ras-create-character-card-dropzone__icon" aria-hidden="true">
+                <ImageIcon size={48} strokeWidth={1.75} />
+              </span>
+              <span className="ras-create-character-card-dropzone__title">{t('create.characterCardDropzoneTitle')}</span>
+            </label>
+            <p className="ras-create-character-card-field__message">{t('create.characterCardFieldMessage')}</p>
+          </div>
+          {isImportingCharacterCard ? <InlineAlert tone="info">{t('create.importingCharacterCard')}</InlineAlert> : null}
+          {characterCardImportResult && !characterCardImportResult.ok ? <InlineAlert tone="danger">{t('create.characterCardImportFailed', { message: characterCardImportResult.message })}</InlineAlert> : null}
+          {characterCardImportResult?.ok ? <InlineAlert tone="success">{t('create.characterCardImported', { name: characterCardImportResult.card.data.name, format: characterCardImportResult.card.sourceFormat.toUpperCase() })}</InlineAlert> : null}
+        </>
+      );
+    }
+
+    return (
+      <>
+        <InlineAlert tone="neutral">{t('create.remix.boundary')}</InlineAlert>
+        {remixAgentsQuery.isLoading ? <EmptyState title={t('create.remix.loadingTitle')} description={t('create.remix.loadingDescription')} /> : null}
+        {remixAgentsQuery.isError ? <InlineAlert tone="danger">{t('create.remix.unavailable')}</InlineAlert> : null}
+        {remixAgentsQuery.data && remixAgentsQuery.data.length > 0 ? (
+          <div className="ras-create-source-list">
+            {remixAgentsQuery.data.map((agent) => (
+              <article key={agent.id} className="ras-create-source-list__item">
                 <div>
-                  <Button tone="primary" onClick={skipSeedAndCreateManually}>
-                    {t('create.startManualGraph')}
-                  </Button>
+                  <strong>{agent.displayName}</strong>
+                  <span>@{agent.handle}</span>
                 </div>
-              </div>
-            </Surface>
-          ) : null}
-          {sourceMode === 'downloaded-character-card' ? (
-            <Surface tone="card" padding="md">
-              <div className="grid gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="font-medium">{t('create.characterCardTitle')}</div>
-                  <StatusBadge tone="info">{t('create.localFile')}</StatusBadge>
-                </div>
-                <FieldShell
-                  label={t('create.characterCardFieldLabel')}
-                  message={t('create.characterCardFieldMessage')}
-                >
-                  <input
-                    type="file"
-                    accept=".json,.png,application/json,image/png"
-                    disabled={isImportingCharacterCard}
-                    onChange={(event) => {
-                      const file = event.currentTarget.files?.[0] || null;
-                      void importCharacterCardFile(file);
-                      event.currentTarget.value = '';
-                    }}
-                  />
-                </FieldShell>
-                {isImportingCharacterCard ? (
-                  <InlineAlert tone="info">{t('create.importingCharacterCard')}</InlineAlert>
-                ) : null}
-                {characterCardImportResult && !characterCardImportResult.ok ? (
-                  <InlineAlert tone="danger">
-                    {t('create.characterCardImportFailed', { message: characterCardImportResult.message })}
-                  </InlineAlert>
-                ) : null}
-                {characterCardImportResult?.ok ? (
-                  <InlineAlert tone="success">
-                    {t('create.characterCardImported', {
-                      name: characterCardImportResult.card.data.name,
-                      format: characterCardImportResult.card.sourceFormat.toUpperCase(),
-                    })}
-                  </InlineAlert>
-                ) : null}
-              </div>
-            </Surface>
-          ) : null}
-          {seedResult && !seedResult.ok ? (
+                <Button tone="secondary" size="sm" onClick={() => remixFromAgent(agent)}>{t('create.remix.use')}</Button>
+              </article>
+            ))}
+          </div>
+        ) : null}
+      </>
+    );
+  }
+
+  function renderManualEntryTable() {
+    const showValidation = manualContinueAttempted;
+    return (
+      <div className="ras-create-manual-table" aria-label={t('create.manualEntryTitle')}>
+        {reviewFields.map((field) => (
+          <div key={field.key} className="ras-create-manual-row" data-status={showValidation ? field.status : undefined}>
+            <div className="ras-create-manual-row__label">
+              <strong>{t(field.labelKey)}</strong>
+              <span>{t(field.reasonKey)}</span>
+            </div>
+            <div className="ras-create-manual-row__editor">
+              {renderReviewEditor(field, { showValidation })}
+              {showValidation && field.issue ? <InlineAlert tone={field.status === 'needs-review' ? 'warning' : 'danger'}>{field.issue}</InlineAlert> : null}
+            </div>
+            {showValidation ? <StatusBadge tone={statusTone(field.status)}>{t(statusLabelKey(field.status))}</StatusBadge> : null}
+          </div>
+        ))}
+        {showValidation && !creationGraphReview.canAccept && creationGraphReview.errors.length > 0 ? (
+          <InlineAlert tone="danger">{creationGraphReview.errors.join('; ')}</InlineAlert>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderReviewEditor(field: ReviewField, options: { showValidation?: boolean } = {}) {
+    const invalid = options.showValidation !== false && field.status === 'blocked';
+    return (
+      <div className="ras-create-review-editor">
+        {field.key === 'handle' ? (
+          <TextField
+            aria-label={t('create.handleLabel')}
+            tone={invalid ? 'danger' : 'default'}
+            value={draft.handle}
+            placeholder={t('create.handlePlaceholder')}
+            onChange={(event) => updateDraft({ handle: event.currentTarget.value }, ['handle'])}
+          />
+        ) : null}
+        {field.key === 'displayName' ? (
+          <TextField
+            aria-label={t('create.displayNameLabel')}
+            tone={invalid ? 'danger' : 'default'}
+            value={draft.displayName}
+            placeholder={t('create.displayNamePlaceholder')}
+            onChange={(event) => updateDraft({ displayName: event.currentTarget.value }, ['displayName'])}
+          />
+        ) : null}
+        {field.key === 'description' ? (
+          <TextareaField
+            aria-label={t('create.profileDescriptionLabel')}
+            tone={invalid ? 'danger' : 'default'}
+            value={draft.description}
+            placeholder={t('create.profileDescriptionPlaceholder')}
+            onChange={(event) => updateDraft({ description: event.currentTarget.value, concept: event.currentTarget.value }, ['description'])}
+          />
+        ) : null}
+        {field.key === 'dnaPrimary' ? (
+          <SelectField
+            aria-label={t('create.dnaPrimaryLabel')}
+            value={draft.dnaPrimary}
+            placeholder={t('create.dnaPrimaryPlaceholder')}
+            options={[{ value: '', label: t('create.dnaPrimaryPlaceholder') }, ...DNA_PRIMARY_ARCHETYPES.map((value) => ({ value, label: value }))]}
+            onValueChange={(value) => updateDraft({ dnaPrimary: value as DnaPrimaryArchetype | '' }, ['dnaPrimary'])}
+          />
+        ) : null}
+        {field.key === 'world' ? (
+          <SelectField
+            aria-label={t('create.worldLabel')}
+            disabled={worldsQuery.isLoading || worlds.length === 0}
+            value={draft.selectedWorldId}
+            placeholder={oasisWorld ? t('create.worldDefault', { name: oasisWorld.name }) : t('create.worldDefaultUnavailable')}
+            options={worlds.map((world) => ({ value: world.id, label: worldOptionLabel(world) }))}
+            onValueChange={(value) => updateDraft({ selectedWorldId: value }, ['world'])}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderReferenceImagePanel() {
+    return (
+      <div className="ras-create-reference-panel">
+        <div className="ras-create-reference-panel__content">
+          <div className="ras-create-reference-panel__header">
+            <div>
+              <strong>{t('create.referenceTitle')}</strong>
+              <p>{t('create.referenceDescription')}</p>
+            </div>
+            <StatusBadge tone={normalizedDraft.referenceImageUrl ? 'success' : 'neutral'}>
+              {normalizedDraft.referenceImageUrl ? t('create.referenceAttached') : t('create.noReferenceYet')}
+            </StatusBadge>
+          </div>
+          <FieldShell label={t('create.imagePromptLabel')} message={t('create.imagePromptMessage')}>
+            <TextareaField
+              value={imagePrompt}
+              rows={3}
+              placeholder={defaultReferenceImagePrompt}
+              onChange={(event) => {
+                setImagePromptEdited(true);
+                setImagePrompt(event.currentTarget.value);
+              }}
+            />
+          </FieldShell>
+          {referenceImageResult && !referenceImageResult.ok ? (
             <InlineAlert tone="danger">
-              {t('create.seedGenerationFailed', { message: seedResult.message })}
+              {t('create.referenceFailed', { message: translateCreateFixedMessage(referenceImageResult.message, t) })}
             </InlineAlert>
           ) : null}
-          <InlineAlert tone="neutral">
-            <strong>{t('create.boundaryLabel')}</strong> {t('create.boundaryDescription')}
-          </InlineAlert>
+          <div className="ras-create-reference-panel__actions">
+            <Button
+              tone="secondary"
+              disabled={!imagePrompt.trim() || isGeneratingReference}
+              loading={isGeneratingReference}
+              leadingIcon={<ImageIcon size={16} strokeWidth={1.9} />}
+              onClick={() => void generateReferenceImageCandidate()}
+            >
+              {normalizedDraft.referenceImageUrl ? t('create.regenerateReference') : t('create.generateReference')}
+            </Button>
+            {normalizedDraft.referenceImageUrl ? (
+              <Button tone="ghost" size="sm" onClick={clearReferenceImageCandidate}>
+                {t('create.clearReference')}
+              </Button>
+            ) : null}
+          </div>
         </div>
-      </Surface>
+        <div className="ras-create-reference-preview">
+          {referencePreviewUrl ? (
+            <img src={referencePreviewUrl} alt={t('create.referenceAlt')} />
+          ) : (
+            <div>
+              <ImageIcon size={28} strokeWidth={1.8} />
+              <span>{t('create.noReferenceYet')}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function renderSourceModeSwitch() {
+    return (
+      <div className="ras-create-mode-switch" role="tablist" aria-label={t('create.modeSwitch.ariaLabel')}>
+        {SOURCE_MODE_SWITCH_OPTIONS.map((option) => {
+          const selected = option.mode === sourceMode;
+          return (
+            <button
+              key={option.mode}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              className="ras-create-mode-switch__item"
+              data-selected={selected || undefined}
+              onClick={() => selectSourceMode(option.mode)}
+            >
+              {t(option.labelKey)}
+            </button>
+          );
+        })}
+      </div>
     );
   }
 
   return (
-    <Surface tone="panel" padding="lg" className="min-w-0">
-      <div className="grid min-w-0 gap-5 xl:grid-cols-[1fr_400px]">
-        <div className="min-w-0">
-          <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <h2 className="m-0 text-xl font-semibold">{t('create.title')}</h2>
-            <StatusBadge tone="info">{t('create.ownerScoped')}</StatusBadge>
-            <StatusBadge tone="neutral">{t('create.reviewRequired')}</StatusBadge>
-            {draft.originalDescription ? (
-              <StatusBadge tone="success">{t('create.aiSeeded')}</StatusBadge>
-            ) : null}
-            <Button tone="ghost" size="sm" onClick={returnToSeedStage}>
-              {t('create.changeSource')}
-            </Button>
-          </div>
-          <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-            {t('create.editDescription')}
-          </p>
-          {characterCardImportResult?.ok ? (
-            <InlineAlert tone="info" className="mt-3">
-              <strong>{t('create.characterCardSource')}</strong> {characterCardImportResult.card.data.name} · {characterCardImportResult.card.spec} {characterCardImportResult.card.specVersion}
-            </InlineAlert>
-          ) : null}
-          {seedResult?.ok && seedResult.rationale ? (
-            <InlineAlert tone="info" className="mt-3">
-              <strong>{t('create.aiDraftRationale')}</strong> {seedResult.rationale}
-            </InlineAlert>
-          ) : null}
-
-          <div className="mt-4 grid gap-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <FieldShell label={t('create.handleLabel')} message={t('create.handleMessage')}>
-                <TextField
-                  value={draft.handle}
-                  placeholder={t('create.handlePlaceholder')}
-                  onChange={(event) => updateDraft({ handle: event.currentTarget.value })}
-                />
-              </FieldShell>
-              <FieldShell label={t('create.displayNameLabel')} message={t('create.displayNameMessage')}>
-                <TextField
-                  value={draft.displayName}
-                  placeholder={t('create.displayNamePlaceholder')}
-                  onChange={(event) => updateDraft({ displayName: event.currentTarget.value })}
-                />
-              </FieldShell>
-            </div>
-            {normalizedDraft.handle && handleAvailabilityQuery.isLoading ? (
-              <InlineAlert tone="info">{t('create.checkingHandle')}</InlineAlert>
-            ) : null}
-            {handleAvailabilityQuery.isError ? (
-              <InlineAlert tone="danger">{t('create.handleCheckFailed')}</InlineAlert>
-            ) : null}
-            {handleAvailabilityQuery.data?.ok === false ? (
-              <InlineAlert tone="danger">{translateCreateFixedMessage(handleAvailabilityQuery.data.message, t)}</InlineAlert>
-            ) : null}
-            {handleAvailability ? (
-              <InlineAlert tone={handleAvailability.available ? 'success' : 'danger'}>
-                {handleAvailability.available
-                  ? t('create.handleAvailable', { handle: handleAvailability.normalized })
-                  : t('create.handleUnavailable', { handle: handleAvailability.normalized, message: translateCreateFixedMessage(handleAvailability.message, t) })}
-              </InlineAlert>
-            ) : null}
-            <FieldShell label={t('create.profileDescriptionLabel')} message={t('create.profileDescriptionMessage')}>
-              <TextareaField
-                value={draft.description}
-                placeholder={t('create.profileDescriptionPlaceholder')}
-                onChange={(event) => updateDraft({ description: event.currentTarget.value })}
-              />
-            </FieldShell>
-            <FieldShell label={t('create.conceptLabel')} message={t('create.conceptMessage')}>
-              <TextareaField
-                value={draft.concept}
-                placeholder={t('create.conceptPlaceholder')}
-                onChange={(event) => updateDraft({ concept: event.currentTarget.value })}
-              />
-            </FieldShell>
-            <FieldShell label={t('create.visibleRulesLabel')} message={t('create.visibleRulesMessage')}>
-              <TextareaField
-                value={draft.ruleText}
-                placeholder={t('create.visibleRulesPlaceholder')}
-                onChange={(event) => updateDraft({ ruleText: event.currentTarget.value })}
-              />
-            </FieldShell>
-            <FieldShell
-              label={t('create.dnaPrimaryLabel')}
-              message={t('create.dnaPrimaryMessage')}
-              messageTone={draft.dnaPrimary ? 'neutral' : 'danger'}
-            >
-              <SelectField
-                value={draft.dnaPrimary}
-                options={[
-                  { value: '', label: t('create.dnaPrimaryPlaceholder') },
-                  ...DNA_PRIMARY_ARCHETYPES.map((archetype) => ({
-                    value: archetype,
-                    label: `${archetype} - ${t(DNA_PRIMARY_DESCRIPTION_KEYS[archetype])}`,
-                  })),
-                ]}
-                onValueChange={(value) => updateDraft({ dnaPrimary: value as DnaPrimaryArchetype | '' })}
-              />
-            </FieldShell>
-            <FieldShell
-              label={t('create.dnaSecondaryLabel', { max: DNA_SECONDARY_MAX_RECOMMENDED })}
-              message={
-                draft.dnaSecondary.length > DNA_SECONDARY_MAX_RECOMMENDED
-                  ? t('create.dnaSecondaryTooMany', { count: draft.dnaSecondary.length, max: DNA_SECONDARY_MAX_RECOMMENDED })
-                  : t('create.dnaSecondaryToggle')
-              }
-              messageTone={draft.dnaSecondary.length > DNA_SECONDARY_MAX_RECOMMENDED ? 'warning' : 'neutral'}
-            >
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {DNA_SECONDARY_TRAITS.map((trait) => {
-                  const active = draft.dnaSecondary.includes(trait);
-                  return (
-                    <button
-                      key={trait}
-                      type="button"
-                      title={t(DNA_SECONDARY_DESCRIPTION_KEYS[trait])}
-                      onClick={() => {
-                        const next = active
-                          ? draft.dnaSecondary.filter((value) => value !== trait)
-                          : [...draft.dnaSecondary, trait];
-                        updateDraft({ dnaSecondary: next });
-                      }}
-                      style={{
-                        padding: '6px 12px',
-                        borderRadius: 999,
-                        border: `1px solid ${active ? 'var(--nimi-action-primary-bg)' : 'var(--nimi-border-subtle)'}`,
-                        background: active
-                          ? 'color-mix(in srgb, var(--nimi-action-primary-bg) 12%, transparent)'
-                          : 'var(--nimi-surface-card)',
-                        color: active ? 'var(--nimi-text-primary)' : 'var(--nimi-text-secondary)',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        letterSpacing: '0.02em',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      {trait}
-                    </button>
-                  );
-                })}
-              </div>
-            </FieldShell>
-            <FieldShell
-              label={t('create.worldLabel')}
-              message={oasisWorld ? t('create.worldDefault', { name: oasisWorld.name }) : t('create.worldDefaultUnavailable')}
-              messageTone={oasisWorld ? 'neutral' : 'danger'}
-            >
-              <SelectField
-                disabled={worldsQuery.isLoading || worlds.length === 0}
-                value={draft.selectedWorldId}
-                options={worlds.map((world) => ({ value: world.id, label: worldOptionLabel(world) }))}
-                onValueChange={(value) => updateDraft({ selectedWorldId: value })}
-              />
-            </FieldShell>
-            {worldsQuery.isError ? (
-              <InlineAlert tone="danger">{t('create.worldSelectionUnavailable')}</InlineAlert>
-            ) : null}
-            {!worldsQuery.isLoading && worlds.length === 0 ? (
-              <InlineAlert tone="warning">{t('create.noSelectableWorlds')}</InlineAlert>
-            ) : null}
-            {!worldsQuery.isLoading && worlds.length > 0 && draft.selectedWorldId && !selectedWorld ? (
-              <InlineAlert tone="danger">{t('create.selectedWorldUnavailable')}</InlineAlert>
-            ) : null}
-            {!readiness.ready ? (
-              <InlineAlert tone="warning">{translateCreateFixedMessages(readiness.errors, t)}</InlineAlert>
-            ) : null}
-            {!creationGraphReview.ready ? (
-              <InlineAlert tone={creationGraphReview.canAccept ? 'warning' : 'danger'}>
-                {translateGraphReviewErrors(creationGraphReview.errors, t)}
-              </InlineAlert>
-            ) : null}
-            {localSubmitErrors.length > 0 ? (
-              <InlineAlert tone="danger">{t('create.validationFailed', { errors: translateCreateFixedMessages(localSubmitErrors, t) })}</InlineAlert>
-            ) : null}
-            {submitResult ? (
-              <InlineAlert tone={submitResult.ok ? 'success' : 'danger'}>
-                {submitResult.ok
-                  ? t('create.createdSuccess', { id: submitResult.canonical.id, status: submitResult.profileSettings.status })
-                  : t('create.createdPartial', {
-                    message: translateCreateFixedMessage(submitResult.message, t),
-                    created: submitResult.createdCanonical
-                      ? t('create.createdAgentId', { id: submitResult.createdCanonical.id })
-                      : '',
-                  })}
-              </InlineAlert>
-            ) : null}
-            {createdContext ? (
-              <Surface tone="card" padding="md">
-                <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="font-medium">{t('create.createdCardTitle')}</div>
-                    <div className="ras-break-anywhere mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                      @{createdContext.handle} · {createdContext.agentId}
-                    </div>
-                  </div>
-                  <StatusBadge tone="success">{createdContext.state || t('create.createdStateFallback')}</StatusBadge>
-                </div>
-                {submitResult?.ok && submitResult.profileSettings.status !== 'not-requested' ? (
-                  <InlineAlert tone="success" className="mt-3">
-                    {t('create.profileDescriptionSaved', {
-                      status: submitResult.profileSettings.status === 'updated'
-                        ? t('create.profileDescriptionSavedUpdated')
-                        : t('create.profileDescriptionSavedCurrent'),
-                    })}
-                  </InlineAlert>
-                ) : null}
-                <div className="mt-3 flex flex-wrap gap-3">
-                  <Button tone="secondary" onClick={() => onOpenCreatedAgent?.(createdContext.agentId, 'detail')}>
-                    {t('create.openCockpit')}
-                  </Button>
-                  <Button tone="ghost" onClick={() => onOpenCreatedAgent?.(createdContext.agentId, 'settings')}>
-                    {t('create.openSettings')}
-                  </Button>
-                </div>
-              </Surface>
-            ) : null}
-            <Surface tone="card" padding="md">
-              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600 }}>{t('create.referenceTitle')}</div>
-                  <div className="ras-text-muted ras-text-size-sm" style={{ marginTop: 4 }}>
-                    {t('create.referenceDescription')}
-                  </div>
-                </div>
-                <StatusBadge tone={draft.referenceImageUrl ? 'success' : 'neutral'}>
-                  {draft.referenceImageUrl ? t('create.referenceAttached') : t('create.noReferenceYet')}
-                </StatusBadge>
-              </div>
-              <FieldShell
-                label={t('create.imagePromptLabel')}
-                message={t('create.imagePromptMessage')}
-              >
-                <TextareaField
-                  value={referenceImagePrompt}
-                  placeholder={defaultReferenceImagePromptFromDraft({
-                    description: draft.originalDescription,
-                    displayName: draft.displayName,
-                    concept: draft.concept,
-                    dnaPrimary: draft.dnaPrimary,
-                  })}
-                  onChange={(event) => setReferenceImagePrompt(event.currentTarget.value)}
-                />
-              </FieldShell>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
-                <Button
-                  tone="secondary"
-                  disabled={isGeneratingReferenceImage}
-                  loading={isGeneratingReferenceImage}
-                  onClick={() => void runReferenceImageGeneration()}
-                >
-                  {draft.referenceImageUrl ? t('create.regenerateReference') : t('create.generateReference')}
-                </Button>
-                {draft.referenceImageUrl ? (
-                  <Button tone="ghost" onClick={clearReferenceImage}>
-                    {t('create.clearReference')}
-                  </Button>
-                ) : null}
-              </div>
-              {referenceImageResult && !referenceImageResult.ok ? (
-                <InlineAlert tone="danger" className="mt-3">
-                  {t('create.referenceFailed', { message: translateCreateFixedMessage(referenceImageResult.message, t) })}
-                </InlineAlert>
-              ) : null}
-              {draft.referenceImageUrl ? (
-                <div style={{ marginTop: 12 }}>
-                  <div className="ras-text-muted ras-text-size-sm" style={{ marginBottom: 6 }}>{t('create.preview')}</div>
-                  <div
-                    style={{
-                      width: '100%',
-                      maxHeight: 320,
-                      overflow: 'hidden',
-                      borderRadius: 12,
-                      border: '1px solid var(--nimi-border-subtle)',
-                      background: 'var(--nimi-surface-active)',
-                    }}
-                  >
-                    <img
-                      src={draft.referenceImageUrl}
-                      alt={t('create.referenceAlt')}
-                      style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'cover' }}
-                    />
-                  </div>
-                  <div className="ras-break-anywhere ras-text-muted ras-text-size-sm" style={{ marginTop: 6 }}>
-                    {draft.referenceImageUrl}
-                  </div>
-                </div>
-              ) : null}
-            </Surface>
-            <Button tone="primary" disabled={createDisabled} loading={createMutation.isPending} onClick={submitCreate}>
-              {t('create.submit')}
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid min-w-0 content-start gap-4">
-          <GraphReviewBoard
-            graph={creationGraph}
-            review={creationGraphReview}
-            onAccept={() => setGraphAcceptedFingerprint(acceptAgentCreationGraphForRealmCreate(creationGraph))}
-          />
-          <Surface tone="card" padding="md">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="font-medium">{t('create.worldPreview.title')}</div>
-              <StatusBadge tone="neutral">{t('create.worldPreview.badge')}</StatusBadge>
-            </div>
-            {!selectedWorld ? (
-              <EmptyState title={t('create.worldPreview.noneTitle')} description={t('create.worldPreview.noneDescription')} />
-            ) : worldPreviewQuery.isLoading ? (
-              <EmptyState title={t('create.worldPreview.loadingTitle')} description={t('create.worldPreview.loadingDescription')} />
-            ) : worldPreviewQuery.isError ? (
-              <InlineAlert tone="danger">{t('create.worldPreview.unavailable')}</InlineAlert>
-            ) : worldPreviewQuery.data ? (
-              <div className="mt-3 grid gap-3 text-[length:var(--nimi-type-body-sm-size)]">
-                <div>
-                  <div className="ras-break-anywhere font-medium">{worldPreviewQuery.data.name}</div>
-                  <div className="ras-break-anywhere mt-1 text-[var(--nimi-text-muted)]">{worldPreviewQuery.data.tagline || worldPreviewQuery.data.description || t('create.worldPreview.basicUnavailable')}</div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <StatusBadge tone="info">{worldPreviewQuery.data.type || t('create.worldPreview.typeUnavailable')}</StatusBadge>
-                  <StatusBadge tone="neutral">{worldPreviewQuery.data.status || t('create.worldPreview.statusUnavailable')}</StatusBadge>
-                  <StatusBadge tone="neutral">{worldPreviewQuery.data.contentRating || t('create.worldPreview.ratingUnavailable')}</StatusBadge>
-                </div>
-                <div className="ras-break-anywhere text-[var(--nimi-text-secondary)]">{worldPreviewQuery.data.overview || t('create.worldPreview.overviewUnavailable')}</div>
-                <div className="flex flex-wrap gap-2">
-                  {worldPreviewQuery.data.themes.length > 0
-                    ? worldPreviewQuery.data.themes.map((theme) => <StatusBadge key={theme} tone="neutral">{theme}</StatusBadge>)
-                    : <StatusBadge tone="warning">{t('create.worldPreview.themesUnavailable')}</StatusBadge>}
-                </div>
-              </div>
-            ) : null}
-          </Surface>
-          <ReadinessPreview draft={draft} selectableWorldIds={selectableWorldIds} handleAvailability={handleAvailability} />
+    <Surface tone="panel" padding="lg" className="ras-create-workspace">
+      <div className="ras-create-workspace__hero">
+        <div>
+          <h2 className="m-0 ras-create-workspace__title">{t('create.title')}</h2>
         </div>
       </div>
+      {step === 'source' ? (
+        <section className="ras-create-stage ras-create-source-landing">
+          <div className="ras-create-primary-panel ras-create-ai-panel">
+            <div className="ras-create-ai-panel__orb" aria-hidden="true">
+              {sourceModeIcon(sourceMode)}
+            </div>
+            <div className="ras-create-ai-panel__copy">
+              <h3>{sourcePanelTitle}</h3>
+              <p>{sourcePanelDescription}</p>
+            </div>
+            {renderSourceModeSwitch()}
+            <div className="ras-create-mode-panel">
+              {renderSourceModePanel()}
+            </div>
+          </div>
+
+          <div className="ras-create-source-footer">
+            <Lock size={15} strokeWidth={1.8} />
+            <span>{t('create.sourceFooter')}</span>
+          </div>
+        </section>
+      ) : null}
+
+      {step === 'draft' ? (
+        <section className="ras-create-stage" aria-labelledby="ras-create-draft-heading">
+          <div className="ras-create-toolbar">
+            <div className="ras-create-toolbar__right">
+              {sourceMode === 'description' ? (
+                <Button tone="secondary" disabled={!seedDescription.trim() || isGeneratingSeed} loading={isGeneratingSeed} leadingIcon={<RefreshCw size={16} strokeWidth={1.9} />} onClick={() => void runSeedGeneration()}>{t('create.draft.regenerate')}</Button>
+              ) : null}
+              <Button tone="primary" trailingIcon={<ArrowRight size={16} strokeWidth={1.9} />} onClick={() => setStep('review')}>{t('create.draft.continueReview')}</Button>
+            </div>
+          </div>
+          <h3 id="ras-create-draft-heading" className="ras-create-stage__title">{t('create.step.draft')}</h3>
+          <div className="ras-create-direction-grid">
+            {directions.map((direction, index) => (
+              <article key={direction.id} className="ras-create-direction-card" data-recommended={index === 0 || undefined}>
+                <div className="ras-create-direction-card__header">
+                  {index === 0 ? <span className="ras-create-recommend">{t('create.reviewRequired')}</span> : null}
+                  <h4>{t(direction.labelKey)}</h4>
+                  <StatusBadge tone={direction.sourceLabelKey === 'create.draft.aiCandidate' ? 'info' : 'neutral'}>{t(direction.sourceLabelKey)}</StatusBadge>
+                </div>
+                <dl className="ras-create-direction-card__body">
+                  <div><dt>{t('create.draft.displayName')}</dt><dd>{direction.displayName}</dd></div>
+                  <div><dt>{t('create.draft.identitySummary')}</dt><dd>{direction.identitySummary}</dd></div>
+                  <div><dt>{t('create.draft.dnaPrimary')}</dt><dd>{direction.dnaPrimary || t('common.notSet')}</dd></div>
+                  <div><dt>{t('create.draft.toneTags')}</dt><dd>{direction.toneTags.join(' / ')}</dd></div>
+                  <div><dt>{t('create.draft.behaviorBoundary')}</dt><dd>{direction.behaviorBoundary}</dd></div>
+                  <div><dt>{t('create.draft.publicDescription')}</dt><dd>{direction.publicDescription || t('common.notSet')}</dd></div>
+                </dl>
+                <Button tone={index === 0 ? 'primary' : 'secondary'} onClick={() => selectDirection(direction)}>{t('create.draft.useDirection')}</Button>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {step === 'review' ? (
+        <section className="ras-create-stage" aria-labelledby="ras-create-review-heading">
+          <div className="ras-create-toolbar">
+            <Button tone="ghost" leadingIcon={<ArrowLeft size={16} strokeWidth={1.9} />} onClick={() => setStep(sourceMode === 'manual' ? 'source' : 'draft')}>{t('create.review.backToDraft')}</Button>
+            <div className="ras-create-toolbar__right">
+              <strong>{t('create.review.autosavedProgress', { count: reviewFields.filter((field) => field.status === 'accepted').length, total: reviewFields.length })}</strong>
+              <Button tone="primary" disabled={!allRequiredAccepted || !creationGraphReview.canAccept} trailingIcon={<ArrowRight size={16} strokeWidth={1.9} />} onClick={continueToConfirm}>{t('create.review.continueConfirm')}</Button>
+            </div>
+          </div>
+          <h3 id="ras-create-review-heading" className="ras-create-stage__title">{t('create.step.review')}</h3>
+          <div className="ras-create-review-table">
+            {reviewFields.map((field) => (
+              <div key={field.key} className="ras-create-review-row" data-status={field.status}>
+                <div className="ras-create-review-row__content">
+                  <div>
+                    <div className="ras-create-review-field">
+                      <strong>{t(field.labelKey)}</strong>
+                      {renderReviewEditor(field)}
+                    </div>
+                    <div className="ras-text-muted ras-text-size-sm">{t(field.reasonKey)}</div>
+                    {field.issue ? <InlineAlert tone={field.status === 'needs-review' ? 'warning' : 'danger'}>{field.issue}</InlineAlert> : null}
+                  </div>
+                </div>
+                <StatusBadge tone={statusTone(field.status)}>{t(statusLabelKey(field.status))}</StatusBadge>
+                <div className="ras-create-review-row__actions">
+                  <Button tone="ghost" size="sm" onClick={() => regenerateField(field.key)}>{t('create.review.regenerate')}</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {renderReferenceImagePanel()}
+          {!creationGraphReview.ready ? (
+            <InlineAlert tone={creationGraphReview.canAccept ? 'warning' : 'danger'}>{creationGraphReview.errors.join('; ')}</InlineAlert>
+          ) : null}
+          <details className="ras-create-later" open={false}>
+            <summary><ChevronRight size={17} strokeWidth={1.9} /> {t('create.later.title')}</summary>
+            <p className="m-0 mt-2 ras-text-muted ras-text-size-sm">{t('create.later.description')}</p>
+            <div className="ras-create-later__grid">
+              {['visualBrief', 'voiceBrief', 'firstPost', 'contentVoice'].map((item) => (
+                <div key={item} className="ras-create-later__item">
+                  <span>{t(`create.later.${item}` as StudioCopyKey)}</span>
+                  <StatusBadge tone="neutral">{t('create.later.deferred')}</StatusBadge>
+                </div>
+              ))}
+            </div>
+          </details>
+        </section>
+      ) : null}
+
+      {step === 'confirm' ? (
+        <section className="ras-create-stage" aria-labelledby="ras-create-confirm-heading">
+          {createdContext && submitResult?.ok ? (
+            <div className="ras-create-success-card">
+              <span className="ras-create-success-card__icon"><Check size={36} strokeWidth={1.8} /></span>
+              <h3 id="ras-create-confirm-heading">{t('create.createdCardTitle')}</h3>
+              <p>{t('create.confirm.openingLaunch', { handle: createdContext.handle })}</p>
+              <div className="ras-create-success-card__identity">
+                <strong>{createdContext.displayName}</strong>
+                <span>@{createdContext.handle}</span>
+              </div>
+              <div className="ras-create-success-card__actions">
+                <Button tone="secondary" onClick={resetCreateWorkflow}>{t('create.title')}</Button>
+                <Button tone="secondary" onClick={() => onOpenCreatedAgent?.(createdContext.agentId, 'detail')}>{t('create.openCockpit')}</Button>
+                <Button tone="primary" onClick={() => onOpenCreatedAgent?.(createdContext.agentId, 'launch')}>{t('create.openLaunch')}</Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="ras-create-toolbar">
+                <Button tone="ghost" leadingIcon={<ArrowLeft size={16} strokeWidth={1.9} />} onClick={() => setStep('review')}>{t('create.confirm.backToReview')}</Button>
+                <Button tone="primary" disabled={createDisabled} loading={createMutation.isPending} leadingIcon={<Sparkles size={16} strokeWidth={2} />} onClick={submitCreate}>{t('create.submit')}</Button>
+              </div>
+              <h3 id="ras-create-confirm-heading" className="ras-create-stage__title">{t('create.step.confirm')}</h3>
+              {!readiness.ready ? <InlineAlert tone="danger">{translateCreateFixedMessages(readiness.errors, t)}</InlineAlert> : null}
+              {localSubmitErrors.length > 0 ? <InlineAlert tone="danger">{t('create.validationFailed', { errors: translateCreateFixedMessages(localSubmitErrors, t) })}</InlineAlert> : null}
+              {submitResult && !submitResult.ok ? (
+                <InlineAlert tone="danger">
+                  {t('create.createdPartial', { message: translateCreateFixedMessage(submitResult.message, t), created: submitResult.createdCanonical ? t('create.createdAgentId', { id: submitResult.createdCanonical.id }) : '' })}
+                </InlineAlert>
+              ) : null}
+              <div className="ras-create-confirm-panel">
+                <div className="ras-create-confirm-panel__header">
+                  <strong>{t('create.confirm.previewTitle')}</strong>
+                  <span>{t('create.confirm.previewSubtitle')}</span>
+                </div>
+                {readiness.ready ? (
+                  <div className="ras-create-agent-preview">
+                    <div className="ras-create-agent-preview__hero">
+                      <div className="ras-create-agent-preview__avatar" aria-hidden="true">
+                        {normalizedDraft.referenceImageUrl ? (
+                          <img src={normalizedDraft.referenceImageUrl} alt="" />
+                        ) : (
+                          (normalizedDraft.displayName || normalizedDraft.handle || 'A').slice(0, 1).toUpperCase()
+                        )}
+                      </div>
+                      <div>
+                        <h4>{normalizedDraft.displayName}</h4>
+                        <p>@{normalizedDraft.handle}</p>
+                      </div>
+                    </div>
+                    <div className="ras-create-confirm-list">
+                      {confirmPreviewFields.map((field) => (
+                        <div key={field.key} className="ras-create-confirm-row" data-emphasized={field.emphasized || undefined}>
+                          <span>{t(field.labelKey)}</span>
+                          <span>{field.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : <EmptyState title={t('create.confirm.blockedTitle')} description={t('create.confirm.blockedDescription')} />}
+              </div>
+              <TechnicalDetails>
+                <pre className="ras-json-preview m-0 max-h-72 overflow-auto rounded-[var(--nimi-radius-field)] border border-[var(--nimi-border-subtle)] bg-[var(--nimi-surface-card)] p-3 text-xs">
+                  {JSON.stringify({ graph: creationGraph, readiness }, null, 2)}
+                </pre>
+              </TechnicalDetails>
+            </>
+          )}
+        </section>
+      ) : null}
+
+      {worldsQuery.isError ? <InlineAlert tone="danger"><AlertTriangle size={15} strokeWidth={1.8} /> {t('create.worldSelectionUnavailable', { message: errorMessage(worldsQuery.error) })}</InlineAlert> : null}
+      {!worldsQuery.isError && !worldsQuery.isLoading && worlds.length === 0 ? <InlineAlert tone="warning">{t('create.noSelectableWorlds')}</InlineAlert> : null}
+      {worldPreviewQuery.isError ? <InlineAlert tone="danger">{t('create.worldPreview.unavailable')}</InlineAlert> : null}
     </Surface>
   );
 }

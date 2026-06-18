@@ -21,7 +21,7 @@ export const AVATAR_PACKAGE_TARGETS = ['SPRITE2D', 'LIVE2D', 'VRM'] as const;
 export const VISUAL_IMAGE_CANDIDATE_NOTICE = 'Image candidates stay local for owner review until a reviewed profile publishing path is available.';
 export const AVATAR_PACKAGE_CANDIDATE_NOTICE = 'Avatar package candidates stay local for owner review; generated output is a design sheet and rigging brief, not a published Live2D/VRM package.';
 export const VOICE_DEMO_CANDIDATE_NOTICE = 'Voice demo audio stays local for owner review; reviewed voice profile config is promoted separately where admitted.';
-export const VISUAL_IMAGE_GENERATION_SOURCE = 'Runtime ScenarioService.executeScenario image.generate';
+export const VISUAL_IMAGE_GENERATION_SOURCE = 'Runtime ScenarioService.submitScenarioJob image.generate';
 export const VOICE_DEMO_SYNTHESIS_SOURCE = 'Runtime ScenarioService.executeScenario audio.synthesize';
 
 export type MediaCandidateResourceType = typeof MEDIA_CANDIDATE_RESOURCE_TYPES[number];

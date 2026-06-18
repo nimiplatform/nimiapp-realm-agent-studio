@@ -162,7 +162,7 @@ describe('reviewed media and voice candidate payloads', () => {
       runtime: {
         capabilityToken: 'image.generate',
         runtimeScenario: 'imageGenerate',
-        source: 'Runtime ScenarioService.executeScenario image.generate',
+        source: 'Runtime ScenarioService.submitScenarioJob image.generate',
       },
       futureEvidencePath: {
         resource: {

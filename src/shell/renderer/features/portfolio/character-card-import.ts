@@ -1,4 +1,4 @@
-import type { CreateRealmAgentDraftInput, DnaPrimaryArchetype, DnaSecondaryTrait } from './create-agent-draft.js';
+import { createRealmAgentHandleCandidate, type CreateRealmAgentDraftInput, type DnaPrimaryArchetype, type DnaSecondaryTrait } from './create-agent-draft.js';
 import type { AgentCreationGraphSourceField } from './agent-creation-graph.js';
 
 export type CharacterCardImportFailure =
@@ -97,16 +97,7 @@ function joinText(parts: string[], separator = '\n\n'): string {
 }
 
 function slugFromName(name: string): string {
-  const ascii = name
-    .normalize('NFKD')
-    .replace(/[^\w\s-]/g, '')
-    .trim()
-    .toLowerCase()
-    .replace(/[_\s]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 20);
-  return ascii || 'imported-agent';
+  return createRealmAgentHandleCandidate(name, 'imported_agent');
 }
 
 function classifyPrimaryDna(text: string): DnaPrimaryArchetype | '' {

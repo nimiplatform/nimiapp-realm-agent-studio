@@ -5,12 +5,21 @@ import {
 } from '@nimiplatform/sdk/ai';
 import type { NimiJsonObject, NimiMessage } from '@nimiplatform/sdk/contracts';
 import {
+  createNimiRuntimeLocalModelCenterClient,
   createNimiRuntimeRouteOptionsHostDeps,
+  isNimiRuntimeLocalEnvironmentDependencyJobActiveState,
+  isNimiRuntimeLocalEnvironmentDependencyReadyState,
+  isNimiRuntimeLocalEnvironmentDependencyStartableState,
   listNimiRuntimeLocalAssetEntries,
   listNimiRuntimeRouteOptionsWithHost,
+  resolveNimiRuntimeLocalImageNativeEnvironmentPlan,
+  runNimiRuntimeScenarioJob,
   toNimiRuntimeProtoStruct,
   toNimiRuntimeVoiceReference,
   type NimiRuntimeLocalAssetEntry,
+  type NimiRuntimeLocalEnvironmentDependencyJob,
+  type NimiRuntimeLocalEnvironmentPlan,
+  type NimiRuntimeLocalEnvironmentPlanDependency,
   type NimiRuntimeRouteBinding,
   type NimiRuntimeRouteOptionsSnapshot,
   type NimiRuntimeSpeechVoiceReference,
@@ -21,6 +30,7 @@ import { COMPANION_SLOTS } from '@nimiplatform/kit/features/model-config/headles
 import {
   ExecutionMode,
   FallbackPolicy,
+  FinishReason,
   RoutePolicy,
   ScenarioType,
   SpeechTimingMode,
@@ -572,6 +582,9 @@ type StudioImageRuntimeBinding = {
   readonly entryOverrides?: readonly StudioImageEntryOverride[];
 };
 
+const STUDIO_LOCAL_IMAGE_ENVIRONMENT_PREPARE_TIMEOUT_MS = 90_000;
+const STUDIO_LOCAL_IMAGE_ENVIRONMENT_POLL_MS = 1_500;
+
 function optionalStudioParamText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -661,6 +674,134 @@ function imageProfileEntryForAsset(input: {
   };
 }
 
+function runtimeDependencyBlocksImageEnvironment(
+  dependency: NimiRuntimeLocalEnvironmentPlanDependency,
+): boolean {
+  return dependency.required && !isNimiRuntimeLocalEnvironmentDependencyReadyState(dependency.state);
+}
+
+function runtimeDependencyJobMatchesDependency(
+  job: NimiRuntimeLocalEnvironmentDependencyJob,
+  dependency: NimiRuntimeLocalEnvironmentPlanDependency,
+): boolean {
+  return (
+    job.environmentKey === dependency.environmentKey
+    && job.dependencyFamily === dependency.dependencyFamily
+    && job.dependencyId === dependency.dependencyId
+  );
+}
+
+function runtimeDependencyStartable(
+  dependency: NimiRuntimeLocalEnvironmentPlanDependency,
+  jobs: readonly NimiRuntimeLocalEnvironmentDependencyJob[],
+): boolean {
+  if (!dependency.required || !dependency.environmentKey) return false;
+  if (!isNimiRuntimeLocalEnvironmentDependencyStartableState(dependency.state)) return false;
+  return !jobs.some((job) => (
+    runtimeDependencyJobMatchesDependency(job, dependency)
+    && isNimiRuntimeLocalEnvironmentDependencyJobActiveState(job.state)
+  ));
+}
+
+function summarizeLocalImageEnvironmentDependencies(
+  dependencies: readonly NimiRuntimeLocalEnvironmentPlanDependency[],
+): string {
+  return dependencies
+    .slice(0, 4)
+    .map((dependency) => `${dependency.dependencyFamily}:${dependency.dependencyId}=${dependency.state}`)
+    .join(', ');
+}
+
+function localImageEnvironmentAssetInput(asset: NimiRuntimeLocalAssetEntry) {
+  return {
+    assetId: asset.assetId,
+    localAssetId: asset.localAssetId,
+  };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, ms);
+  });
+}
+
+async function listLocalImageEnvironmentJobs(
+  localModelCenter: ReturnType<typeof createNimiRuntimeLocalModelCenterClient>,
+  dependencies: readonly NimiRuntimeLocalEnvironmentPlanDependency[],
+): Promise<NimiRuntimeLocalEnvironmentDependencyJob[]> {
+  const environmentKeys = [...new Set(dependencies.map((dependency) => dependency.environmentKey).filter(Boolean))];
+  if (environmentKeys.length === 0) return [];
+  const jobGroups = await Promise.all(environmentKeys.map((environmentKey) =>
+    localModelCenter.listEnvironmentDependencyJobs({ environmentKey })));
+  return jobGroups.flat();
+}
+
+async function resolveLocalImageEnvironmentPlan(
+  localModelCenter: ReturnType<typeof createNimiRuntimeLocalModelCenterClient>,
+  asset: NimiRuntimeLocalAssetEntry,
+): Promise<NimiRuntimeLocalEnvironmentPlan> {
+  return resolveNimiRuntimeLocalImageNativeEnvironmentPlan({
+    runtime: localModelCenter,
+    asset: localImageEnvironmentAssetInput(asset),
+  });
+}
+
+async function waitForLocalImageEnvironmentReady(
+  localModelCenter: ReturnType<typeof createNimiRuntimeLocalModelCenterClient>,
+  asset: NimiRuntimeLocalAssetEntry,
+  timeoutMs: number,
+): Promise<NimiRuntimeLocalEnvironmentPlan> {
+  const deadline = Date.now() + timeoutMs;
+  let plan = await resolveLocalImageEnvironmentPlan(localModelCenter, asset);
+  while (plan.dependencies.some(runtimeDependencyBlocksImageEnvironment) && Date.now() < deadline) {
+    await sleep(STUDIO_LOCAL_IMAGE_ENVIRONMENT_POLL_MS);
+    plan = await resolveLocalImageEnvironmentPlan(localModelCenter, asset);
+  }
+  return plan;
+}
+
+async function prepareStudioLocalImageRuntimeEnvironment(
+  runtime: Runtime,
+  asset: NimiRuntimeLocalAssetEntry,
+): Promise<void> {
+  const localModelCenter = createNimiRuntimeLocalModelCenterClient({ local: runtime.local });
+  let plan = await resolveLocalImageEnvironmentPlan(localModelCenter, asset);
+  let blockingDependencies = plan.dependencies.filter(runtimeDependencyBlocksImageEnvironment);
+  if (blockingDependencies.length === 0) return;
+
+  const jobs = await listLocalImageEnvironmentJobs(localModelCenter, blockingDependencies);
+  const startableDependencies = blockingDependencies.filter((dependency) =>
+    runtimeDependencyStartable(dependency, jobs));
+  if (startableDependencies.length > 0) {
+    await Promise.all(startableDependencies.map((dependency) =>
+      localModelCenter.startEnvironmentDependencyJob({
+        environmentKey: dependency.environmentKey,
+        dependencyFamily: dependency.dependencyFamily,
+        dependencyId: dependency.dependencyId,
+        sourceKind: dependency.sourceKind,
+        confirmed: true,
+        consumerScope: dependency.consumerScope,
+      }, { caller: 'core' })));
+    plan = await resolveLocalImageEnvironmentPlan(localModelCenter, asset);
+    blockingDependencies = plan.dependencies.filter(runtimeDependencyBlocksImageEnvironment);
+  }
+
+  if (blockingDependencies.length === 0) return;
+
+  plan = await waitForLocalImageEnvironmentReady(
+    localModelCenter,
+    asset,
+    STUDIO_LOCAL_IMAGE_ENVIRONMENT_PREPARE_TIMEOUT_MS,
+  );
+  blockingDependencies = plan.dependencies.filter(runtimeDependencyBlocksImageEnvironment);
+  if (blockingDependencies.length === 0) return;
+
+  const summary = summarizeLocalImageEnvironmentDependencies(blockingDependencies);
+  throw new Error(
+    `Runtime local image environment is still preparing (${summary}). Studio started required local dependency activation; retry after Runtime finishes preparing the image environment.`,
+  );
+}
+
 async function resolveStudioImageRuntimeBinding(
   runtime: Runtime,
   binding: StudioResolvedRuntimeRouteBinding,
@@ -683,6 +824,7 @@ async function resolveStudioImageRuntimeBinding(
       if (configuredModel && !assetMatchesId(mainAsset, configuredModel)) {
         throw new Error(`image.generate profile_entries main model ${configuredModel} is not the Runtime local asset selected by NimiAIConfig targetRef.`);
       }
+      await prepareStudioLocalImageRuntimeEnvironment(runtime, mainAsset);
       return {
         binding: {
           ...binding,
@@ -720,6 +862,7 @@ async function resolveStudioImageRuntimeBinding(
   if (!mainAsset) {
     throw new Error(`image.generate active model ${binding.model} is not present in Runtime local assets; reselect the Image active model.`);
   }
+  await prepareStudioLocalImageRuntimeEnvironment(runtime, mainAsset);
 
   const companionSlots = selectedCompanionSlots(binding.selectedParams);
   const profileEntries: StudioImageProfileEntry[] = [
@@ -871,6 +1014,20 @@ export function resolveStudioImageCallParams(
   };
 }
 
+function normalizeStudioScenarioInt64(value: string | number | bigint | null | undefined): string {
+  if (value === undefined || value === null || value === '') {
+    return '0';
+  }
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  const text = String(value).trim();
+  if (!/^-?\d+$/u.test(text)) {
+    throw new Error(`Runtime image.generate seed must be an integer string, got ${text}.`);
+  }
+  return text;
+}
+
 function createScenarioRequestHead(params: {
   readonly model: string;
   readonly route?: 'local' | 'cloud';
@@ -893,6 +1050,10 @@ export function createStudioImageGeneratePayload(input: {
   readonly params: StudioImageCallParams;
   readonly spec: ImageGenerateScenarioSpec;
 }): StudioImageGeneratePayload {
+  const imageGenerateSpec: ImageGenerateScenarioSpec = {
+    ...input.spec,
+    seed: normalizeStudioScenarioInt64(input.spec.seed),
+  };
   return {
     surfaceId: input.surfaceId,
     params: input.params,
@@ -903,7 +1064,7 @@ export function createStudioImageGeneratePayload(input: {
       spec: {
         spec: {
           oneofKind: 'imageGenerate',
-          imageGenerate: input.spec,
+          imageGenerate: imageGenerateSpec,
         },
       },
       extensions: [],
@@ -957,6 +1118,49 @@ export async function bindStudioImageGeneratePayload(
 }
 
 export async function executeStudioImageGenerate(
+  payload: StudioBoundImageGeneratePayload,
+  runtime: Runtime,
+): Promise<ExecuteScenarioResponse> {
+  assertBoundStudioScenarioPayload('image.generate', payload);
+  const jobResult = await runNimiRuntimeScenarioJob({
+    ai: runtime.ai,
+    request: {
+      head: payload.request.head,
+      scenarioType: payload.request.scenarioType,
+      executionMode: ExecutionMode.ASYNC_JOB,
+      spec: payload.request.spec,
+      requestId: '',
+      idempotencyKey: '',
+      labels: {
+        surfaceId: payload.surfaceId,
+        capability: 'image.generate',
+      },
+      extensions: payload.request.extensions,
+    },
+    callOptions: {
+      timeoutMs: payload.params.timeoutMs,
+      metadata: toStudioCoreMetadata(payload.surfaceId, undefined),
+    },
+  });
+  return {
+    output: jobResult.output ?? {
+      output: {
+        oneofKind: 'imageGenerate',
+        imageGenerate: {
+          artifacts: [...jobResult.artifacts],
+        },
+      },
+    },
+    finishReason: FinishReason.STOP,
+    routeDecision: jobResult.job.routeDecision,
+    modelResolved: jobResult.job.modelResolved,
+    traceId: jobResult.traceId || jobResult.job.traceId,
+    ignoredExtensions: jobResult.job.ignoredExtensions,
+    ...(jobResult.job.usage ? { usage: jobResult.job.usage } : {}),
+  };
+}
+
+export async function executeStudioImageRouteDescribe(
   payload: StudioBoundImageGeneratePayload,
   runtime: Runtime,
 ): Promise<ExecuteScenarioResponse> {

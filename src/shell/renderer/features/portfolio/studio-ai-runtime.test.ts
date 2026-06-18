@@ -74,6 +74,35 @@ function speechPayload(model = 'auto'): StudioSpeechSynthesizePayload {
 }
 
 describe('studio ai runtime route hard boundary', () => {
+  it('normalizes empty image seed to the Runtime int64 zero value', () => {
+    const payload = imagePayload();
+    const imageGenerate = payload.request.spec?.spec.oneofKind === 'imageGenerate'
+      ? payload.request.spec.spec.imageGenerate
+      : null;
+
+    expect(imageGenerate?.seed).toBe('0');
+  });
+
+  it('rejects non-integer image seed before Runtime execution', () => {
+    expect(() => createStudioImageGeneratePayload({
+      surfaceId: 'realm-agent-studio.visual-image-candidate',
+      params: { model: 'auto' },
+      spec: {
+        prompt: 'Warm profile portrait.',
+        negativePrompt: '',
+        n: 1,
+        size: '',
+        aspectRatio: '1:1',
+        quality: '',
+        style: '',
+        seed: 'not-an-int',
+        referenceImages: [],
+        mask: '',
+        responseFormat: 'url',
+      },
+    })).toThrow('Runtime image.generate seed must be an integer string');
+  });
+
   it('fails closed when targetRef is missing even if caller supplies a concrete model', async () => {
     const runtime = mockRuntimeWithRoutes({
       executeScenario: vi.fn(),
@@ -283,6 +312,122 @@ describe('studio ai runtime route hard boundary', () => {
         local_asset_id: 'image:runtime-vae-model',
       }),
     ]));
+  });
+
+  it('activates required local image environment dependencies before submitting image jobs', async () => {
+    const startLocalEnvironmentDependencyJob = vi.fn(async (request: {
+      readonly environmentKey?: string;
+      readonly dependencyFamily?: string;
+      readonly dependencyId?: string;
+      readonly consumerScope?: string;
+      readonly sourceKind?: string;
+      readonly confirmed?: boolean;
+    }) => ({
+      job: {
+        jobId: 'local-environment-dependency-job-1',
+        environmentKey: request.environmentKey || '',
+        dependencyFamily: request.dependencyFamily || '',
+        dependencyId: request.dependencyId || '',
+        consumerScope: request.consumerScope || '',
+        state: 'queued',
+        sourceKind: request.sourceKind || '',
+        canonicalRoot: '',
+        selectedSourceRecordId: '',
+        failureDetail: '',
+        retryable: false,
+        createdAt: '2026-05-21T00:00:00.000Z',
+        updatedAt: '2026-05-21T00:00:00.000Z',
+        reasonCode: '',
+        recoveryDisposition: '',
+        bytesReceived: 0,
+        bytesTotal: 0,
+        percent: 0,
+        speedBytesPerSec: 0,
+        etaSeconds: 0,
+      },
+    }));
+    const resolveLocalEnvironmentPlan = vi
+      .fn()
+      .mockResolvedValueOnce({
+        plan: {
+          planId: 'local-image-native-plan-blocked',
+          packId: 'local-image-native',
+          productLabel: 'Local image native',
+          hostProfileId: 'test-host',
+          platformTuple: 'test-platform',
+          runtimeDataRoot: '',
+          consumerScope: 'local-image-native',
+          cloudOnlyImpact: '',
+          state: 'needs_confirmation',
+          reasonCode: '',
+          dependencies: [{
+            dependencyFamily: 'python.tool.uv',
+            dependencyId: 'uv',
+            consumerScope: 'local-image-native',
+            required: true,
+            state: 'needs_confirmation',
+            sourceKind: 'runtime_managed',
+            confirmationRequired: true,
+            selectedSourceRecordId: '',
+            environmentKey: 'local-image-native',
+            canonicalRoot: '',
+            reasonCode: '',
+            detail: '',
+          }],
+        },
+      })
+      .mockResolvedValue({
+        plan: {
+          planId: 'local-image-native-plan-ready',
+          packId: 'local-image-native',
+          productLabel: 'Local image native',
+          hostProfileId: 'test-host',
+          platformTuple: 'test-platform',
+          runtimeDataRoot: '',
+          consumerScope: 'local-image-native',
+          cloudOnlyImpact: '',
+          state: 'ready',
+          reasonCode: '',
+          dependencies: [{
+            dependencyFamily: 'python.tool.uv',
+            dependencyId: 'uv',
+            consumerScope: 'local-image-native',
+            required: true,
+            state: 'ready_managed',
+            sourceKind: 'runtime_managed',
+            confirmationRequired: false,
+            selectedSourceRecordId: '',
+            environmentKey: 'local-image-native',
+            canonicalRoot: '',
+            reasonCode: '',
+            detail: '',
+          }],
+        },
+      });
+    const runtime = mockRuntimeWithRoutes({
+      executeScenario: vi.fn(),
+      resolveLocalEnvironmentPlan,
+      listLocalEnvironmentDependencyJobs: vi.fn(async () => ({ jobs: [] })),
+      startLocalEnvironmentDependencyJob,
+      routes: [{ capability: 'image.generate', model: 'runtime-image-model' }],
+    });
+    configureStudioAIConfigTargetRefsForTest({
+      targetRefs: {
+        'image.generate': 'runtime-image-model',
+      },
+    });
+
+    const bound = await bindStudioImageGeneratePayload(imagePayload(), runtime);
+    await executeStudioImageGenerate(bound, runtime);
+
+    expect(startLocalEnvironmentDependencyJob).toHaveBeenCalledWith(expect.objectContaining({
+      environmentKey: 'local-image-native',
+      dependencyFamily: 'python.tool.uv',
+      dependencyId: 'uv',
+      confirmed: true,
+      consumerScope: 'local-image-native',
+    }), undefined);
+    expect(runtime.ai.submitScenarioJob).toHaveBeenCalledTimes(1);
   });
 
   it('rejects image profile_entries when they try to override the targetRef resolved model', async () => {

@@ -15,6 +15,9 @@ export const REALM_AGENT_CREATE_SOURCE = 'Realm AgentsService.agentControllerCre
 export const REALM_AGENT_CREATE_PATH = 'POST /api/agent';
 export const REALM_AGENT_HANDLE_CHECK_SOURCE = 'Realm AgentsService.agentControllerCheckHandle';
 export const REALM_AGENT_HANDLE_CHECK_PATH = 'GET /api/agent/handles/check';
+export const REALM_AGENT_HANDLE_MIN_LENGTH = 4;
+export const REALM_AGENT_HANDLE_MAX_LENGTH = 16;
+export const REALM_AGENT_HANDLE_PATTERN = /^[a-z0-9_]{4,16}$/;
 
 /**
  * Realm `CreateAgentDto.dnaPrimary` enum — six canonical archetypes from
@@ -131,6 +134,7 @@ export type ReviewedRealmCreateAgentInput = {
   worldId: string;
   concept: string;
   ownershipType: 'MASTER_OWNED';
+  dna: NonNullable<RealmCreateAgentInput['dna']>;
   dnaPrimary: DnaPrimaryArchetype;
   dnaSecondary?: DnaSecondaryTrait[];
   description?: string;
@@ -196,8 +200,39 @@ function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
-function normalizeHandle(value: string): string {
-  return value.trim().replace(/^@+/, '').toLocaleLowerCase();
+function stableHandleSuffix(value: string): string {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) % 100000;
+  }
+  return String(hash || 1).padStart(5, '0');
+}
+
+export function normalizeRealmAgentHandleInput(value: string): string {
+  return value
+    .trim()
+    .replace(/^[@~]+/, '')
+    .normalize('NFKD')
+    .toLocaleLowerCase()
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, REALM_AGENT_HANDLE_MAX_LENGTH)
+    .replace(/_+$/g, '');
+}
+
+export function createRealmAgentHandleCandidate(source: string, fallback = 'realm'): string {
+  const normalized = normalizeRealmAgentHandleInput(source);
+  if (normalized.length >= REALM_AGENT_HANDLE_MIN_LENGTH) return normalized;
+
+  const fallbackStem = normalizeRealmAgentHandleInput(fallback) || 'agent';
+  const suffix = stableHandleSuffix(source || fallbackStem);
+  const stem = (normalized || fallbackStem)
+    .slice(0, REALM_AGENT_HANDLE_MAX_LENGTH - suffix.length - 1)
+    .replace(/_+$/g, '');
+  const candidate = normalizeRealmAgentHandleInput(`${stem}_${suffix}`);
+  return REALM_AGENT_HANDLE_PATTERN.test(candidate) ? candidate : `agent_${suffix}`;
 }
 
 function normalizeRuleLines(value: string): string[] {
@@ -205,6 +240,19 @@ function normalizeRuleLines(value: string): string[] {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+function compactStringArray(values: readonly string[], maxItems: number): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+    if (out.length >= maxItems) break;
+  }
+  return out;
 }
 
 function normalizeDnaSecondary(values: readonly DnaSecondaryTrait[] | readonly string[]): DnaSecondaryTrait[] {
@@ -237,7 +285,7 @@ export function normalizeCreateRealmAgentDraft(input: CreateRealmAgentDraftInput
     ? (rawPrimary as DnaPrimaryArchetype)
     : '';
   return {
-    handle: normalizeHandle(input.handle),
+    handle: normalizeRealmAgentHandleInput(input.handle),
     displayName: input.displayName.trim(),
     concept: input.concept.trim(),
     description: input.description.trim(),
@@ -250,16 +298,44 @@ export function normalizeCreateRealmAgentDraft(input: CreateRealmAgentDraftInput
   };
 }
 
+export function buildReviewedCreateAgentDna(
+  input: NormalizedCreateRealmAgentDraft,
+): NonNullable<RealmCreateAgentInput['dna']> {
+  const summary = input.description || input.concept;
+  const behavioralDirectives = compactStringArray(normalizeRuleLines(input.ruleText), 12);
+  return {
+    source: 'realm-agent-studio.reviewed-create-dna.v1',
+    primaryArchetype: input.dnaPrimary,
+    secondaryTraits: [...input.dnaSecondary],
+    identity: {
+      name: input.displayName,
+      role: 'Owner-created public Realm Agent',
+      species: 'Realm Agent',
+      worldview: input.concept,
+      ...(summary ? { summary } : {}),
+    },
+    personality: {
+      primaryArchetype: input.dnaPrimary,
+      secondaryTraits: [...input.dnaSecondary],
+      ...(summary ? { summary } : {}),
+      ...(behavioralDirectives.length > 0 ? { behavioralDirectives } : {}),
+    },
+    communication: {
+      sourceText: input.ruleText || input.concept,
+    },
+  };
+}
+
 export function normalizeRealmAgentHandleAvailability(
   handle: string,
   response: RealmAgentHandleAvailabilityDto,
 ): NormalizedRealmAgentHandleAvailability {
-  const normalized = readString(response.normalized) || normalizeHandle(handle);
+  const normalized = normalizeRealmAgentHandleInput(readString(response.normalized) || handle);
   if (response.available) {
     return {
       checked: true,
       source: REALM_AGENT_HANDLE_CHECK_SOURCE,
-      handle: normalizeHandle(handle),
+      handle: normalizeRealmAgentHandleInput(handle),
       normalized,
       available: true,
       ...(response.message ? { message: response.message } : {}),
@@ -269,7 +345,7 @@ export function normalizeRealmAgentHandleAvailability(
   return {
     checked: true,
     source: REALM_AGENT_HANDLE_CHECK_SOURCE,
-    handle: normalizeHandle(handle),
+    handle: normalizeRealmAgentHandleInput(handle),
     normalized,
     available: false,
     message: response.message || 'Realm reported this agent handle is unavailable.',
@@ -379,6 +455,7 @@ export function validateCreateRealmAgentReadiness(
     worldId: draft.selectedWorldId,
     concept: draft.concept,
     ownershipType: 'MASTER_OWNED',
+    dna: buildReviewedCreateAgentDna(draft),
     dnaPrimary,
     ...(draft.dnaSecondary.length > 0 ? { dnaSecondary: draft.dnaSecondary } : {}),
     ...(draft.description ? { description: draft.description } : {}),

@@ -1,5 +1,6 @@
 import type { Runtime } from '@nimiplatform/sdk/runtime';
 import type { ExecuteScenarioResponse, ScenarioArtifact } from '@nimiplatform/sdk/runtime/generated';
+import { extractNimiErrorFields } from '@nimiplatform/sdk/types';
 import { createStudioRuntimeClient } from '@renderer/data/runtime-client.js';
 import {
   bindStudioImageGeneratePayload,
@@ -13,7 +14,7 @@ import {
   type StudioRuntimeArtifactProjection,
 } from './runtime-artifact-projection.js';
 
-export const AGENT_REFERENCE_IMAGE_SOURCE = 'Runtime ScenarioService.executeScenario image.generate' as const;
+export const AGENT_REFERENCE_IMAGE_SOURCE = 'Runtime ScenarioService.submitScenarioJob image.generate' as const;
 
 type RuntimeImageClient = Runtime;
 
@@ -97,6 +98,44 @@ function readImageArtifacts(output: ExecuteScenarioResponse): readonly ScenarioA
     : [];
 }
 
+function parseEmbeddedRuntimeError(value: string): Record<string, unknown> {
+  const text = value.trim();
+  if (!text) return {};
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace < 0 || lastBrace <= firstBrace) return {};
+  try {
+    const parsed = JSON.parse(text.slice(firstBrace, lastBrace + 1));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function runtimeErrorText(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  if (typeof error === 'string' && error.trim()) return error.trim();
+  const fields = extractNimiErrorFields(error);
+  return fields.message || 'runtime transport call failed.';
+}
+
+function runtimeImageGenerateFailureMessage(error: unknown): string {
+  const raw = runtimeErrorText(error);
+  const fields = extractNimiErrorFields(error);
+  const embedded = parseEmbeddedRuntimeError(raw);
+  const reasonCode = String(fields.reasonCode || embedded.reasonCode || '');
+  if (reasonCode === 'AI_LOCAL_MODEL_UNAVAILABLE') {
+    return 'Runtime local image environment is not ready. Studio requested local dependency activation; retry after Runtime finishes preparing the image environment.';
+  }
+  const structuredMessage = typeof embedded.message === 'string' ? embedded.message.trim() : '';
+  if (structuredMessage && structuredMessage.length < raw.length) {
+    return structuredMessage;
+  }
+  return raw;
+}
+
 export async function generateAgentReferenceImage(
   input: AgentReferenceImageInput,
   runtime?: RuntimeImageClient | null,
@@ -173,7 +212,7 @@ export async function generateAgentReferenceImage(
       ok: false,
       source: AGENT_REFERENCE_IMAGE_SOURCE,
       failure: 'agent-reference-image-generate-failed',
-      message: `Runtime imageGenerate scenario failed: ${error instanceof Error ? error.message : 'runtime transport call failed.'}`,
+      message: `Runtime imageGenerate scenario failed: ${runtimeImageGenerateFailureMessage(error)}`,
       submitted,
     };
   }
@@ -192,5 +231,5 @@ export function defaultReferenceImagePromptFromDraft(input: {
   const lead = input.description.trim() || input.concept.trim();
   const traits = [input.dnaPrimary, input.displayName].filter(Boolean).join(', ');
   const tail = 'character portrait, cinematic lighting, full body, high detail, neutral background';
-  return [lead, traits, tail].filter(Boolean).join(' — ');
+  return [lead, traits, tail].filter(Boolean).join(' - ');
 }

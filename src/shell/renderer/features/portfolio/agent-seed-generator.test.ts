@@ -16,7 +16,7 @@ describe('agent seed Runtime output parser', () => {
   it('parses a strict single JSON object into owner-reviewed draft fields', () => {
     expect(parseAgentSeedOutput(JSON.stringify(validSeed))).toMatchObject({
       seed: {
-        handle: 'mira-prime',
+        handle: 'mira_prime',
         displayName: 'Mira Prime',
         dnaPrimary: 'INTELLECTUAL',
         dnaSecondary: ['WISE', 'DIRECT'],

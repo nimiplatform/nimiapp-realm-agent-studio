@@ -1,6 +1,14 @@
 import type { Runtime } from '@nimiplatform/sdk/runtime';
 import type { NimiAIConfigTargetRef } from '@nimiplatform/sdk/ai';
 import type { NimiJsonValue } from '@nimiplatform/sdk/contracts';
+import {
+  ExecutionMode,
+  ReasonCode,
+  RoutePolicy,
+  ScenarioJobEventType,
+  ScenarioJobStatus,
+  ScenarioType,
+} from '@nimiplatform/sdk/runtime/generated';
 import type { StudioRealmSurface } from '@renderer/data/realm-client.js';
 import {
   createStudioAIScopeRef,
@@ -110,9 +118,9 @@ export function mockRealm(): StudioRealmSurface {
       agentControllerCheckHandle: vi.fn(async (request: { readonly query?: { readonly handle?: string } }) => {
         const handle = String(request.query?.handle || '');
         return {
-          available: handle !== 'taken.agent',
-          normalized: handle,
-          ...(handle === 'taken.agent' ? { message: 'Handle already taken.' } : {}),
+          available: handle !== 'taken_handle',
+          normalized: handle ? `~${handle}` : '',
+          ...(handle === 'taken_handle' ? { message: 'Handle already taken.' } : {}),
         };
       }),
       agentControllerCreate: vi.fn(async () => ({
@@ -121,7 +129,7 @@ export function mockRealm(): StudioRealmSurface {
           dna: {},
           user: {
             id: 'agent-created-1',
-            handle: 'mira.agent',
+            handle: '~mira_agent',
             displayName: 'Mira Agent',
           },
       })),
@@ -481,14 +489,70 @@ function localKindForCapability(capability: MockRuntimeRoute['capability']): str
 
 export function mockRuntimeWithRoutes(input: {
   readonly executeScenario: ReturnType<typeof vi.fn>;
+  readonly submitScenarioJob?: ReturnType<typeof vi.fn>;
+  readonly getScenarioArtifacts?: ReturnType<typeof vi.fn>;
+  readonly getScenarioJob?: ReturnType<typeof vi.fn>;
+  readonly cancelScenarioJob?: ReturnType<typeof vi.fn>;
+  readonly subscribeScenarioJobEvents?: ReturnType<typeof vi.fn>;
+  readonly resolveLocalEnvironmentPlan?: ReturnType<typeof vi.fn>;
+  readonly listLocalEnvironmentDependencyJobs?: ReturnType<typeof vi.fn>;
+  readonly startLocalEnvironmentDependencyJob?: ReturnType<typeof vi.fn>;
   readonly routes: readonly MockRuntimeRoute[];
 }): Runtime {
   const cloudRoutes = input.routes.filter((route) => route.connectorId);
   const localRoutes = input.routes.filter((route) => !route.connectorId);
+  const defaultScenarioJob = {
+    jobId: 'runtime-scenario-job-1',
+    scenarioType: ScenarioType.IMAGE_GENERATE,
+    executionMode: ExecutionMode.ASYNC_JOB,
+    routeDecision: RoutePolicy.UNSPECIFIED,
+    modelResolved: '',
+    status: ScenarioJobStatus.COMPLETED,
+    providerJobId: '',
+    reasonCode: ReasonCode.REASON_CODE_UNSPECIFIED,
+    reasonDetail: '',
+    retryCount: 0,
+    artifacts: [],
+    traceId: '',
+    ignoredExtensions: [],
+    progressPercent: 100,
+    progressCurrentStep: 0,
+    progressTotalSteps: 0,
+  };
   return {
     ai: {
       executeScenario: input.executeScenario,
       streamScenario: async function* () {},
+      submitScenarioJob: input.submitScenarioJob ?? vi.fn(async (request: { readonly scenarioType?: ScenarioType; readonly head?: unknown; readonly executionMode?: ExecutionMode }) => ({
+        job: {
+          ...defaultScenarioJob,
+          head: request.head,
+          scenarioType: request.scenarioType ?? ScenarioType.IMAGE_GENERATE,
+          executionMode: request.executionMode ?? ExecutionMode.ASYNC_JOB,
+        },
+      })),
+      getScenarioJob: input.getScenarioJob ?? vi.fn(async () => ({
+        job: defaultScenarioJob,
+      })),
+      cancelScenarioJob: input.cancelScenarioJob ?? vi.fn(async () => ({
+        job: {
+          ...defaultScenarioJob,
+          status: ScenarioJobStatus.CANCELED,
+        },
+      })),
+      subscribeScenarioJobEvents: input.subscribeScenarioJobEvents ?? vi.fn(async function* () {
+        yield {
+          eventType: ScenarioJobEventType.SCENARIO_JOB_EVENT_COMPLETED,
+          sequence: 1,
+          jobId: defaultScenarioJob.jobId,
+          message: '',
+          job: defaultScenarioJob,
+        };
+      }),
+      getScenarioArtifacts: input.getScenarioArtifacts ?? vi.fn(async () => ({
+        artifacts: [],
+        traceId: '',
+      })),
     },
     connectors: {
       listConnectors: vi.fn(async () => ({
@@ -526,6 +590,54 @@ export function mockRuntimeWithRoutes(input: {
           capabilities: [route.capability],
         })),
         nextPageToken: '',
+      })),
+      resolveLocalEnvironmentPlan: input.resolveLocalEnvironmentPlan ?? vi.fn(async () => ({
+        plan: {
+          planId: 'local-image-native-plan-ready',
+          packId: 'local-image-native',
+          productLabel: 'Local image native',
+          hostProfileId: 'test-host',
+          platformTuple: 'test-platform',
+          runtimeDataRoot: '',
+          consumerScope: 'local-image-native',
+          cloudOnlyImpact: '',
+          state: 'ready',
+          reasonCode: '',
+          dependencies: [],
+        },
+      })),
+      listLocalEnvironmentDependencyJobs: input.listLocalEnvironmentDependencyJobs ?? vi.fn(async () => ({
+        jobs: [],
+      })),
+      startLocalEnvironmentDependencyJob: input.startLocalEnvironmentDependencyJob ?? vi.fn(async (request: {
+        readonly environmentKey?: string;
+        readonly dependencyFamily?: string;
+        readonly dependencyId?: string;
+        readonly consumerScope?: string;
+        readonly sourceKind?: string;
+      }) => ({
+        job: {
+          jobId: 'local-environment-dependency-job-1',
+          environmentKey: request.environmentKey || 'local-image-native',
+          dependencyFamily: request.dependencyFamily || 'python.tool.uv',
+          dependencyId: request.dependencyId || 'uv',
+          consumerScope: request.consumerScope || 'local-image-native',
+          state: 'queued',
+          sourceKind: request.sourceKind || 'runtime_managed',
+          canonicalRoot: '',
+          selectedSourceRecordId: '',
+          failureDetail: '',
+          retryable: false,
+          createdAt: '2026-05-21T00:00:00.000Z',
+          updatedAt: '2026-05-21T00:00:00.000Z',
+          reasonCode: '',
+          recoveryDisposition: '',
+          bytesReceived: 0,
+          bytesTotal: 0,
+          percent: 0,
+          speedBytesPerSec: 0,
+          etaSeconds: 0,
+        },
       })),
     },
   } as unknown as Runtime;
@@ -626,19 +738,40 @@ export const createPayload: ReviewedCreateRealmAgentPayload = {
   source: REALM_AGENT_CREATE_SOURCE,
   path: REALM_AGENT_CREATE_PATH,
   publicFields: {
-    handle: 'mira.agent',
+    handle: 'mira_agent',
     displayName: 'Mira Agent',
     concept: 'Durable public Realm Agent',
     description: 'Owner-created public identity',
     rulesText: 'Stay visible.\nStay owner-reviewed.',
   },
   body: {
-    handle: 'mira.agent',
+    handle: 'mira_agent',
     displayName: 'Mira Agent',
     concept: 'Durable public Realm Agent',
     description: 'Owner-created public identity',
     worldId: 'world-oasis',
     ownershipType: 'MASTER_OWNED',
+    dna: {
+      source: 'realm-agent-studio.reviewed-create-dna.v1',
+      primaryArchetype: 'CARING',
+      secondaryTraits: ['GENTLE', 'WISE'],
+      identity: {
+        name: 'Mira Agent',
+        role: 'Owner-created public Realm Agent',
+        species: 'Realm Agent',
+        worldview: 'Durable public Realm Agent',
+        summary: 'Owner-created public identity',
+      },
+      personality: {
+        primaryArchetype: 'CARING',
+        secondaryTraits: ['GENTLE', 'WISE'],
+        summary: 'Owner-created public identity',
+        behavioralDirectives: ['Stay visible.', 'Stay owner-reviewed.'],
+      },
+      communication: {
+        sourceText: 'Stay visible.\nStay owner-reviewed.',
+      },
+    },
     dnaPrimary: 'CARING',
     dnaSecondary: ['GENTLE', 'WISE'],
     rules: {

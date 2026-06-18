@@ -11,6 +11,7 @@ import {
 } from './portfolio-data.js';
 import {
   REALM_AGENT_CREATE_SOURCE,
+  buildReviewedCreateAgentDna,
   normalizeCreateRealmAgentDraft,
   normalizeRealmAgentHandleAvailability,
   normalizeSelectableWorlds,
@@ -122,15 +123,27 @@ function readOptionalString(record: Record<string, unknown>, key: string): strin
 
 export function buildRealmCreateAgentInput(payload: ReviewedCreateRealmAgentPayload): RealmCreateAgentInput {
   const body = payload.body;
+  const reviewedDna = buildReviewedCreateAgentDna(normalizeCreateRealmAgentDraft({
+    handle: body.handle,
+    displayName: body.displayName,
+    concept: body.concept,
+    description: body.description || '',
+    ruleText: body.rules?.text || '',
+    selectedWorldId: body.worldId,
+    dnaPrimary: body.dnaPrimary,
+    dnaSecondary: body.dnaSecondary ? [...body.dnaSecondary] : [],
+    referenceImageUrl: body.referenceImageUrl || '',
+    originalDescription: '',
+  }));
   return {
     handle: body.handle,
     displayName: body.displayName,
     worldId: body.worldId,
     concept: body.concept,
     ownershipType: 'MASTER_OWNED',
-    // Realm requires `dnaPrimary` (or full `dna` JSON); otherwise it throws
-    // `AGENT_DNA_REQUIRED`. We send the archetype-based form and let the
-    // backend construct the full AgentDna from primary + optional secondary.
+    // Realm requires canonical DNA input; sending only dnaPrimary currently
+    // fails with `AGENT_DNA_REQUIRED` against the live Realm service.
+    dna: reviewedDna,
     dnaPrimary: body.dnaPrimary,
     ...(body.dnaSecondary && body.dnaSecondary.length > 0 ? { dnaSecondary: [...body.dnaSecondary] } : {}),
     ...(body.description ? { description: body.description } : {}),

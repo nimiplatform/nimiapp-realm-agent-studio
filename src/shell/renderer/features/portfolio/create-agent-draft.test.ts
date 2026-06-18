@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   REALM_AGENT_CREATE_PATH,
   REALM_AGENT_CREATE_SOURCE,
+  createRealmAgentHandleCandidate,
   normalizeRealmAgentHandleAvailability,
   normalizeCreateRealmAgentDraft,
   normalizeSelectableWorlds,
@@ -66,7 +67,7 @@ const baseInput: CreateRealmAgentDraftInput = {
 describe('create Realm Agent draft normalization', () => {
   it('normalizes public identity and selected world fields for preview', () => {
     expect(normalizeCreateRealmAgentDraft(baseInput)).toEqual({
-      handle: 'mira.agent',
+      handle: 'mira_agent',
       displayName: 'Mira Agent',
       concept: 'Durable public Realm Agent',
       description: 'Owner-created public identity',
@@ -77,6 +78,12 @@ describe('create Realm Agent draft normalization', () => {
       referenceImageUrl: '',
       originalDescription: '',
     });
+  });
+
+  it('generates Realm-compliant handle candidates instead of blocked kebab-case handles', () => {
+    expect(createRealmAgentHandleCandidate('xiaomei-china')).toBe('xiaomei_china');
+    expect(createRealmAgentHandleCandidate('Mira Prime')).toBe('mira_prime');
+    expect(createRealmAgentHandleCandidate('小美')).toMatch(/^realm_[0-9]{5}$/);
   });
 
   it('selects OASIS from the source-backed Realm world list', () => {
@@ -132,9 +139,9 @@ describe('selected world preview normalization', () => {
 describe('create Realm Agent readiness', () => {
   it('returns a reviewed owner-scoped CreateAgentDto request payload', () => {
     const result = validateCreateRealmAgentReadiness(baseInput, {
-      handleAvailability: normalizeRealmAgentHandleAvailability('mira.agent', {
+      handleAvailability: normalizeRealmAgentHandleAvailability('mira_agent', {
         available: true,
-        normalized: 'mira.agent',
+        normalized: '~mira_agent',
       }),
     });
 
@@ -144,19 +151,40 @@ describe('create Realm Agent readiness', () => {
       source: REALM_AGENT_CREATE_SOURCE,
       path: REALM_AGENT_CREATE_PATH,
       publicFields: {
-        handle: 'mira.agent',
+        handle: 'mira_agent',
         displayName: 'Mira Agent',
         concept: 'Durable public Realm Agent',
         description: 'Owner-created public identity',
         rulesText: 'Stay visible and owner-reviewed.',
       },
       body: {
-        handle: 'mira.agent',
+        handle: 'mira_agent',
         displayName: 'Mira Agent',
         worldId: 'world-oasis',
         concept: 'Durable public Realm Agent',
         description: 'Owner-created public identity',
         ownershipType: 'MASTER_OWNED',
+        dna: {
+          source: 'realm-agent-studio.reviewed-create-dna.v1',
+          primaryArchetype: 'CARING',
+          secondaryTraits: ['GENTLE', 'WISE'],
+          identity: {
+            name: 'Mira Agent',
+            role: 'Owner-created public Realm Agent',
+            species: 'Realm Agent',
+            worldview: 'Durable public Realm Agent',
+            summary: 'Owner-created public identity',
+          },
+          personality: {
+            primaryArchetype: 'CARING',
+            secondaryTraits: ['GENTLE', 'WISE'],
+            summary: 'Owner-created public identity',
+            behavioralDirectives: ['Stay visible and owner-reviewed.'],
+          },
+          communication: {
+            sourceText: 'Stay visible and owner-reviewed.',
+          },
+        },
         dnaPrimary: 'CARING',
         dnaSecondary: ['GENTLE', 'WISE'],
         rules: {
@@ -173,9 +201,9 @@ describe('create Realm Agent readiness', () => {
       ...baseInput,
       referenceImageUrl: ' https://cdn.example.test/reference.png ',
     }, {
-      handleAvailability: normalizeRealmAgentHandleAvailability('mira.agent', {
+      handleAvailability: normalizeRealmAgentHandleAvailability('mira_agent', {
         available: true,
-        normalized: 'mira.agent',
+        normalized: '~mira_agent',
       }),
     });
 
@@ -186,9 +214,9 @@ describe('create Realm Agent readiness', () => {
       ...baseInput,
       referenceImageUrl: 'file:///tmp/reference.png',
     }, {
-      handleAvailability: normalizeRealmAgentHandleAvailability('mira.agent', {
+      handleAvailability: normalizeRealmAgentHandleAvailability('mira_agent', {
         available: true,
-        normalized: 'mira.agent',
+        normalized: '~mira_agent',
       }),
     });
     expect(rejected.payload?.body.referenceImageUrl).toBeUndefined();
@@ -206,9 +234,9 @@ describe('create Realm Agent readiness', () => {
   it('fails readiness when selected world is not source-backed by the current world list', () => {
     const result = validateCreateRealmAgentReadiness(baseInput, {
       selectableWorldIds: ['world-creator'],
-      handleAvailability: normalizeRealmAgentHandleAvailability('mira.agent', {
+      handleAvailability: normalizeRealmAgentHandleAvailability('mira_agent', {
         available: true,
-        normalized: 'mira.agent',
+        normalized: '~mira_agent',
       }),
     });
 
@@ -220,16 +248,16 @@ describe('create Realm Agent readiness', () => {
   it('fails readiness when handle availability is missing, unavailable, or stale', () => {
     const unchecked = validateCreateRealmAgentReadiness(baseInput);
     const unavailable = validateCreateRealmAgentReadiness(baseInput, {
-      handleAvailability: normalizeRealmAgentHandleAvailability('mira.agent', {
+      handleAvailability: normalizeRealmAgentHandleAvailability('mira_agent', {
         available: false,
-        normalized: 'mira.agent',
+        normalized: '~mira_agent',
         message: 'Handle already taken.',
       }),
     });
     const stale = validateCreateRealmAgentReadiness(baseInput, {
-      handleAvailability: normalizeRealmAgentHandleAvailability('other.agent', {
+      handleAvailability: normalizeRealmAgentHandleAvailability('other_agent', {
         available: true,
-        normalized: 'other.agent',
+        normalized: '~other_agent',
       }),
     });
 

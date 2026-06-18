@@ -119,23 +119,23 @@ describe('owner portfolio core client', () => {
     it('checks create handle availability through AgentsService before create', async () => {
       const realm = mockRealm();
       const available = await checkCreateRealmAgentHandleAvailability(' @Mira.Agent ', realm);
-      const unavailable = await checkCreateRealmAgentHandleAvailability('taken.agent', realm);
+      const unavailable = await checkCreateRealmAgentHandleAvailability('taken-handle', realm);
 
       expect(realm.agentControllerCheckHandle).toHaveBeenCalledWith({
         path: {},
-        query: { handle: 'mira.agent' },
+        query: { handle: 'mira_agent' },
       });
       expect(realm.agentControllerCheckHandle).toHaveBeenCalledWith({
         path: {},
-        query: { handle: 'taken.agent' },
+        query: { handle: 'taken_handle' },
       });
       expect(available).toMatchObject({
         ok: true,
         truthWrite: false,
         availability: {
           source: 'Realm AgentsService.agentControllerCheckHandle',
-          handle: 'mira.agent',
-          normalized: 'mira.agent',
+          handle: 'mira_agent',
+          normalized: 'mira_agent',
           available: true,
         },
       });
@@ -143,7 +143,7 @@ describe('owner portfolio core client', () => {
         ok: true,
         truthWrite: false,
         availability: {
-          handle: 'taken.agent',
+          handle: 'taken_handle',
           available: false,
           message: 'Handle already taken.',
         },
@@ -163,9 +163,7 @@ describe('owner portfolio core client', () => {
         'concept',
         'description',
         'displayName',
-        // Realm requires `dnaPrimary` (or full `dna` JSON); Studio sends the
-        // archetype-based form. `dnaSecondary` is optional but included here
-        // because the test fixture sets it. Full `dna` JSON remains stripped.
+        'dna',
         'dnaPrimary',
         'dnaSecondary',
         'handle',
@@ -184,10 +182,7 @@ describe('owner portfolio core client', () => {
       expect(collectKeys(submittedPayload).has('provider')).toBe(false);
       expect(collectKeys(submittedPayload).has('model')).toBe(false);
       expect(collectKeys(submittedPayload).has('LocalAgent')).toBe(false);
-      // Full `dna` JSON is still stripped — Studio always sends the archetype
-      // form (`dnaPrimary` + optional `dnaSecondary`), never the full JSON.
-      expect(collectKeys(submittedPayload).has('dna')).toBe(false);
-      // dnaPrimary / dnaSecondary now flow through as required by Realm.
+      expect(collectKeys(submittedPayload).has('dna')).toBe(true);
       expect(collectKeys(submittedPayload).has('dnaPrimary')).toBe(true);
       expect(collectKeys(submittedPayload).has('dnaSecondary')).toBe(true);
       expect(collectKeys(submittedPayload).has('referenceImageUrl')).toBe(false);
@@ -282,16 +277,15 @@ describe('owner portfolio core client', () => {
 
       expect(input).toEqual(createPayload.body);
       expect(collectKeys(input).has('publicFields')).toBe(false);
-      expect(collectKeys(input).has('path')).toBe(false);
-      expect(collectKeys(input).has('source')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(input, 'path')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(input, 'source')).toBe(false);
     });
 
     it('rebuilds CreateAgentDto from a narrow allowlist and forces MASTER_OWNED at submit boundary', () => {
       // The dirty payload spreads forbidden control-plane fields into body to
-      // prove buildRealmCreateAgentInput strips them. `dnaPrimary` /
+      // prove buildRealmCreateAgentInput strips them.
       // `dnaSecondary` / `referenceImageUrl` are no longer forbidden — Realm
-      // accepts them. Full `dna` JSON, however, is still stripped (Studio
-      // always chose the archetype form for DNA).
+      // `dna` is rebuilt from reviewed create fields instead of passing hidden input through.
       const dirtyPayload = {
         ...createPayload,
         body: {
@@ -308,7 +302,8 @@ describe('owner portfolio core client', () => {
 
       expect(input).toEqual(createPayload.body);
       expect(input.ownershipType).toBe('MASTER_OWNED');
-      expect(collectKeys(input).has('dna')).toBe(false);
+      expect(collectKeys(input).has('dna')).toBe(true);
+      expect(collectKeys(input).has('hidden')).toBe(false);
       expect(collectKeys(input).has('lifecycle')).toBe(false);
       expect(collectKeys(input).has('provider')).toBe(false);
       expect(collectKeys(input).has('model')).toBe(false);

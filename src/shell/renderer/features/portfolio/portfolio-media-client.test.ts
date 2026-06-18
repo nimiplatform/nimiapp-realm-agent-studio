@@ -1,5 +1,13 @@
 import type { StudioRealmSurface } from '@renderer/data/realm-client.js';
-import { FinishReason, RoutePolicy } from '@nimiplatform/sdk/runtime/generated';
+import {
+  ExecutionMode,
+  FinishReason,
+  ReasonCode,
+  RoutePolicy,
+  ScenarioJobEventType,
+  ScenarioJobStatus,
+  ScenarioType,
+} from '@nimiplatform/sdk/runtime/generated';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildFinalizeDirectMediaResourceInput,
@@ -129,28 +137,50 @@ describe('owner portfolio media client', () => {
       expect(buildRealmSelectAvatarInput('')).toBeNull();
     });
 
-     it('calls Runtime imageGenerate scenario for visual candidates only', async () => {
-      const executeScenario = vi.fn(async (_input: unknown) => ({
-        output: {
-          output: {
-            oneofKind: 'imageGenerate' as const,
-            imageGenerate: {
-              artifacts: [{
-                artifactId: 'artifact-image-1',
-                mimeType: 'image/png',
-                uri: 'runtime://artifact-image-1',
-              }],
-            },
-          },
-        },
-        finishReason: FinishReason.STOP,
+     it('calls Runtime imageGenerate scenario job for visual candidates only', async () => {
+      const imageJob = {
+        jobId: 'job-image-1',
+        scenarioType: ScenarioType.IMAGE_GENERATE,
+        executionMode: ExecutionMode.ASYNC_JOB,
         routeDecision: RoutePolicy.UNSPECIFIED,
         modelResolved: 'runtime-image-model',
+        status: ScenarioJobStatus.COMPLETED,
+        providerJobId: '',
+        reasonCode: ReasonCode.REASON_CODE_UNSPECIFIED,
+        reasonDetail: '',
+        retryCount: 0,
+        artifacts: [],
         traceId: 'trace-image-output',
         ignoredExtensions: [],
-      }));
+        progressPercent: 100,
+        progressCurrentStep: 0,
+        progressTotalSteps: 0,
+      };
       const runtime = mockRuntimeWithRoutes({
-        executeScenario,
+        executeScenario: vi.fn(),
+        submitScenarioJob: vi.fn(async (request: unknown) => ({
+          job: {
+            ...imageJob,
+            head: (request as { readonly head?: unknown }).head,
+          },
+        })),
+        subscribeScenarioJobEvents: vi.fn(async function* () {
+          yield {
+            eventType: ScenarioJobEventType.SCENARIO_JOB_EVENT_COMPLETED,
+            sequence: 1,
+            jobId: imageJob.jobId,
+            message: '',
+            job: imageJob,
+          };
+        }),
+        getScenarioArtifacts: vi.fn(async () => ({
+          artifacts: [{
+            artifactId: 'artifact-image-1',
+            mimeType: 'image/png',
+            uri: 'runtime://artifact-image-1',
+          }],
+          traceId: 'trace-image-output',
+        })),
         routes: [{ capability: 'image.generate', model: 'runtime-image-model' }],
       });
       configureStudioAIConfigTargetRefsForTest({
@@ -167,12 +197,16 @@ describe('owner portfolio media client', () => {
         aspectRatio: '1:1',
       }, ownerAgentDetail(), runtime as unknown as Parameters<typeof generateReviewedVisualImageCandidate>[2]);
 
-      const submittedPayload = executeScenario.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
-      expect(executeScenario).toHaveBeenCalledTimes(1);
+      const submitScenarioJob = vi.mocked(runtime.ai.submitScenarioJob);
+      const submittedPayload = submitScenarioJob.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+      expect(runtime.ai.executeScenario).not.toHaveBeenCalled();
+      expect(submitScenarioJob).toHaveBeenCalledTimes(1);
       expect(submittedPayload).toMatchObject({
         head: {
           modelId: 'runtime-image-model',
         },
+        scenarioType: ScenarioType.IMAGE_GENERATE,
+        executionMode: ExecutionMode.ASYNC_JOB,
         spec: {
           spec: {
             oneofKind: 'imageGenerate',
@@ -189,7 +223,7 @@ describe('owner portfolio media client', () => {
       expect(collectKeys(submittedPayload).has('worldId')).toBe(false);
       expect(result).toMatchObject({
         ok: true,
-        source: 'Runtime ScenarioService.executeScenario image.generate',
+        source: 'Runtime ScenarioService.submitScenarioJob image.generate',
         candidate: true,
         publicTruth: false,
         runtime: {
@@ -202,24 +236,41 @@ describe('owner portfolio media client', () => {
       });
     });
 
-     it('fails closed when Runtime imageGenerate scenario output has no artifact', async () => {
-      const executeScenario = vi.fn(async () => ({
-        output: {
-          output: {
-            oneofKind: 'imageGenerate' as const,
-            imageGenerate: {
-              artifacts: [],
-            },
-          },
-        },
-        finishReason: FinishReason.STOP,
+     it('fails closed when Runtime imageGenerate scenario job returns no artifact', async () => {
+      const imageJob = {
+        jobId: 'job-image-empty',
+        scenarioType: ScenarioType.IMAGE_GENERATE,
+        executionMode: ExecutionMode.ASYNC_JOB,
         routeDecision: RoutePolicy.UNSPECIFIED,
         modelResolved: '',
+        status: ScenarioJobStatus.COMPLETED,
+        providerJobId: '',
+        reasonCode: ReasonCode.REASON_CODE_UNSPECIFIED,
+        reasonDetail: '',
+        retryCount: 0,
+        artifacts: [],
         traceId: '',
         ignoredExtensions: [],
-      }));
+        progressPercent: 100,
+        progressCurrentStep: 0,
+        progressTotalSteps: 0,
+      };
       const runtime = mockRuntimeWithRoutes({
-        executeScenario,
+        executeScenario: vi.fn(),
+        submitScenarioJob: vi.fn(async () => ({ job: imageJob })),
+        subscribeScenarioJobEvents: vi.fn(async function* () {
+          yield {
+            eventType: ScenarioJobEventType.SCENARIO_JOB_EVENT_COMPLETED,
+            sequence: 1,
+            jobId: imageJob.jobId,
+            message: '',
+            job: imageJob,
+          };
+        }),
+        getScenarioArtifacts: vi.fn(async () => ({
+          artifacts: [],
+          traceId: '',
+        })),
         routes: [{ capability: 'image.generate', model: 'runtime-image-model' }],
       });
       configureStudioAIConfigTargetRefsForTest({
@@ -236,9 +287,11 @@ describe('owner portfolio media client', () => {
         aspectRatio: '1:1',
       }, ownerAgentDetail(), runtime as unknown as Parameters<typeof generateReviewedVisualImageCandidate>[2]);
 
+      expect(runtime.ai.executeScenario).not.toHaveBeenCalled();
+      expect(runtime.ai.submitScenarioJob).toHaveBeenCalledTimes(1);
       expect(result).toMatchObject({
         ok: false,
-        source: 'Runtime ScenarioService.executeScenario image.generate',
+        source: 'Runtime ScenarioService.submitScenarioJob image.generate',
         failure: 'runtime-output-missing',
         message: 'Runtime imageGenerate scenario output missing readable artifact.',
       });

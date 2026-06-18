@@ -36,7 +36,7 @@ describe('downloaded CharacterCard import', () => {
 
     const draft = mapCharacterCardToCreateDraft(result.card);
     expect(draft).toMatchObject({
-      handle: 'mira-prime',
+      handle: 'mira_prime',
       displayName: 'Mira Prime',
       dnaPrimary: 'INTELLECTUAL',
       dnaSecondary: ['DIRECT', 'REALISTIC', 'WISE'],
