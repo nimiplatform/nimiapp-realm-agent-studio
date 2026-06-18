@@ -121,6 +121,13 @@ const EVIDENCE_STATUS_KEYS: Record<string, StudioCopyKey> = {
   'voice-demo-candidate': 'agent.maintenance.kind.voiceDemoCandidate',
 };
 
+const SOURCE_LABEL_KEYS: Record<string, StudioCopyKey> = {
+  'Realm MeService.getMyRealmAgent': 'agent.cockpit.source.realmDetail',
+  'local workspace state': 'agent.cockpit.source.localWorkspace',
+  'realm-agent-studio.local-creative-asset-history': 'agent.cockpit.source.localCreativeHistory',
+  'realm-agent-studio.local-single-post-schedule-store': 'agent.cockpit.source.localSchedule',
+};
+
 const SIGNAL_LABEL_KEYS: Record<string, StudioCopyKey> = {
   'display name': 'agent.cockpit.field.displayName',
   handle: 'agent.cockpit.field.handle',
@@ -208,6 +215,10 @@ function translateSignal(signal: string, t: StudioTranslator): string {
   return SIGNAL_LABEL_KEYS[signal] ? t(SIGNAL_LABEL_KEYS[signal]) : signal;
 }
 
+function translateSource(source: string, t: StudioTranslator): string {
+  return SOURCE_LABEL_KEYS[source] ? t(SOURCE_LABEL_KEYS[source]) : source;
+}
+
 function translateCardSummary(card: AgentCockpitCard, agent: OwnerPortfolioAgentDetail, t: StudioTranslator): string {
   if (card.key === 'adoption' && agent.friendCount.status === 'available') {
     return t('agent.cockpit.card.adoption.summary.available', { count: agent.friendCount.value });
@@ -248,6 +259,16 @@ export function AgentCockpit({ agent }: { agent: OwnerPortfolioAgentDetail }) {
           </>
         }
         description={t('agent.cockpit.description')}
+        actions={(
+          <>
+            <Button tone="secondary" onClick={() => navigate(`/portfolio/${agent.id}/preview`)}>
+              {t('agent.cockpit.openPreview')}
+            </Button>
+            <Button tone="ghost" onClick={() => navigate(`/portfolio/${agent.id}/posts/manage`)}>
+              {t('agent.cockpit.openDraftBox')}
+            </Button>
+          </>
+        )}
       />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -330,7 +351,7 @@ export function AgentCockpit({ agent }: { agent: OwnerPortfolioAgentDetail }) {
                       {t(MAINTENANCE_ACTION_KEYS[suggestion.action.route])}
                     </Button>
                     <span className="text-[length:var(--nimi-type-body-xs-size)] text-[var(--nimi-text-muted)]">
-                      {suggestion.sources.join(' + ')}
+                      {suggestion.sources.map((source) => translateSource(source, t)).join(' + ')}
                     </span>
                   </div>
                 </div>
@@ -379,7 +400,7 @@ export function AgentCockpit({ agent }: { agent: OwnerPortfolioAgentDetail }) {
             <div>
               <h3 className="m-0 text-[length:var(--nimi-type-body-size)] font-semibold">{t('agent.cockpit.sourceInventory')}</h3>
               <p className="m-0 mt-1 text-[length:var(--nimi-type-body-sm-size)] text-[var(--nimi-text-muted)]">
-                {t('agent.cockpit.currentSource', { source: agent.source })}
+                {t('agent.cockpit.currentSource', { source: translateSource(agent.source, t) })}
               </p>
             </div>
             {([

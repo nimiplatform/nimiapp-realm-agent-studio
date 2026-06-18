@@ -51,6 +51,14 @@ describe('Studio shell kit boundary', () => {
     expect(styles).not.toContain('.bg-\\[var\\(--nimi-action-primary-bg\\)\\]');
   });
 
+  it('keeps route content vertically scrollable inside the fixed desktop shell', () => {
+    const styles = rendererStylesSource();
+
+    expect(styles).toContain('.ras-main');
+    expect(styles).toContain('overflow-y: auto;');
+    expect(styles).toContain('scrollbar-gutter: stable;');
+  });
+
   it('does not use a blank renderer-entry lazy fallback', () => {
     const source = rendererEntrySource();
 
