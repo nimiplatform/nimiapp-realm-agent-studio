@@ -62,6 +62,40 @@ describe('studio auth bridge boundary', () => {
     expect(bootstrapSource).toContain('getStudioRuntimeDefaults');
   });
 
+  it('preserves Runtime-admitted local Realm host while normalizing missing ports', async () => {
+    const previousNimiRealmUrl = process.env['NIMI_REALM_URL'];
+    const previousViteRealmBaseUrl = process.env['VITE_NIMI_REALM_BASE_URL'];
+
+    try {
+      delete process.env['NIMI_REALM_URL'];
+      delete process.env['VITE_NIMI_REALM_BASE_URL'];
+      await expect(bridge.getStudioRuntimeDefaults()).resolves.toEqual({
+        realm: { realmBaseUrl: 'http://localhost:3002' },
+      });
+
+      process.env['NIMI_REALM_URL'] = 'http://localhost';
+      await expect(bridge.getStudioRuntimeDefaults()).resolves.toEqual({
+        realm: { realmBaseUrl: 'http://localhost:3002' },
+      });
+
+      process.env['NIMI_REALM_URL'] = 'http://127.0.0.1';
+      await expect(bridge.getStudioRuntimeDefaults()).resolves.toEqual({
+        realm: { realmBaseUrl: 'http://127.0.0.1:3002' },
+      });
+    } finally {
+      if (previousNimiRealmUrl === undefined) {
+        delete process.env['NIMI_REALM_URL'];
+      } else {
+        process.env['NIMI_REALM_URL'] = previousNimiRealmUrl;
+      }
+      if (previousViteRealmBaseUrl === undefined) {
+        delete process.env['VITE_NIMI_REALM_BASE_URL'];
+      } else {
+        process.env['VITE_NIMI_REALM_BASE_URL'] = previousViteRealmBaseUrl;
+      }
+    }
+  });
+
   it('keeps Runtime complete-login as an explicit code-only proof envelope', () => {
     expect(studioAuthAdapterSource).toContain('createRuntimeAccountBrowserBroker');
     expect(studioAuthAdapterSource).not.toContain('runtime.account.completeLogin');

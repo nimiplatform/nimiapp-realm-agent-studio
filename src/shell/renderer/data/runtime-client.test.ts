@@ -45,6 +45,8 @@ describe('studio runtime client gate', () => {
     expect(studioPlatformSource).toContain('createNimiClient');
     expect(studioPlatformSource).toContain("type: 'tauri-ipc'");
     expect(studioPlatformSource).toContain('createNimiLocalFirstPartyRuntimeAccountCaller');
+    expect(studioPlatformSource).toContain("'realm.worlds.read'");
+    expect(studioPlatformSource).toContain('scopes: [...STUDIO_REALM_API_SCOPES]');
     expect(studioPlatformSource).toContain('createNimiRuntimeAppSessionMetadataProvider');
     expect(studioPlatformSource).toContain('createStudioRealmBridgeOptions');
     expect(realmTransportSource).toContain('invokeRealmUnary');

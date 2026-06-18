@@ -15,6 +15,9 @@ permissions:
     - scope: realm.me.agents.write
       qualifier: owner-portfolio
       purpose: Create, update, and retire user-owned public Realm Agents.
+    - scope: realm.worlds.read
+      qualifier: create-agent-world-selection
+      purpose: List Realm worlds and preview the selected world for reviewed Realm Agent creation.
     - scope: realm.posts.write
       qualifier: agent-authored-post
       purpose: Publish agent-authored posts to the Realm feed after owner review.

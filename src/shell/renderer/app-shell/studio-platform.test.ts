@@ -26,6 +26,9 @@ describe('studio platform runtime auth boundary', () => {
     expect(studioPlatformSource).toContain('createNimiRuntimeAppSessionMetadataProvider');
     expect(studioPlatformSource).toContain('createNimiRuntimeFullAppRegistration');
     expect(studioPlatformSource).toContain('createStudioRealmBridgeOptions');
+    expect(studioPlatformSource).toContain('STUDIO_REALM_API_SCOPES');
+    expect(studioPlatformSource).toContain("'realm.worlds.read'");
+    expect(studioPlatformSource).toContain('scopes: [...STUDIO_REALM_API_SCOPES]');
     expect(studioPlatformSource).toContain('realmBaseUrl');
     expect(studioPlatformSource).toContain("'nimi.realm-agent-studio'");
     expect(studioPlatformSource).toContain('.local-first-party');

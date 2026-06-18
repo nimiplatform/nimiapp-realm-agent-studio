@@ -41,13 +41,19 @@ const STUDIO_RUNTIME_PROTECTED_TOKEN_TTL_SECONDS = 3600;
 const STUDIO_RUNTIME_PROTECTED_TOKEN_REFRESH_SKEW_MS = 60_000;
 const STUDIO_RUNTIME_PROTECTED_CONSENT_ID = 'realm-agent-studio-runtime-account';
 const STUDIO_RUNTIME_DEVELOPER_REGISTRATION = false;
+export const STUDIO_REALM_API_SCOPES = [
+  'realm.me.agents.read',
+  'realm.me.agents.write',
+  'realm.worlds.read',
+  'realm.posts.write',
+] as const;
 
 export const studioRuntimeAccountCaller: NimiRuntimeAccountCaller =
   createNimiLocalFirstPartyRuntimeAccountCaller({
     appId: STUDIO_RUNTIME_APP_ID,
     appInstanceId: STUDIO_RUNTIME_APP_INSTANCE_ID,
     deviceId: STUDIO_RUNTIME_DEVICE_ID,
-    scopes: [],
+    scopes: [...STUDIO_REALM_API_SCOPES],
   });
 
 let protectedAccessCache: {
